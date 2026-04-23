@@ -1,0 +1,486 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { IMealsDatastore, MealsDatastoreSchema } from "./schemas/meals-datastore-schema";
+import { useEffect, useState } from "react";
+import useUser from "@/hooks/use-user";
+import { IOption } from "@/types/common";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "../ui/form";
+import { Input } from "../ui/input";
+import { S3UploadResponse, uploadToS3 } from "@/lib/s3-upload";
+import { Autocomplete } from "../ui/autocomplete";
+import { CURRENCY_OPTIONS } from "@/constants/data";
+import { Textarea } from "../ui/textarea";
+import { Button } from "../ui/button";
+import { ImagePlus, X, Wand2, Loader2, Edit3, Save } from "lucide-react";
+import S3Image from "../ui/s3-image";
+import { fetchCountries } from "@/data-access/datastore";
+import { createMeal, updateMeal } from "@/data-access/meals";
+import { generateExamples } from "@/data-access/common";
+import { MessageMarkdown } from "@/components/ui/message-markdown";
+import RategenMarkdown from "@/components/ui/rategen-markdown";
+import { Checkbox } from "../ui/checkbox";
+
+type Props = {
+  initialData: IMealsDatastore | null;
+  onSuccess?: () => void;
+};
+
+export default function MealsDatastoreForm({ initialData, onSuccess }: Props) {
+  const router = useRouter();
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [generatingExamples, setGeneratingExamples] = useState(false);
+  const [editingExamples, setEditingExamples] = useState(false);
+  const { user } = useUser();
+
+  const [countryOptions, setCountryOptions] = useState<IOption[]>([]);
+
+  const form = useForm({
+    resolver: zodResolver(MealsDatastoreSchema),
+    values: {
+      meal_name: initialData?.meal_name || "",
+      description: initialData?.description || "",
+      meal_rate_adult: initialData?.meal_rate_adult || undefined,
+      meal_rate_child: initialData?.meal_rate_child || undefined,
+      country: initialData?.country || "",
+      cancellation_policy: initialData?.cancellation_policy || "",
+      remarks: initialData?.remarks || "",
+      currency: initialData?.currency || "",
+      images: initialData?.images || [],
+      examples: initialData?.examples || "",
+      preferred: initialData?.preferred || false,
+      markup: initialData?.markup || undefined,
+    },
+  });
+
+  useEffect(() => {
+    fetchCountries().then((options) => {
+      setCountryOptions(options);
+    });
+  }, []);
+
+  const removeImage = (indexToRemove: number) => {
+    const images = (form.getValues("images") || []) as string[];
+    form.setValue(
+      "images",
+      images.filter((_, index) => index !== indexToRemove)
+    );
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || !e.target.files.length || !user?.id) return;
+
+    setUploadingImages(true);
+    const files = Array.from(e.target.files);
+    const images = (form.getValues("images") || []) as string[];
+
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const result: S3UploadResponse = await uploadToS3({
+          file,
+          userId: user.id,
+        });
+
+        if (result.error) throw new Error(result.error);
+        return result.url!;
+      });
+
+      const uploadedUrls = await Promise.all(uploadPromises);
+      form.setValue("images", [...images, ...uploadedUrls]);
+      toast.success("Images uploaded successfully");
+    } catch (error) {
+      toast.error("Failed to upload images");
+      console.error("Upload error:", error);
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  const handleGenerateExamples = async () => {
+    setGeneratingExamples(true);
+    try {
+      const formData = form.getValues();
+      const { data, error } = await generateExamples(formData, "meals");
+
+      if (error) {
+        toast.error(error);
+        return;
+      }
+
+      form.setValue("examples", data.examples);
+      toast.success("Examples generated successfully");
+    } finally {
+      setGeneratingExamples(false);
+    }
+  };
+
+  async function onSubmit(values: any) {
+    try {
+      const { error } =
+        initialData && initialData.id ? await updateMeal(initialData.id, values) : await createMeal(values);
+
+      if (error) throw error;
+
+      toast.success(initialData ? "Meal updated successfully" : "Meal created successfully");
+      onSuccess?.();
+      router.refresh();
+    } catch (error) {
+      console.error("Error submitting form:", error);
+      toast.error("Failed to save meal");
+    }
+  }
+
+  const isLoading = form.formState.isSubmitting;
+
+  return (
+    <div className="space-y-6">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          {/* General Information Section */}
+          <div className="space-y-6 border rounded-lg p-4">
+            <h4 className="text-md font-semibold mb-6">General Information</h4>
+            <FormField
+              control={form.control}
+              name="meal_name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Meal Name *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter transfer name" {...field} disabled={isLoading} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="country"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Country *</FormLabel>
+                    <Autocomplete options={countryOptions} value={field.value} onChange={field.onChange} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency</FormLabel>
+                    <Autocomplete options={CURRENCY_OPTIONS} value={field.value} onChange={field.onChange} />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Enter meal description"
+                      {...field}
+                      value={field.value || ""}
+                      disabled={isLoading}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="examples"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Examples</FormLabel>
+                    <div className="flex items-center gap-2">
+                      {!editingExamples ? (
+                        <>
+                          {field.value && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditingExamples(true)}
+                              className="flex items-center gap-2"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                              Edit
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ai"
+                            size="sm"
+                            onClick={handleGenerateExamples}
+                            disabled={isLoading || generatingExamples}
+                            className="flex items-center gap-2"
+                          >
+                            {generatingExamples ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 />}
+                            {generatingExamples ? "Generating..." : "Generate"}
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEditingExamples(false)}
+                            className="flex items-center gap-2"
+                          >
+                            <Save className="h-4 w-4" />
+                            Save
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setEditingExamples(false);
+                              // Reset to original value if cancelled
+                            }}
+                            className="flex items-center gap-2"
+                          >
+                            <X className="h-4 w-4" />
+                            Cancel
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <FormControl>
+                    {editingExamples ? (
+                      <MessageMarkdown
+                        placeholder="Enter examples or generate them automatically"
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    ) : field.value ? (
+                      <div className="min-h-[120px] p-3 border rounded-md bg-muted/30 text-sm">
+                        <RategenMarkdown content={field.value} className="text-sm" />
+                      </div>
+                    ) : (
+                      <MessageMarkdown
+                        placeholder="Enter examples or generate them automatically"
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value)}
+                        disabled={isLoading}
+                      />
+                    )}
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="images"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Meal Images</FormLabel>
+                  <FormControl>
+                    <div className="space-y-4">
+                      {/* Image Grid */}
+                      {field.value && field.value.length > 0 && (
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                          {field.value.map((url: string, index: number) => (
+                            <div key={`${url}-${index}`} className="relative group aspect-square">
+                              <S3Image url={url} index={index} />
+                              <button
+                                type="button"
+                                onClick={() => removeImage(index)}
+                                className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Upload Button */}
+                      <div className="flex items-center gap-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={uploadingImages}
+                          onClick={() => document.getElementById("image-upload")?.click()}
+                        >
+                          <ImagePlus className="h-4 w-4 mr-2" />
+                          {uploadingImages ? "Uploading..." : "Add Images"}
+                        </Button>
+                        <input
+                          id="image-upload"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleImageUpload}
+                          disabled={uploadingImages}
+                        />
+                      </div>
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          {/* Rate Information Section */}
+          <div className="space-y-6 border rounded-lg p-4">
+            <h4 className="text-md font-semibold mb-6">Rate Information</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="meal_rate_adult"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Meal Rate (Adult)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="-"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        disabled={isLoading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="meal_rate_child"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Meal Rate (Child)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="-"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        disabled={isLoading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="markup"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Markup (%)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="Enter markup percentage"
+                        {...field}
+                        value={field.value || ""}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        disabled={isLoading}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="preferred"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-start space-x-3 space-y-0 mt-8">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} disabled={isLoading} />
+                    </FormControl>
+                    <div className="space-y-1 leading-none">
+                      <FormLabel>Preferred Meal</FormLabel>
+                    </div>
+                  </FormItem>
+                )}
+              />
+            </div>
+          </div>
+          {/* Policies Section */}
+          <div className="space-y-6 border rounded-lg p-4">
+            <h4 className="text-md font-semibold mb-6">Policies</h4>
+            <FormField
+              control={form.control}
+              name="cancellation_policy"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Cancellation Policy</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Enter cancellation policy"
+                      {...field}
+                      value={field.value || ""}
+                      disabled={isLoading}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="remarks"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Remarks</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Enter additional remarks"
+                      {...field}
+                      value={field.value || ""}
+                      disabled={isLoading}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button type="submit" disabled={isLoading || uploadingImages}>
+              {isLoading ? (initialData ? "Updating..." : "Creating...") : initialData ? "Update Meal" : "Create Meal"}
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </div>
+  );
+}

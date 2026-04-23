@@ -1,0 +1,56 @@
+[
+  {
+    "combo1": {
+      "combos": {
+        "id": "16890207-09bd-4875-866b-5ed4a38fb2c6",
+        "title": "Special Ile Aux Cerf Package (Double basis)",
+        "description": "Undersea Walk + Tube Ride + Speedboat to GRSE Waterfall + Parasailing (Double basis)",
+        "remarks": "This package is applicable if 2 people book this tour together on double basis.",
+        "age_policy": "{\"adult\": {\"max_age\": 99, \"min_age\": 12}, \"child\": {\"max_age\": 11, \"min_age\": 2}}",
+        "currency": "USD",
+        "created_by": "b1e95646-23d1-4252-a1f6-5e3b287b7ff1",
+        "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4",
+        "created_at": "2025-11-28 05:27:28.498742+00",
+        "updated_at": "2025-11-28 05:27:28.498742+00",
+        "country": "602f36b5-b802-413a-ad7e-3d94b43bd886",
+        "city": "8f26ae36-b979-4ef7-a0e8-4907fe6d6083"
+      },
+      "combo_seasons": [
+        {
+          "id": "f2efc2ba-0a84-49d4-80bc-8ff7d075cbd4",
+          "combo_id": "16890207-09bd-4875-866b-5ed4a38fb2c6",
+          "dates": "All Season",
+          "blackout_dates": null,
+          "exception_rules": null,
+          "order": 0,
+          "ticket_only_rate_adult": "105.00",
+          "ticket_only_rate_child": "105.00",
+          "ticket_only_rate_teenager": null,
+          "ticket_only_rate_infant": null,
+          "sic_rate_adult": null,
+          "sic_rate_child": null,
+          "sic_rate_teenager": null,
+          "sic_rate_infant": null,
+          "pvt_rate": null,
+          "per_vehicle_rate": null,
+          "total_rate": null,
+          "created_at": "2025-11-28 05:27:31.27022+00"
+        }
+      ],
+      "combo_items": [
+        {
+          "id": "00586e25-4f61-4b6b-a292-a2d9d8d6cb18",
+          "combo_id": "16890207-09bd-4875-866b-5ed4a38fb2c6",
+          "item_type": "tour",
+          "tour_id": "4d9b4b9b-977e-4481-b463-982d93743504",
+          "transfer_id": null,
+          "tour_package_id": "0298913f-f1f0-4a3e-ae41-f65ef2a79a88",
+          "transfer_package_id": null,
+          "package_name": "Undersea Walk",
+          "order": 0,
+          "created_at": "2025-11-28 05:27:30.033132+00"
+        }
+      ]
+    }
+  }
+]

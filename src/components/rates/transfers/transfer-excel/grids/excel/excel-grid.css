@@ -1,0 +1,428 @@
+/* Excel Grid Styles */
+
+.excel-grid-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+/* Toolbar with search and add button */
+.excel-grid-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.excel-grid-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 8px;
+}
+
+.excel-grid-search input {
+  min-width: 200px;
+}
+
+.excel-grid-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.excel-grid-undo-redo {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.excel-grid-undo-redo button:disabled {
+  opacity: 0.4;
+}
+
+.excel-grid-container {
+  flex: 1;
+  overflow: auto;
+  outline: none;
+  background: white;
+  font-size: 12px;
+}
+
+.excel-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+/* Header */
+.excel-grid thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.excel-grid th {
+  background-color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.excel-grid thead tr:first-child th {
+  border-top: 1px solid var(--border);
+}
+
+.excel-grid th:first-child {
+  border-left: 1px solid var(--border);
+}
+
+.excel-grid th .th-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.excel-grid th .th-content span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.excel-grid th.has-filter {
+  background-color: var(--primary) / 0.1;
+}
+
+/* Row index column */
+.excel-grid th.row-index,
+.excel-grid td.row-index {
+  width: 40px !important;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  text-align: center;
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+  font-weight: 500;
+  user-select: none;
+  position: relative;
+}
+
+.excel-grid td.row-index {
+  cursor: pointer;
+}
+
+.excel-grid td.row-index:hover {
+  background-color: var(--accent);
+}
+
+/* Row index number and copy button */
+.row-index-number {
+  display: block;
+}
+
+.row-index-copy-btn {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  border: none;
+  cursor: pointer;
+  color: var(--primary);
+}
+
+.excel-grid td.row-index:hover .row-index-number {
+  display: none;
+}
+
+.excel-grid td.row-index:hover .row-index-copy-btn {
+  display: flex;
+}
+
+.row-index-copy-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+
+/* Cells */
+.excel-grid td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 0;
+  height: 28px;
+  position: relative;
+  background: white;
+}
+
+.excel-grid td:first-child {
+  border-left: 1px solid var(--border);
+}
+
+.excel-grid td.readonly {
+  background-color: var(--muted) / 0.5;
+  color: var(--muted-foreground);
+}
+
+/* Cell content */
+.cell-content {
+  padding: 4px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  cursor: cell;
+  user-select: none;
+}
+
+/* Cell with action button (eye icon) */
+.cell-content.cell-with-action {
+  gap: 4px;
+  padding-left: 4px;
+}
+
+.cell-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cell-view-btn:hover {
+  background: var(--accent);
+  color: var(--primary);
+}
+
+.cell-content .cell-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.cell-content.checkbox {
+  justify-content: center;
+}
+
+/* Inline Select/Dropdown using Autocomplete */
+.cell-select-wrapper {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+/* Style the Autocomplete button inside grid cells */
+.cell-select-wrapper button[role="combobox"] {
+  width: 100%;
+  height: 100%;
+  min-height: unset !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 8px !important;
+  font-size: 12px !important;
+  background: transparent !important;
+  justify-content: space-between;
+}
+
+.cell-select-wrapper button[role="combobox"]:focus {
+  outline: none !important;
+  ring: none !important;
+  box-shadow: none !important;
+}
+
+.cell-select-wrapper button[role="combobox"]:hover {
+  background: var(--muted) !important;
+}
+
+.cell-select-wrapper button[role="combobox"][disabled] {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Hide the chevron icon in compact cells */
+.cell-select-wrapper button[role="combobox"] svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.5;
+}
+
+/* Selection styles */
+.excel-grid td.selected {
+  background-color: var(--primary) / 0.08;
+}
+
+.excel-grid td.anchor {
+  background-color: white;
+}
+
+/* Selection border classes */
+.excel-grid td.selection-top {
+  box-shadow: inset 0 2px 0 0 var(--primary);
+}
+
+.excel-grid td.selection-bottom {
+  box-shadow: inset 0 -2px 0 0 var(--primary);
+}
+
+.excel-grid td.selection-left {
+  box-shadow: inset 2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-right {
+  box-shadow: inset -2px 0 0 0 var(--primary);
+}
+
+/* Combined selection borders */
+.excel-grid td.selection-top.selection-bottom {
+  box-shadow:
+    inset 0 2px 0 0 var(--primary),
+    inset 0 -2px 0 0 var(--primary);
+}
+
+.excel-grid td.selection-top.selection-left {
+  box-shadow:
+    inset 0 2px 0 0 var(--primary),
+    inset 2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-top.selection-right {
+  box-shadow:
+    inset 0 2px 0 0 var(--primary),
+    inset -2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-bottom.selection-left {
+  box-shadow:
+    inset 0 -2px 0 0 var(--primary),
+    inset 2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-bottom.selection-right {
+  box-shadow:
+    inset 0 -2px 0 0 var(--primary),
+    inset -2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-left.selection-right {
+  box-shadow:
+    inset 2px 0 0 0 var(--primary),
+    inset -2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-top.selection-bottom.selection-left {
+  box-shadow:
+    inset 0 2px 0 0 var(--primary),
+    inset 0 -2px 0 0 var(--primary),
+    inset 2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-top.selection-bottom.selection-right {
+  box-shadow:
+    inset 0 2px 0 0 var(--primary),
+    inset 0 -2px 0 0 var(--primary),
+    inset -2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-top.selection-left.selection-right {
+  box-shadow:
+    inset 0 2px 0 0 var(--primary),
+    inset 2px 0 0 0 var(--primary),
+    inset -2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-bottom.selection-left.selection-right {
+  box-shadow:
+    inset 0 -2px 0 0 var(--primary),
+    inset 2px 0 0 0 var(--primary),
+    inset -2px 0 0 0 var(--primary);
+}
+
+.excel-grid td.selection-top.selection-bottom.selection-left.selection-right {
+  box-shadow:
+    inset 0 2px 0 0 var(--primary),
+    inset 0 -2px 0 0 var(--primary),
+    inset 2px 0 0 0 var(--primary),
+    inset -2px 0 0 0 var(--primary);
+}
+
+/* Editors */
+.cell-editor {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  background: white;
+  box-sizing: border-box;
+}
+
+.cell-editor:focus {
+  outline: none;
+}
+
+.cell-editor-text,
+.cell-editor-number {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border: 2px solid var(--primary) !important;
+}
+
+.cell-editor-select {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  cursor: pointer;
+}
+
+.cell-editor-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Active cell indicator */
+.excel-grid td.editing {
+  padding: 0;
+  overflow: visible;
+}
+
+/* Hover effect */
+.excel-grid tbody tr:hover td:not(.row-index) {
+  background-color: var(--muted) / 0.3;
+}
+
+.excel-grid tbody tr:hover td.selected {
+  background-color: var(--primary) / 0.15;
+}

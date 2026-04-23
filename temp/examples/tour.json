@@ -1,0 +1,111 @@
+[
+  {
+    "tour1": {
+      "tours": {
+        "id": "7e575967-80aa-4379-bec5-d22dc273b76e",
+        "created_at": "2025-11-12 07:30:23.650486+00",
+        "tour_name": "Valle Advenature Park ",
+        "description": "Spread across 450 acres and operating since 1998, Vallé Advenature Park is one of the island’s most iconic eco-tourism destinations. The unspoiled beauty of the land captures every heart and soul. The park is also home to tortoises, monkeys, stags, fish, and birds such as the Pink Pigeon, Paille en Queue, and Cateau Vert. Various endemic trees like the Ebony, Bois de Natte, Takamaka, and other rare plants further contribute to the natural splendour of the park.\n\nFor thrill-seekers, the park offers a wide range of adventures: a 1.5km zipline - the longest in Mauritius - a 350m suspended bridge - the longest in the Indian Ocean - and a luge-kart track for high-speed fun. Whether you're exploring the diverse trails, soaring through the air on a zipline, manoeuvring a quad bike, racing down the luge-kart track, or conquering the daring Nepalese Bridge, every moment is filled with excitement and awe-inspiring views.",
+        "remarks": "",
+        "cancellation_policy": "",
+        "child_policy": null,
+        "preferred": true,
+        "markup": "",
+        "currency": "USD",
+        "country": "602f36b5-b802-413a-ad7e-3d94b43bd886",
+        "city": "8f26ae36-b979-4ef7-a0e8-4907fe6d6083",
+        "formatted_address": "",
+        "website": "",
+        "latitude": null,
+        "longitude": null,
+        "rating": null,
+        "user_ratings_total": null,
+        "photos": null,
+        "types": null,
+        "review_summary": null,
+        "maps_url": "",
+        "place_id": null,
+        "images": [
+          "https://chatdmc-avatars.s3.ap-south-1.amazonaws.com/tour_images/0ca10f10-a688-4a49-9c37-e9f310589b5a-1763648071257.webp"
+        ],
+        "timings": [],
+        "created_by": "0ca10f10-a688-4a49-9c37-e9f310589b5a",
+        "dmc_id": "33aabd1c-c259-429f-9d31-2f09a5ba08e0",
+        "updated_at": null,
+        "examples": "",
+        "notes": null
+      },
+      "tour_packages": [
+        {
+          "id": "04e69d01-6edd-4a57-9c32-12336b7cd44e",
+          "created_at": "2025-11-12 07:41:43.182007+00",
+          "updated_at": "2025-11-21 13:14:46.864772+00",
+          "tour_id": "7e575967-80aa-4379-bec5-d22dc273b76e",
+          "name": "Advenature Flight Zipline [5.5 km -11 lines]",
+          "seasons": [
+            {
+              "dates": "All Season",
+              "order": 0,
+              "pvt_rate": {},
+              "exception_rules": "",
+              "per_vehicle_rate": [],
+              "ticket_only_rate_adult": 124,
+              "ticket_only_rate_child": 124
+            }
+          ],
+          "description": "",
+          "remarks": "",
+          "child_policy": "",
+          "preferred": false,
+          "iscombo": false,
+          "order": 0,
+          "embedding": null,
+          "includes_transfer": false,
+          "notes": null,
+          "inclusions": null,
+          "exclusions": null,
+          "age_policy": "{}",
+          "max_participants": null,
+          "images": [],
+          "meeting_point": null,
+          "pickup_point": null,
+          "dropoff_point": null,
+          "operational_hours": "[]",
+          "duration": "{}",
+          "categories": null
+        }
+      ],
+      "tour_add_ons": [
+        {
+          "id": "29f37047-8a12-4773-8b31-822f284735c0",
+          "created_at": "2025-11-20 13:55:23.713904+00",
+          "updated_at": "2025-11-20 14:15:15.680919+00",
+          "tour_id": "7e575967-80aa-4379-bec5-d22dc273b76e",
+          "name": "Valle Advenature Park (Entrance Fee)",
+          "ticket_only_rate_adult": "11.00",
+          "ticket_only_rate_child": "7.00",
+          "description": "",
+          "notes": "",
+          "age_policy": "{\"adult\": {\"max_age\": 99, \"min_age\": 12}, \"child\": {\"max_age\": 11, \"min_age\": 6}, \"infant\": {\"max_age\": 5, \"min_age\": 0}}",
+          "ticket_only_rate_infant": "0.00",
+          "ticket_only_rate_teenager": null,
+          "total_rate": null,
+          "max_participants": null,
+          "images": [
+            "https://chatdmc-avatars.s3.ap-south-1.amazonaws.com/tour-addons0ca10f10-a688-4a49-9c37-e9f310589b5a-1763648107648.webp"
+          ],
+          "remarks": ""
+        }
+      ],
+      "tour_package_add_ons": [
+        {
+          "id": "11f50dcd-d86f-4523-91fb-3f16b0bb1f2b",
+          "created_at": "2025-11-21 13:14:47.517904+00",
+          "package_id": "dd4615a9-62c2-42f0-bb7a-ad526aced594",
+          "add_on_id": "29f37047-8a12-4773-8b31-822f284735c0",
+          "is_mandatory": true
+        }
+      ]
+    }
+  }
+]

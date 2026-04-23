@@ -1,0 +1,2363 @@
+=== AI Agent Log Started: 2025-12-30T11:25:58.965Z ===
+
+[2025-12-30T11:25:58.967Z] [IntentClassifier] Classification complete
+{
+  "query_preview": "suggest 5 day trip ",
+  "category": "complete_quote",
+  "action": "new",
+  "action_target": "all",
+  "is_followup": false,
+  "tokens": 650
+}
+
+[2025-12-30T11:25:58.969Z] [parseQuery] COMPLETE_QUOTE + NEW - fast path (no SmartRouting needed)
+{
+  "category": "complete_quote",
+  "action": "new",
+  "route_type": "NEW_QUOTE",
+  "tokens_used": 650
+}
+
+
+============================================================
+[2025-12-30T11:25:58.984Z] HANDLE COMPLETE QUOTE NODE START
+============================================================
+
+[2025-12-30T11:25:58.987Z] [Workflow] Using new pipeline fast path
+{
+  "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4",
+  "query_preview": "suggest 5 day trip "
+}
+
+[2025-12-30T11:25:58.989Z] [Pipeline-V2] Starting itinerary pipeline
+{
+  "chat_id": "e67e7efc-d465-4120-b528-41192b01cd3d",
+  "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4",
+  "query_preview": "suggest 5 day trip "
+}
+
+[2025-12-30T11:25:59.235Z] [Pipeline-V2] Phase 1: Running Itinerary Creator
+
+[2025-12-30T11:25:59.422Z] [Pipeline-V2] Sample itinerary loaded
+{
+  "nights": 4,
+  "content_length": 992
+}
+
+[2025-12-30T11:25:59.424Z] [ItineraryCreator] Starting itinerary creation
+{
+  "chat_id": "e67e7efc-d465-4120-b528-41192b01cd3d",
+  "query_length": 19,
+  "dmc_countries": [
+    "MU"
+  ]
+}
+
+[2025-12-30T11:25:59.426Z] [ItineraryCreator] Invoking LLM
+{
+  "query_length": 19,
+  "dmc_countries": [
+    "MU"
+  ],
+  "has_sample_itinerary": true
+}
+
+[2025-12-30T11:26:02.326Z] [ItineraryCreator] Transfer exclusion detection
+{
+  "query": "suggest 5 day trip ",
+  "excludes_transfers": false,
+  "reasoning": "The user is asking for a 5-day trip suggestion without specifying any preference regarding transfers. This query does not explicitly state that transfers should be excluded."
+}
+
+[2025-12-30T11:26:03.789Z] [ItineraryCreator] LLM extraction complete
+{
+  "destination": "Mauritius (MU)",
+  "check_in": "2025-12-30",
+  "check_out": "2026-01-04",
+  "nights": 5,
+  "adults": 1,
+  "children": 0,
+  "children_ages": [],
+  "services_count": 4,
+  "days_count": 6,
+  "tokens": 5147
+}
+
+[2025-12-30T11:26:03.791Z] [ItineraryCreator] Generated itinerary
+{
+  "days": [
+    {
+      "day": 1,
+      "title": "Arrival Day & Leisure",
+      "activities": [
+        {
+          "time": "On Arrival",
+          "activity": "Airport to Hotel Transfer",
+          "type": "transfer",
+          "basis": "SIC"
+        },
+        {
+          "time": "Afternoon/Evening",
+          "activity": "Leisure / Relaxation at Hotel",
+          "type": "free"
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "title": "Full Day South Island Tour",
+      "activities": [
+        {
+          "time": "08:00",
+          "activity": "Full Day South Island Tour",
+          "type": "tour",
+          "basis": "SIC"
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "title": "Full Day North Island Tour",
+      "activities": [
+        {
+          "time": "08:00",
+          "activity": "Full Day North Island Tour",
+          "type": "tour",
+          "basis": "SIC"
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "title": "Full Day Ile Aux Cerf Island Tour",
+      "activities": [
+        {
+          "time": "08:00",
+          "activity": "Full Day Ile Aux Cerf Island Tour",
+          "type": "tour",
+          "basis": "SIC"
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "title": "Leisure Day / Optional Activities",
+      "activities": [
+        {
+          "time": "All Day",
+          "activity": "Day at Leisure",
+          "type": "free"
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "title": "Departure Day",
+      "activities": [
+        {
+          "time": "On Departure",
+          "activity": "Hotel to Airport Transfer",
+          "type": "transfer",
+          "basis": "SIC"
+        }
+      ]
+    }
+  ]
+}
+
+[2025-12-30T11:26:04.678Z] [ItineraryCreator] Hotel policy combo extracted
+{
+  "min_nights": 3,
+  "services_count": 4,
+  "basis": "SIC",
+  "description": "For 4+ nights: Mandatory Combo Pack including Roundtrip Airport Transfers + Full Day North Island Tour + Full Day South Island Tour + Full Day Ile Aux Cerf Island Tour on SIC basis. For 3 nights or less: Mandatory Combo Pack including Roundtrip Airport Transfers + Any 2 among the three Full Day Tours on SIC basis."
+}
+
+[2025-12-30T11:26:04.964Z] [ItineraryCreator] Itinerary created successfully
+{
+  "days": 6,
+  "services": 4,
+  "nights": 5,
+  "destination": "Mauritius (MU)"
+}
+
+[2025-12-30T11:26:04.966Z] [Pipeline-V2] Itinerary Creator result
+{
+  "success": true,
+  "itinerary_days": 6,
+  "tokens": 5147,
+  "used_sample_itinerary": true
+}
+
+[2025-12-30T11:26:04.968Z] [Pipeline-V2] 🚀 Emitting itinerary-partial (structure_created)
+{
+  "days": 6
+}
+
+[2025-12-30T11:26:04.970Z] [Integration] 📤 Forwarding itinerary event
+{
+  "type": "itinerary-partial",
+  "status": "structure_created",
+  "has_data": true
+}
+
+[2025-12-30T11:26:04.975Z] [Pipeline-V2] Phase 2: Running Service Mapper
+
+[2025-12-30T11:26:04.978Z] [ServiceMapper] detectHotelPolicyCombo - evaluating policy
+{
+  "has_raw_policy": true,
+  "total_activities": 5,
+  "actual_nights": 5,
+  "policy_preview": "<ul class=\"list-disc\"><li class=\"list-item\"><p>If the user just asks for hotel rates in Mauritius and the duration is <strong>4 nights or more</strong"
+}
+
+[2025-12-30T11:26:06.067Z] [ServiceMapper] Hotel policy evaluation result
+{
+  "should_apply_combo": false,
+  "reasoning": "The user query is \"suggest 5 day trip \" and the actual duration is 5 nights. The policy states that the combo pack should be applied if the user *just asks for hotel rates* in Mauritius and the duration is 4 nights or more. Since the user is asking for a trip suggestion and not explicitly just hotel rates, the primary condition for automatic application is not strictly met. Furthermore, the current itinerary already includes transfers and three major tours (South, North, Ile Aux Cerf), suggesting the user's intent might already cover the combo elements, but based strictly on the trigger condition (\"just asks for hotel rates\"), the automatic application rule is not triggered by this specific query.",
+  "tokens": 735
+}
+
+[2025-12-30T11:26:06.070Z] [ServiceMapper] Phase 2: SEQUENTIAL Tours → Transfers mapping
+{
+  "has_hotel_name": false,
+  "total_days": 6
+}
+
+[2025-12-30T11:26:06.976Z] [ServiceMapper] Tour search results
+{
+  "query": "Mauritius (MU) Full Day North Island Tour",
+  "results_count": 15,
+  "results": [
+    {
+      "package_name": "Full Day North Island Tour",
+      "tour_id": "b47be303-1bd1-475c-af53-f77ee1848466",
+      "package_id": "d09cbc42-4277-4fe1-81ae-6b5365a71f22",
+      "similarity": 0.732300352865521
+    },
+    {
+      "package_name": "Full Day South Island Tour ",
+      "tour_id": "79fdd54c-f1b7-409c-9f96-ce625e1968cd",
+      "package_id": "c88b44a7-c6ce-4ab4-b40f-e8eae8885401",
+      "similarity": 0.692932947417043
+    },
+    {
+      "package_name": "Helicopter Ride - The Must of the North of Mauritius (25 minutes)",
+      "tour_id": "c09e5b25-e661-4bb0-9118-4aac1e44213d",
+      "package_id": "5a94d49a-6915-486e-ab58-afa3c88e96f9",
+      "similarity": 0.614551140612501
+    }
+  ]
+}
+
+[2025-12-30T11:26:06.995Z] [ServiceMapper] Tour search results
+{
+  "query": "Mauritius (MU) Full Day South Island Tour",
+  "results_count": 15,
+  "results": [
+    {
+      "package_name": "Full Day South Island Tour ",
+      "tour_id": "79fdd54c-f1b7-409c-9f96-ce625e1968cd",
+      "package_id": "c88b44a7-c6ce-4ab4-b40f-e8eae8885401",
+      "similarity": 0.735916093831307
+    },
+    {
+      "package_name": "Full Day North Island Tour",
+      "tour_id": "b47be303-1bd1-475c-af53-f77ee1848466",
+      "package_id": "d09cbc42-4277-4fe1-81ae-6b5365a71f22",
+      "similarity": 0.700067618487266
+    },
+    {
+      "package_name": "Full-day Catamaran Cruise to Ile Aux Benitiers Island (Shared)",
+      "tour_id": "190c3ae8-9290-46ab-8760-a1918c4730c3",
+      "package_id": "3aa5564b-acf4-4602-8145-89044b4ca59e",
+      "similarity": 0.608818683905915
+    }
+  ]
+}
+
+[2025-12-30T11:26:07.509Z] [ServiceMapper] Tour search results
+{
+  "query": "Mauritius (MU) Full Day Ile Aux Cerf Island Tour",
+  "results_count": 15,
+  "results": [
+    {
+      "package_name": "Full Day Ile Aux Cerfs Island Tour",
+      "tour_id": "4d9b4b9b-977e-4481-b463-982d93743504",
+      "package_id": "08903c27-4d2f-4240-94f4-1fc80f62930b",
+      "similarity": 0.751985713957922
+    },
+    {
+      "package_name": "Catamaran Cruise - Ile Aux Cerf Island & Lunch, Drinks (Shared)",
+      "tour_id": "efedcd41-86a9-4ec9-a51f-6d6e7761e173",
+      "package_id": "7b0a6e41-1500-417d-87cc-8ba2c8f6d4d3",
+      "similarity": 0.708077202301692
+    },
+    {
+      "package_name": "Tube Ride",
+      "tour_id": "4d9b4b9b-977e-4481-b463-982d93743504",
+      "package_id": "d49448f2-3e2a-462b-8c23-079bcc75b57e",
+      "similarity": 0.665326754411851
+    }
+  ]
+}
+
+[2025-12-30T11:26:07.991Z] [ServiceMapper] Tour selection result
+{
+  "query": "Full Day North Island Tour",
+  "selection": {
+    "package_name": "Full Day North Island Tour",
+    "tour_id": "b47be303-1bd1-475c-af53-f77ee1848466",
+    "package_id": "d09cbc42-4277-4fe1-81ae-6b5365a71f22"
+  },
+  "reasoning": "The user requested the \"Full Day North Island Tour\". Package 1 is an exact name match for the requested tour name: \"Full Day North Island Tour\". Since there are no other variants for this specific tour name to compare costs against, and it is an exact match, it is selected as the best option."
+}
+
+[2025-12-30T11:26:08.109Z] [ServiceMapper] Tour age_policy loaded
+{
+  "tour_name": "Full Day North Island Tour",
+  "age_policy": {
+    "adult": {
+      "max_age": 99,
+      "min_age": 12
+    },
+    "child": {
+      "max_age": 11,
+      "min_age": 2
+    },
+    "infant": {
+      "max_age": 1,
+      "min_age": 0
+    }
+  }
+}
+
+[2025-12-30T11:26:08.111Z] [ServiceMapper] Mapped tour
+{
+  "activity": "Full Day North Island Tour",
+  "package_name": "Full Day North Island Tour",
+  "tour_id": "b47be303-1bd1-475c-af53-f77ee1848466",
+  "includes_transfer": true,
+  "package_id": "d09cbc42-4277-4fe1-81ae-6b5365a71f22",
+  "has_age_policy": true,
+  "status": "mapped"
+}
+
+[2025-12-30T11:26:08.208Z] [ServiceMapper] Tour selection result
+{
+  "query": "Full Day South Island Tour",
+  "selection": {
+    "package_name": "Full Day South Island Tour ",
+    "tour_id": "79fdd54c-f1b7-409c-9f96-ce625e1968cd",
+    "package_id": "c88b44a7-c6ce-4ab4-b40f-e8eae8885401"
+  },
+  "reasoning": "The user requested the \"Full Day South Island Tour\". Package 1, \"Full Day South Island Tour\", is an exact name match for the tour component of the request. Although the basis (SIC tour) is not explicitly specified by the user, this is the only package matching the tour name. Since the party size is 1 Adult (16 years old, qualifying as an adult under the policy [adult:12-99]), the cost for the SIC tour variant is 1 unit * $30 = $30. No other package matches the requested tour name."
+}
+
+[2025-12-30T11:26:08.308Z] [ServiceMapper] Tour age_policy loaded
+{
+  "tour_name": "Full Day South Island Tour ",
+  "age_policy": {
+    "adult": {
+      "max_age": 99,
+      "min_age": 12
+    },
+    "child": {
+      "max_age": 11,
+      "min_age": 2
+    },
+    "infant": {
+      "max_age": 1,
+      "min_age": 0
+    }
+  }
+}
+
+[2025-12-30T11:26:08.310Z] [ServiceMapper] Mapped tour
+{
+  "activity": "Full Day South Island Tour",
+  "package_name": "Full Day South Island Tour ",
+  "tour_id": "79fdd54c-f1b7-409c-9f96-ce625e1968cd",
+  "includes_transfer": true,
+  "package_id": "c88b44a7-c6ce-4ab4-b40f-e8eae8885401",
+  "has_age_policy": true,
+  "status": "mapped"
+}
+
+[2025-12-30T11:26:08.769Z] [ServiceMapper] Tour selection result
+{
+  "query": "Full Day Ile Aux Cerf Island Tour",
+  "selection": {
+    "package_name": "Full Day Ile Aux Cerfs Island Tour",
+    "tour_id": "4d9b4b9b-977e-4481-b463-982d93743504",
+    "package_id": "08903c27-4d2f-4240-94f4-1fc80f62930b"
+  },
+  "reasoning": "The user requested the \"Full Day Ile Aux Cerfs Island Tour\". Package 1 is the only one that exactly matches this name and description, and it includes transfer. Since the party size is 1 Adult and the basis is 'SIC tour ca' (per person), the cost calculation is 1 unit * $30 = $30, which is the lowest possible cost among the matching options (though only one exact match exists)."
+}
+
+[2025-12-30T11:26:08.867Z] [ServiceMapper] Tour age_policy loaded
+{
+  "tour_name": "Full Day Ile Aux Cerfs Island Tour",
+  "age_policy": {
+    "adult": {
+      "max_age": 99,
+      "min_age": 12
+    },
+    "child": {
+      "max_age": 11,
+      "min_age": 0
+    }
+  }
+}
+
+[2025-12-30T11:26:08.869Z] [ServiceMapper] Mapped tour
+{
+  "activity": "Full Day Ile Aux Cerf Island Tour",
+  "package_name": "Full Day Ile Aux Cerfs Island Tour",
+  "tour_id": "4d9b4b9b-977e-4481-b463-982d93743504",
+  "includes_transfer": true,
+  "package_id": "08903c27-4d2f-4240-94f4-1fc80f62930b",
+  "has_age_policy": true,
+  "status": "mapped"
+}
+
+[2025-12-30T11:26:09.164Z] [ServiceMapper] Transfer location context
+{
+  "zone": "none",
+  "hotel": "none",
+  "location_context": "none"
+}
+
+[2025-12-30T11:26:09.167Z] [ServiceMapper] Transfer location context
+{
+  "zone": "none",
+  "hotel": "none",
+  "location_context": "none"
+}
+
+[2025-12-30T11:26:09.868Z] [ActivityAnalyzer] Transfer analyzed
+{
+  "input": "Hotel to Airport Transfer",
+  "direction": "departure",
+  "from": "Hotel",
+  "to": "Airport",
+  "is_airport": true,
+  "zone": "Mauritius",
+  "tokens": 213
+}
+
+[2025-12-30T11:26:09.870Z] [ServiceMapper] Transfer analysis
+{
+  "activity": "Hotel to Airport Transfer",
+  "direction": "departure",
+  "from": "Hotel",
+  "to": "Airport",
+  "zone": "Mauritius"
+}
+
+[2025-12-30T11:26:09.878Z] [ActivityAnalyzer] Transfer analyzed
+{
+  "input": "Airport to Hotel Transfer",
+  "direction": "arrival",
+  "from": "Airport",
+  "to": "Hotel",
+  "is_airport": true,
+  "zone": "Mauritius",
+  "tokens": 213
+}
+
+[2025-12-30T11:26:09.880Z] [ServiceMapper] Transfer analysis
+{
+  "activity": "Airport to Hotel Transfer",
+  "direction": "arrival",
+  "from": "Airport",
+  "to": "Hotel",
+  "zone": "Mauritius"
+}
+
+[2025-12-30T11:26:11.589Z] [Pipeline-V2] Service Mapper result
+{
+  "success": true,
+  "mapped_count": 5,
+  "tokens": 6322
+}
+
+[2025-12-30T11:26:11.591Z] [Pipeline-V2] 🚀 Emitting itinerary-partial (services_mapped)
+{
+  "days": 6,
+  "mapped_count": 5
+}
+
+[2025-12-30T11:26:11.593Z] [Integration] 📤 Forwarding itinerary event
+{
+  "type": "itinerary-partial",
+  "status": "services_mapped",
+  "has_data": true
+}
+
+[2025-12-30T11:26:11.598Z] [Pipeline-V2] Phase 2.5: Running Tour Pricing Agent
+
+[2025-12-30T11:26:11.697Z] [TourPricingAgent] Processing: Full Day South Island Tour 
+{
+  "type": "tour",
+  "age_policy": {
+    "adult": {
+      "max_age": 99,
+      "min_age": 12
+    },
+    "child": {
+      "max_age": 11,
+      "min_age": 2
+    },
+    "infant": {
+      "max_age": 1,
+      "min_age": 0
+    }
+  },
+  "pricing_model": {
+    "type": "per_person",
+    "sic_rate_adult": 30,
+    "sic_rate_child": 25,
+    "per_vehicle_rate": [
+      {
+        "rate": 80,
+        "brand": "",
+        "capacity": "3 ",
+        "vehicle_type": "Sedan"
+      },
+      {
+        "rate": 102,
+        "brand": "",
+        "capacity": "10",
+        "vehicle_type": "Van"
+      },
+      {
+        "rate": 175,
+        "brand": "",
+        "capacity": "20",
+        "vehicle_type": "Coach"
+      }
+    ]
+  },
+  "max_participants": 1,
+  "travelers": "1A + children []"
+}
+
+[2025-12-30T11:26:11.712Z] [TourPricingAgent] Processing: Full Day North Island Tour
+{
+  "type": "tour",
+  "age_policy": {
+    "adult": {
+      "max_age": 99,
+      "min_age": 12
+    },
+    "child": {
+      "max_age": 11,
+      "min_age": 2
+    },
+    "infant": {
+      "max_age": 1,
+      "min_age": 0
+    }
+  },
+  "pricing_model": {
+    "type": "per_person",
+    "sic_rate_adult": 30,
+    "sic_rate_child": 25,
+    "per_vehicle_rate": [
+      {
+        "rate": 80,
+        "brand": "",
+        "capacity": "3",
+        "vehicle_type": "Sedan"
+      },
+      {
+        "rate": 102,
+        "brand": "",
+        "capacity": "10",
+        "vehicle_type": "Van"
+      },
+      {
+        "rate": 175,
+        "brand": "",
+        "capacity": "20",
+        "vehicle_type": "Coach"
+      }
+    ]
+  },
+  "max_participants": 1,
+  "travelers": "1A + children []"
+}
+
+[2025-12-30T11:26:11.720Z] [TourPricingAgent] Processing: Full Day Ile Aux Cerfs Island Tour
+{
+  "type": "tour",
+  "age_policy": {
+    "adult": {
+      "max_age": 99,
+      "min_age": 12
+    },
+    "child": {
+      "max_age": 11,
+      "min_age": 0
+    }
+  },
+  "pricing_model": {
+    "type": "per_person",
+    "sic_rate_adult": 30,
+    "sic_rate_child": 25,
+    "per_vehicle_rate": [
+      {
+        "rate": 80,
+        "brand": "",
+        "capacity": "3",
+        "vehicle_type": "Sedan"
+      },
+      {
+        "rate": 102,
+        "brand": "",
+        "capacity": "10",
+        "vehicle_type": "Van"
+      },
+      {
+        "rate": 175,
+        "brand": "",
+        "capacity": "20",
+        "vehicle_type": "Coach"
+      }
+    ]
+  },
+  "max_participants": 1,
+  "travelers": "1A + children []"
+}
+
+[2025-12-30T11:26:14.472Z] [TourPricingAgent] Complete: Full Day North Island Tour
+{
+  "classification": {
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "excluded_count": 0,
+    "classification_remarks": [
+      "1 Adult (assumed 30+ years old) classified as Adult based on age policy (12-99 years)."
+    ],
+    "exclusions": []
+  },
+  "units_needed": 1,
+  "line_items_count": 1,
+  "subtotal": 30,
+  "tokens": 1772
+}
+
+[2025-12-30T11:26:14.604Z] [TourPricingAgent] Complete: Full Day Ile Aux Cerfs Island Tour
+{
+  "classification": {
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "excluded_count": 0,
+    "classification_remarks": [
+      "1 Adult classified based on age policy (12-99 years)."
+    ],
+    "exclusions": []
+  },
+  "units_needed": 1,
+  "line_items_count": 1,
+  "subtotal": 30,
+  "tokens": 1808
+}
+
+[2025-12-30T11:26:14.687Z] [TourPricingAgent] Complete: Full Day South Island Tour 
+{
+  "classification": {
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "excluded_count": 0,
+    "classification_remarks": [
+      "1 Adult classified based on default age assumption (30+)."
+    ],
+    "exclusions": []
+  },
+  "units_needed": 1,
+  "line_items_count": 1,
+  "subtotal": 30,
+  "tokens": 1797
+}
+
+[2025-12-30T11:26:14.689Z] [TourPricingAgent] Priced: Full Day South Island Tour 
+{
+  "quantity": {
+    "units_needed": 1,
+    "breakdown": [],
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "total_eligible": 1,
+    "age_policy_used": {
+      "adult": {
+        "max_age": 99,
+        "min_age": 12
+      },
+      "child": {
+        "max_age": 11,
+        "min_age": 2
+      },
+      "infant": {
+        "max_age": 1,
+        "min_age": 0
+      }
+    },
+    "classification_remarks": [
+      "1 Adult classified based on default age assumption (30+)."
+    ],
+    "exclusions": []
+  },
+  "subtotal": 30
+}
+
+[2025-12-30T11:26:14.691Z] [TourPricingAgent] Priced: Full Day North Island Tour
+{
+  "quantity": {
+    "units_needed": 1,
+    "breakdown": [],
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "total_eligible": 1,
+    "age_policy_used": {
+      "adult": {
+        "max_age": 99,
+        "min_age": 12
+      },
+      "child": {
+        "max_age": 11,
+        "min_age": 2
+      },
+      "infant": {
+        "max_age": 1,
+        "min_age": 0
+      }
+    },
+    "classification_remarks": [
+      "1 Adult (assumed 30+ years old) classified as Adult based on age policy (12-99 years)."
+    ],
+    "exclusions": []
+  },
+  "subtotal": 30
+}
+
+[2025-12-30T11:26:14.692Z] [TourPricingAgent] Priced: Full Day Ile Aux Cerfs Island Tour
+{
+  "quantity": {
+    "units_needed": 1,
+    "breakdown": [],
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "total_eligible": 1,
+    "age_policy_used": {
+      "adult": {
+        "max_age": 99,
+        "min_age": 12
+      },
+      "child": {
+        "max_age": 11,
+        "min_age": 0
+      }
+    },
+    "classification_remarks": [
+      "1 Adult classified based on age policy (12-99 years)."
+    ],
+    "exclusions": []
+  },
+  "subtotal": 30
+}
+
+[2025-12-30T11:26:14.694Z] [Pipeline-V2] Tour Pricing Agent result
+{
+  "success": true,
+  "priced_count": 3,
+  "tokens": 5377
+}
+
+[2025-12-30T11:26:14.700Z] [Pipeline-V2] Phase 3: Running Quantity Selector (hotels & transfers)
+
+[2025-12-30T11:26:14.809Z] [QuantitySelector] Child policy for transfer One Way Mauritius Airport to Hotel Transfer
+{
+  "is_per_vehicle": true
+}
+
+[2025-12-30T11:26:14.814Z] [QuantitySelector] Child policy for transfer One Way Hotel to Mauritius Airport Transfer
+{
+  "is_per_vehicle": true
+}
+
+[2025-12-30T11:26:16.106Z] [QuantitySelector] Quantified: Airport to Hotel Transfer
+{
+  "package_name": "One Way Mauritius Airport to Hotel Transfer",
+  "units_needed": 1,
+  "exclusions": []
+}
+
+[2025-12-30T11:26:16.108Z] [QuantitySelector] Quantified: Hotel to Airport Transfer
+{
+  "package_name": "One Way Hotel to Mauritius Airport Transfer",
+  "units_needed": 1,
+  "exclusions": []
+}
+
+[2025-12-30T11:26:16.110Z] [Pipeline-V2] Quantity Selector result
+{
+  "success": true,
+  "quantified_count": 2,
+  "tokens": 0
+}
+
+[2025-12-30T11:26:16.116Z] [Pipeline-V2] Phase 4: Running Pricing Calculator
+
+[2025-12-30T11:26:16.119Z] [PricingCalculator] Starting pricing calculation
+{
+  "chat_id": "e67e7efc-d465-4120-b528-41192b01cd3d",
+  "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4"
+}
+
+[2025-12-30T11:26:16.321Z] [PricingCalculator] Using DMC currency
+{
+  "currency": "USD",
+  "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4"
+}
+
+[2025-12-30T11:26:16.323Z] [PricingCalculator] Activity check: Airport to Hotel Transfer
+{
+  "status": "quantified",
+  "package_type": "transfer",
+  "has_quantity": true,
+  "quantity_summary": {
+    "exclusions": []
+  }
+}
+
+[2025-12-30T11:26:16.412Z] [PricingCalculator] Activity check: Leisure / Relaxation at Hotel
+{
+  "status": "placeholder",
+  "package_type": "free",
+  "has_quantity": false,
+  "quantity_summary": null
+}
+
+[2025-12-30T11:26:16.415Z] [PricingCalculator] Activity check: Full Day South Island Tour
+{
+  "status": "priced",
+  "package_type": "tour",
+  "has_quantity": true,
+  "quantity_summary": {
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "exclusions": []
+  }
+}
+
+[2025-12-30T11:26:16.417Z] [PricingCalculator] Activity check: Full Day North Island Tour
+{
+  "status": "priced",
+  "package_type": "tour",
+  "has_quantity": true,
+  "quantity_summary": {
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "exclusions": []
+  }
+}
+
+[2025-12-30T11:26:16.418Z] [PricingCalculator] Activity check: Full Day Ile Aux Cerf Island Tour
+{
+  "status": "priced",
+  "package_type": "tour",
+  "has_quantity": true,
+  "quantity_summary": {
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "exclusions": []
+  }
+}
+
+[2025-12-30T11:26:16.420Z] [PricingCalculator] Activity check: Day at Leisure
+{
+  "status": "placeholder",
+  "package_type": "free",
+  "has_quantity": false,
+  "quantity_summary": null
+}
+
+[2025-12-30T11:26:16.421Z] [PricingCalculator] Activity check: Hotel to Airport Transfer
+{
+  "status": "quantified",
+  "package_type": "transfer",
+  "has_quantity": true,
+  "quantity_summary": {
+    "exclusions": []
+  }
+}
+
+[2025-12-30T11:26:16.518Z] [PricingCalculator] Calling parallel price calculator
+{
+  "services_count": 2,
+  "hotels": 0,
+  "tours": 0,
+  "transfers": 2,
+  "combos": 0
+}
+
+
+============================================================
+[2025-12-30T11:26:16.521Z] PARALLEL PRICE CALCULATOR START
+============================================================
+
+[2025-12-30T11:26:16.523Z] [PriceCalculator] Services categorized
+{
+  "hotels": 0,
+  "tours": 0,
+  "transfers": 2,
+  "combos": 0,
+  "combo_basis": "auto (will use available rates)",
+  "country_code": "default"
+}
+
+[2025-12-30T11:26:16.524Z] [PriceCalculator] Task queue built
+{
+  "total_tasks": 2,
+  "hotels": 0,
+  "tours": 0,
+  "transfers": 2,
+  "combos": 0,
+  "max_parallel": 5
+}
+
+[2025-12-30T11:26:16.526Z] [PriceCalculator] Batch execution starting
+{
+  "total_tasks": 2,
+  "total_batches": 1,
+  "max_parallel": 5
+}
+
+[2025-12-30T11:26:16.527Z] [PriceCalculator] Batch 1 START
+{
+  "batch_index": 1,
+  "total_batches": 1,
+  "tasks": [
+    {
+      "type": "transfer",
+      "name": "Mauritius Airport Transfers"
+    },
+    {
+      "type": "transfer",
+      "name": "Mauritius Airport Transfers"
+    }
+  ]
+}
+
+[2025-12-30T11:26:16.529Z] [TransferPriceCalculator] START
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "transfer_id": "05544607-4bd4-4419-89e9-a41fb91ecfa4",
+  "route": "N/A",
+  "basis": "SIC",
+  "travelers": {
+    "adults": 1,
+    "children": 0,
+    "child_ages": []
+  }
+}
+
+[2025-12-30T11:26:16.531Z] [TransferPriceCalculator] DB Rates & Eligible Counts
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "actual_rates": {
+    "sic_adult": 30,
+    "sic_child": 25,
+    "per_vehicle_rates": [
+      {
+        "type": "Sedan",
+        "capacity": 0,
+        "rate": 80
+      },
+      {
+        "type": "Van",
+        "capacity": 0,
+        "rate": 102
+      },
+      {
+        "type": "Coach",
+        "capacity": 0,
+        "rate": 175
+      }
+    ]
+  },
+  "eligible_counts": {
+    "adults": 1,
+    "children": 0,
+    "total": 1,
+    "total_passengers": 1,
+    "vehicles": 1
+  }
+}
+
+[2025-12-30T11:26:16.534Z] [TransferPriceCalculator] START
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "transfer_id": "05544607-4bd4-4419-89e9-a41fb91ecfa4",
+  "route": "N/A",
+  "basis": "SIC",
+  "travelers": {
+    "adults": 1,
+    "children": 0,
+    "child_ages": []
+  }
+}
+
+[2025-12-30T11:26:16.536Z] [TransferPriceCalculator] DB Rates & Eligible Counts
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "actual_rates": {
+    "sic_adult": 30,
+    "sic_child": 25,
+    "per_vehicle_rates": [
+      {
+        "type": "Sedan",
+        "capacity": 0,
+        "rate": 80
+      },
+      {
+        "type": "Van",
+        "capacity": 0,
+        "rate": 102
+      },
+      {
+        "type": "Coach",
+        "capacity": 0,
+        "rate": 175
+      }
+    ]
+  },
+  "eligible_counts": {
+    "adults": 1,
+    "children": 0,
+    "total": 1,
+    "total_passengers": 1,
+    "vehicles": 1
+  }
+}
+
+[2025-12-30T11:26:18.890Z] [TransferPriceCalculator] COMPLETE
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "line_items_count": 1,
+  "subtotal": 30,
+  "tokens_used": 2281
+}
+
+[2025-12-30T11:26:18.893Z] [PriceCalculator] Task completed: transfer
+{
+  "service_name": "Mauritius Airport Transfers",
+  "duration_ms": 2359,
+  "tokens_used": 2281,
+  "line_items_count": 1,
+  "subtotal": 30
+}
+
+[2025-12-30T11:26:19.329Z] [TransferPriceCalculator] COMPLETE
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "line_items_count": 1,
+  "subtotal": 30,
+  "tokens_used": 2294
+}
+
+[2025-12-30T11:26:19.331Z] [PriceCalculator] Task completed: transfer
+{
+  "service_name": "Mauritius Airport Transfers",
+  "duration_ms": 2802,
+  "tokens_used": 2294,
+  "line_items_count": 1,
+  "subtotal": 30
+}
+
+[2025-12-30T11:26:19.334Z] [PriceCalculator] Batch 1 COMPLETE
+{
+  "successful": 2,
+  "failed": 0
+}
+
+[2025-12-30T11:26:19.336Z] [PriceAggregator] Aggregation complete
+{
+  "total_line_items": 2,
+  "successful_calculators": 2,
+  "failed_calculators": 0,
+  "subtotals": {
+    "accommodation": 0,
+    "meals": 0,
+    "supplements": 0,
+    "tours_transfers": 60
+  },
+  "grand_total": 60,
+  "per_adult": 60,
+  "per_child": 0
+}
+
+[2025-12-30T11:26:19.338Z] [PriceCalculator] COMPLETE
+{
+  "total_duration_ms": 2810,
+  "total_tasks": 2,
+  "successful": 2,
+  "failed": 0,
+  "total_tokens": 4575,
+  "tokens_by_type": {
+    "hotel": 0,
+    "tour": 0,
+    "transfer": 4575,
+    "combo": 0
+  },
+  "grand_total": 60,
+  "line_items_count": 2
+}
+
+[2025-12-30T11:26:19.340Z] [PricingCalculator] Tour pricing from TourPricingAgent
+{
+  "tour_line_items": 3,
+  "tour_total": 90
+}
+
+[2025-12-30T11:26:19.342Z] [PricingCalculator] Pricing complete
+{
+  "grand_total": 150,
+  "line_items_count": 5,
+  "tokens": 4575,
+  "currency": "USD",
+  "calculation_notes_count": 10
+}
+
+[2025-12-30T11:26:19.343Z] [Pipeline-V2] Pricing Calculator result
+{
+  "success": true,
+  "tokens": 4575
+}
+
+[2025-12-30T11:26:19.345Z] [Pipeline-V2] 🚀 Emitting itinerary-complete (complete)
+{
+  "days": 6,
+  "grand_total": 150,
+  "currency": "USD"
+}
+
+[2025-12-30T11:26:19.347Z] [Integration] 📤 Forwarding itinerary event
+{
+  "type": "itinerary-complete",
+  "status": "complete",
+  "has_data": true
+}
+
+[2025-12-30T11:26:19.354Z] [Pipeline-V2] Pipeline COMPLETE
+{
+  "total_tokens": 21421,
+  "errors_count": 0
+}
+
+[2025-12-30T11:26:19.358Z] [Integration] Pipeline result
+{
+  "success": true,
+  "has_itinerary": true,
+  "days_count": 6,
+  "total_tokens": 21421
+}
+
+[2025-12-30T11:26:19.360Z] [Integration] Converting itinerary
+{
+  "days_count": 6,
+  "destination": "Mauritius (MU)",
+  "travelers": "1A 0C"
+}
+
+[2025-12-30T11:26:19.361Z] [Integration] Day 1
+{
+  "activities": [
+    {
+      "activity": "Airport to Hotel Transfer",
+      "type": "transfer",
+      "status": "priced"
+    },
+    {
+      "activity": "Leisure / Relaxation at Hotel",
+      "type": "free",
+      "status": "placeholder"
+    }
+  ]
+}
+
+[2025-12-30T11:26:19.363Z] [Integration] SKIPPED activity
+{
+  "activity": "Leisure / Relaxation at Hotel",
+  "status": "placeholder",
+  "reason": "not priced/quantified/mapped"
+}
+
+[2025-12-30T11:26:19.364Z] [Integration] Day 2
+{
+  "activities": [
+    {
+      "activity": "Full Day South Island Tour",
+      "type": "tour",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:26:19.366Z] [Integration] Tour activity
+{
+  "activity": "Full Day South Island Tour",
+  "tour_id": "79fdd54c-f1b7-409c-9f96-ce625e1968cd",
+  "package_id": "c88b44a7-c6ce-4ab4-b40f-e8eae8885401",
+  "package_name": "Full Day South Island Tour ",
+  "status": "priced"
+}
+
+[2025-12-30T11:26:19.367Z] [Integration] Day 3
+{
+  "activities": [
+    {
+      "activity": "Full Day North Island Tour",
+      "type": "tour",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:26:19.369Z] [Integration] Tour activity
+{
+  "activity": "Full Day North Island Tour",
+  "tour_id": "b47be303-1bd1-475c-af53-f77ee1848466",
+  "package_id": "d09cbc42-4277-4fe1-81ae-6b5365a71f22",
+  "package_name": "Full Day North Island Tour",
+  "status": "priced"
+}
+
+[2025-12-30T11:26:19.371Z] [Integration] Day 4
+{
+  "activities": [
+    {
+      "activity": "Full Day Ile Aux Cerf Island Tour",
+      "type": "tour",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:26:19.372Z] [Integration] Tour activity
+{
+  "activity": "Full Day Ile Aux Cerf Island Tour",
+  "tour_id": "4d9b4b9b-977e-4481-b463-982d93743504",
+  "package_id": "08903c27-4d2f-4240-94f4-1fc80f62930b",
+  "package_name": "Full Day Ile Aux Cerfs Island Tour",
+  "status": "priced"
+}
+
+[2025-12-30T11:26:19.374Z] [Integration] Day 5
+{
+  "activities": [
+    {
+      "activity": "Day at Leisure",
+      "type": "free",
+      "status": "placeholder"
+    }
+  ]
+}
+
+[2025-12-30T11:26:19.375Z] [Integration] SKIPPED activity
+{
+  "activity": "Day at Leisure",
+  "status": "placeholder",
+  "reason": "not priced/quantified/mapped"
+}
+
+[2025-12-30T11:26:19.377Z] [Integration] Day 6
+{
+  "activities": [
+    {
+      "activity": "Hotel to Airport Transfer",
+      "type": "transfer",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:26:19.378Z] [Integration] Converted to orchestrator format
+{
+  "hotels_count": 0,
+  "tours_count": 3,
+  "transfers_count": 2,
+  "combos_count": 0
+}
+
+[2025-12-30T11:26:19.381Z] [Workflow] New pipeline fast path complete
+{
+  "services_count": 2,
+  "total_tokens": 21421,
+  "has_itinerary": true,
+  "has_pricing": true
+}
+
+
+============================================================
+[2025-12-30T11:26:19.385Z] AI REMARKS AGENT START
+============================================================
+
+[2025-12-30T11:26:19.387Z] [AIRemarksAgent] Input data
+{
+  "services_count": 2,
+  "has_itinerary": true,
+  "has_scheduling_notes": 0,
+  "has_line_items": true,
+  "line_items_count": 5
+}
+
+[2025-12-30T11:26:19.390Z] [AIRemarksAgent] Raw data collected for LLM
+{
+  "sections_count": 11,
+  "raw_data": "\n**SERVICE: Full Day South Island Tour (tour)**\n\n**SERVICE: Full Day North Island Tour (tour)**\n\n**SERVICE: Full Day Ile Aux Cerf Island Tour (tour)**\n\n**SERVICE: transfer (transfer)**\n\n**SERVICE: transfer (transfer)**\n\n**PRICING LINE ITEMS (for occupancy context):**\n- One Way Mauritius Airport to Hotel Transfer (SIC Basis): $30 (SIC Transfer for 1 Adult. Note: SIC Transfer timings are 8 AM to 5 PM only daily.)\n- One Way Hotel to Mauritius Airport Transfer (SIC Basis): $30 (SIC Transfer timings - 8 AM to 5 PM only daily.)\n- 2025-12-31 | Full Day South Island Tour  - Adult: $30\n- 2026-01-01 | Full Day North Island Tour - Adult: $30\n- 2026-01-02 | Full Day Ile Aux Cerfs Island Tour - Adult: $30"
+}
+
+[2025-12-30T11:26:20.514Z] [AIRemarksAgent] Final output
+{
+  "remarks_count": 4,
+  "remarks": [
+    "Value Add: The pricing structure confirms that the Full Day South Island Tour, North Island Tour, and Ile Aux Cerfs Island Tour are all priced at $30 per adult.",
+    "Operational Note: Both One Way Airport Transfer services (to and from the hotel) are subject to strict operating hours, available only between 8 AM and 5 PM daily.",
+    "Scheduling Density Alert: Your itinerary includes three separate full-day tours scheduled consecutively on December 31st, January 1st, and January 2nd, indicating a very busy travel period.",
+    "Operational Note: The pricing data shows specific dates assigned to the tours (Dec 31, Jan 1, Jan 2), suggesting these tours may run on fixed schedules or specific days of the week."
+  ],
+  "tokens_used": 1015
+}
+
+
+============================================================
+[2025-12-30T11:26:20.612Z] USER QUOTE FORMATTER START
+============================================================
+
+[2025-12-30T11:26:20.615Z] [UserQuoteFormatter] Input data DETAILED
+{
+  "services_count": 2,
+  "service_types": [
+    "tour",
+    "transfer"
+  ],
+  "has_hotel": false,
+  "has_combo": false,
+  "has_tour": true,
+  "has_transfer": true,
+  "line_items_count": 5,
+  "grand_total": 150,
+  "ai_remarks_count": 4,
+  "has_itinerary": true,
+  "using_itinerary_extraction": false,
+  "combo_details": null,
+  "dmc_settings": {
+    "id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4",
+    "name": "Mauritius Demo",
+    "streetAddress": "Mauritius",
+    "city": "",
+    "country": "MU",
+    "website": "https://www.rategen.ai/",
+    "pricing_breakup_rule": "total_gross",
+    "output_currency": "USD",
+    "allow_individual_service_rates": true,
+    "countryServing": [
+      "MU"
+    ],
+    "kill_switch": false,
+    "default_sell_policy": null,
+    "default_hotel_policy": "<ul class=\"list-disc\"><li class=\"list-item\"><p>If the user just asks for hotel rates in Mauritius and the duration is <strong>4 nights or more</strong>, <strong>always add Combo Pack </strong>of [Roundtrip Airport Transfers + Full Day North Island Tour + Full Day South Island Tour + Full Day Ile Aux Cerf Island Tour] on <strong>SIC basis</strong> by default as per tour operational days. If the user again sends a follow-up message to remove the transfers or tours or the whole combo pack, then you can do the needful.<br>Note: SIC tours cannot be done on arrival/departure days, Operational days for Ile Aux Cerf Tour SIC (Mon, Wed, Sat), Operational days for North Island Tour SIC (Tues, Fri), Operational days for South Island Tour SIC (Thurs, Sun)</p></li><li class=\"list-item\"><p>If the user just asks for hotel rates in Mauritius and the duration is <strong>3 nights or less</strong>, <strong>always add Combo Pack</strong> that includes [Roundtrip Airport Transfers + <strong>Any 2</strong> among Full Day North Island Tour / Full Day South Island Tour / Full Day Ile Aux Cerf Island Tour] on <strong>SIC basis </strong>by default<strong>,</strong> depending on the operational days of these tours and actual travel dates. If the user again sends a follow-up message to remove the transfers or tours or the whole combo pack, then you can do the needful.<br>Note: SIC tours cannot be done on arrival/departure days, Operational days for Ile Aux Cerf Tour SIC (Mon, Wed, Sat), Operational days for North Island Tour SIC (Tues, Fri), Operational days for South Island Tour SIC (Thurs, Sun)<br></p></li></ul><p></p>",
+    "default_tour_policy": "<ul class=\"list-disc\"><li class=\"list-item\"><p>Max 8 hours of tours can be done in a single day. If two or more tours combined takes more than 8 hours, then it has to be shifted to another day.</p></li><li class=\"list-item\"><p>South Island Tour, North Island Tour &amp; Ile Aux Cerf Island Tour - These 3 tours on SIC basis have to be done on separate days as per operational days of each tour. Also, these 3 can’t be done on arrival and departure days on SIC basis. </p></li><li class=\"list-item\"><p></p></li></ul><p></p>",
+    "default_transfer_policy": "<ul class=\"list-disc\"><li class=\"list-item\"><p>Whenever private transfers are required for any tour/activity in Mauritius and private transfer rates are missing, then always auto consider “full day car on disposal” rates.</p></li></ul><p></p>",
+    "default_travel_theme": null
+  }
+}
+
+[2025-12-30T11:26:20.617Z] [UserQuoteFormatter] Using unified template
+{
+  "template_name": "UniversalTemplate",
+  "service_types": [
+    "tour",
+    "transfer"
+  ],
+  "show_itinerary": true,
+  "pricing_breakup_rule": "total_gross"
+}
+
+
+============================================================
+[2025-12-30T11:26:20.620Z] INTERNAL BREAKUP FORMATTER START
+============================================================
+
+[2025-12-30T11:26:20.622Z] [InternalBreakupFormatter] Input data
+{
+  "line_items_count": 5,
+  "grand_total": 150,
+  "has_services": true
+}
+
+[2025-12-30T11:26:24.386Z] [InternalBreakupFormatter] Output generated
+{
+  "response_length": 1186,
+  "tokens_used": 3268
+}
+
+[2025-12-30T11:26:27.845Z] [UserQuoteFormatter] Output generated
+{
+  "response_length": 4001,
+  "tokens_used": 9662
+}
+
+[2025-12-30T11:27:07.035Z] [IntentClassifier] Classification complete
+{
+  "query_preview": " suggest 5 day trip ,, what do you think I should ",
+  "category": "complete_quote",
+  "action": "new",
+  "action_target": "all",
+  "is_followup": false,
+  "tokens": 644
+}
+
+[2025-12-30T11:27:07.037Z] [parseQuery] COMPLETE_QUOTE + NEW - fast path (no SmartRouting needed)
+{
+  "category": "complete_quote",
+  "action": "new",
+  "route_type": "NEW_QUOTE",
+  "tokens_used": 644
+}
+
+
+============================================================
+[2025-12-30T11:27:07.059Z] HANDLE COMPLETE QUOTE NODE START
+============================================================
+
+[2025-12-30T11:27:07.063Z] [Workflow] Using new pipeline fast path
+{
+  "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4",
+  "query_preview": " suggest 5 day trip ,, what do you think I should "
+}
+
+[2025-12-30T11:27:07.065Z] [Pipeline-V2] Starting itinerary pipeline
+{
+  "chat_id": "7690df76-4d33-48b7-8fff-fee463e52692",
+  "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4",
+  "query_preview": " suggest 5 day trip ,, what do you think I should do? Suggest itinerary only"
+}
+
+[2025-12-30T11:27:07.275Z] [Pipeline-V2] Phase 1: Running Itinerary Creator
+
+[2025-12-30T11:27:07.373Z] [Pipeline-V2] Sample itinerary loaded
+{
+  "nights": 4,
+  "content_length": 992
+}
+
+[2025-12-30T11:27:07.376Z] [ItineraryCreator] Starting itinerary creation
+{
+  "chat_id": "7690df76-4d33-48b7-8fff-fee463e52692",
+  "query_length": 76,
+  "dmc_countries": [
+    "MU"
+  ]
+}
+
+[2025-12-30T11:27:07.379Z] [ItineraryCreator] Invoking LLM
+{
+  "query_length": 76,
+  "dmc_countries": [
+    "MU"
+  ],
+  "has_sample_itinerary": true
+}
+
+[2025-12-30T11:27:09.732Z] [ItineraryCreator] Transfer exclusion detection
+{
+  "query": " suggest 5 day trip ,, what do you think I should do? Suggest itinerary only",
+  "excludes_transfers": false,
+  "reasoning": "The user is asking for a suggested itinerary only ('Suggest itinerary only'). This request does not explicitly state that transfers should be excluded, nor does it mention arranging their own transport. Therefore, transfers are not explicitly excluded."
+}
+
+[2025-12-30T11:27:11.495Z] [ItineraryCreator] LLM extraction complete
+{
+  "destination": "Mauritius (MU)",
+  "check_in": "2025-12-30",
+  "check_out": "2026-01-04",
+  "nights": 5,
+  "adults": 1,
+  "children": 0,
+  "children_ages": [],
+  "services_count": 4,
+  "days_count": 6,
+  "tokens": 5153
+}
+
+[2025-12-30T11:27:11.498Z] [ItineraryCreator] Generated itinerary
+{
+  "days": [
+    {
+      "day": 1,
+      "title": "Arrival and Leisure",
+      "activities": [
+        {
+          "time": "On Arrival",
+          "activity": "Airport to Hotel Transfer",
+          "type": "transfer",
+          "basis": "SIC"
+        },
+        {
+          "time": "Afternoon",
+          "activity": "Day at Leisure",
+          "type": "free"
+        }
+      ]
+    },
+    {
+      "day": 2,
+      "title": "Full Day North Island Tour (SIC)",
+      "activities": [
+        {
+          "time": "08:00",
+          "activity": "Full Day North Island Tour",
+          "type": "tour",
+          "basis": "SIC"
+        }
+      ]
+    },
+    {
+      "day": 3,
+      "title": "Full Day Ile Aux Cerf Island Tour (SIC)",
+      "activities": [
+        {
+          "time": "08:00",
+          "activity": "Full Day Ile Aux Cerf Island Tour",
+          "type": "tour",
+          "basis": "SIC"
+        }
+      ]
+    },
+    {
+      "day": 4,
+      "title": "Full Day South Island Tour (SIC)",
+      "activities": [
+        {
+          "time": "08:00",
+          "activity": "Full Day South Island Tour",
+          "type": "tour",
+          "basis": "SIC"
+        }
+      ]
+    },
+    {
+      "day": 5,
+      "title": "Leisure Day",
+      "activities": [
+        {
+          "time": "All Day",
+          "activity": "Day at Leisure",
+          "type": "free"
+        }
+      ]
+    },
+    {
+      "day": 6,
+      "title": "Departure",
+      "activities": [
+        {
+          "time": "On Departure",
+          "activity": "Hotel to Airport Transfer",
+          "type": "transfer",
+          "basis": "SIC"
+        }
+      ]
+    }
+  ]
+}
+
+[2025-12-30T11:27:12.416Z] [ItineraryCreator] Hotel policy combo extracted
+{
+  "min_nights": 3,
+  "services_count": 4,
+  "basis": "SIC",
+  "description": "For 4+ nights: Mandatory Combo Pack including Roundtrip Airport Transfers + Full Day North Island Tour + Full Day South Island Tour + Full Day Ile Aux Cerf Island Tour on SIC basis. For 3 nights or less: Mandatory Combo Pack including Roundtrip Airport Transfers + Any 2 among the three Full Day Tours on SIC basis."
+}
+
+[2025-12-30T11:27:12.656Z] [ItineraryCreator] Itinerary created successfully
+{
+  "days": 6,
+  "services": 4,
+  "nights": 5,
+  "destination": "Mauritius (MU)"
+}
+
+[2025-12-30T11:27:12.659Z] [Pipeline-V2] Itinerary Creator result
+{
+  "success": true,
+  "itinerary_days": 6,
+  "tokens": 5153,
+  "used_sample_itinerary": true
+}
+
+[2025-12-30T11:27:12.662Z] [Pipeline-V2] 🚀 Emitting itinerary-partial (structure_created)
+{
+  "days": 6
+}
+
+[2025-12-30T11:27:12.664Z] [Integration] 📤 Forwarding itinerary event
+{
+  "type": "itinerary-partial",
+  "status": "structure_created",
+  "has_data": true
+}
+
+[2025-12-30T11:27:12.670Z] [Pipeline-V2] Phase 2: Running Service Mapper
+
+[2025-12-30T11:27:12.673Z] [ServiceMapper] detectHotelPolicyCombo - evaluating policy
+{
+  "has_raw_policy": true,
+  "total_activities": 5,
+  "actual_nights": 5,
+  "policy_preview": "<ul class=\"list-disc\"><li class=\"list-item\"><p>If the user just asks for hotel rates in Mauritius and the duration is <strong>4 nights or more</strong"
+}
+
+[2025-12-30T11:27:13.959Z] [ServiceMapper] Hotel policy evaluation result
+{
+  "should_apply_combo": true,
+  "reasoning": "The user is asking for a 5-day trip itinerary, which implies a stay of 4 nights or more (since 5 days usually means 4 nights or 5 nights, and the policy covers 4 nights or more). The policy states that if the user just asks for hotel rates in Mauritius and the duration is 4 nights or more, the full combo pack (Transfers + 3 specified tours) must always be added by default. Although the user asked for an itinerary suggestion rather than explicitly 'hotel rates', the context of a trip planning query combined with the actual nights being 5 triggers the first policy rule. The current itinerary already includes the required transfers and all three tours, confirming the application of the combo pack structure for a 4+ night stay.",
+  "tokens": 763
+}
+
+[2025-12-30T11:27:16.034Z] [ServiceMapper] detectHotelPolicyCombo - LLM result
+{
+  "combo_number": 4,
+  "covered_indices": [
+    0,
+    1,
+    2,
+    3,
+    5
+  ],
+  "reasoning": "The policy for 4 nights or more (implied by a 5-day trip) mandates adding the full combo pack: [Roundtrip Airport Transfers + Full Day North Island Tour + Full Day South Island Tour + Full Day Ile Aux Cerf Island Tour] on SIC basis. Combo 4, \"Mauritius Combo [Airport Transfers + Tours] - SIC\", covers exactly these components: Full Day North Island Tour, Full Day South Island Tour, Full Day Ile Aux Cerfs Island Tour, and Roundtrip Airport Transfers (split into arrival/departure transfers). The current itinerary activities match all components of Combo 4: Day 1 (Airport to Hotel Transfer), Day 2 (North Island Tour), Day 3 (Ile Aux Cerf Island Tour), Day 4 (South Island Tour), and Day 6 (Hotel to Airport Transfer). Therefore, Combo 4 is the best match for the required default package structure."
+}
+
+[2025-12-30T11:27:16.038Z] [ServiceMapper] Hotel policy combo applied
+{
+  "combo": "Mauritius Combo [Airport Transfers + Tours] - SIC",
+  "activities_marked": 5,
+  "min_nights": 3,
+  "actual_nights": 5
+}
+
+[2025-12-30T11:27:16.041Z] [ServiceMapper] Phase 2: SEQUENTIAL Tours → Transfers mapping
+{
+  "has_hotel_name": false,
+  "total_days": 6
+}
+
+[2025-12-30T11:27:16.045Z] [ServiceMapper] Transfer location context
+{
+  "zone": "none",
+  "hotel": "none",
+  "location_context": "none"
+}
+
+[2025-12-30T11:27:16.790Z] [ActivityAnalyzer] Transfer analyzed
+{
+  "input": "Hotel to Airport Transfer",
+  "direction": "departure",
+  "from": "Hotel",
+  "to": "Airport",
+  "is_airport": true,
+  "zone": "Mauritius",
+  "tokens": 213
+}
+
+[2025-12-30T11:27:16.792Z] [ServiceMapper] Transfer analysis
+{
+  "activity": "Hotel to Airport Transfer",
+  "direction": "departure",
+  "from": "Hotel",
+  "to": "Airport",
+  "zone": "Mauritius"
+}
+
+[2025-12-30T11:27:18.503Z] [Pipeline-V2] Service Mapper result
+{
+  "success": true,
+  "mapped_count": 6,
+  "tokens": 2107
+}
+
+[2025-12-30T11:27:18.507Z] [Pipeline-V2] 🚀 Emitting itinerary-partial (services_mapped)
+{
+  "days": 6,
+  "mapped_count": 6
+}
+
+[2025-12-30T11:27:18.509Z] [Integration] 📤 Forwarding itinerary event
+{
+  "type": "itinerary-partial",
+  "status": "services_mapped",
+  "has_data": true
+}
+
+[2025-12-30T11:27:18.515Z] [Pipeline-V2] Phase 2.5: Running Tour Pricing Agent
+
+[2025-12-30T11:27:18.517Z] [TourPricingAgent] Combined tour: undefined
+{
+  "note": "Included in combo package",
+  "pricing": "$0 (included in combo)"
+}
+
+[2025-12-30T11:27:18.520Z] [TourPricingAgent] Combined tour: undefined
+{
+  "note": "Included in combo package",
+  "pricing": "$0 (included in combo)"
+}
+
+[2025-12-30T11:27:18.522Z] [TourPricingAgent] Combined tour: undefined
+{
+  "note": "Included in combo package",
+  "pricing": "$0 (included in combo)"
+}
+
+[2025-12-30T11:27:18.619Z] [TourPricingAgent] Combo pricing: Mauritius Combo [Airport Transfers + Tours] - SIC
+{
+  "title": "Mauritius Combo [Airport Transfers + Tours] - SIC",
+  "travelers": "1A + children []"
+}
+
+[2025-12-30T11:27:21.232Z] [TourPricingAgent] Combo complete: Mauritius Combo [Airport Transfers + Tours] - SIC
+{
+  "units_needed": 1,
+  "subtotal": 30,
+  "tokens": 1782
+}
+
+[2025-12-30T11:27:21.235Z] [TourPricingAgent] Priced: Mauritius Combo [Airport Transfers + Tours] - SIC
+{
+  "quantity": {
+    "units_needed": 1,
+    "breakdown": [],
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "total_eligible": 1,
+    "classification_remarks": [
+      "1 traveler classified as Adult based on age 30+."
+    ],
+    "exclusions": []
+  },
+  "subtotal": 30
+}
+
+[2025-12-30T11:27:21.237Z] [Pipeline-V2] Tour Pricing Agent result
+{
+  "success": true,
+  "priced_count": 1,
+  "tokens": 1782
+}
+
+[2025-12-30T11:27:21.243Z] [Pipeline-V2] Phase 3: Running Quantity Selector (hotels & transfers)
+
+[2025-12-30T11:27:21.345Z] [QuantitySelector] Child policy for transfer One Way Hotel to Mauritius Airport Transfer
+{
+  "is_per_vehicle": true
+}
+
+[2025-12-30T11:27:22.352Z] [QuantitySelector] Quantified: Hotel to Airport Transfer
+{
+  "package_name": "One Way Hotel to Mauritius Airport Transfer",
+  "units_needed": 1,
+  "exclusions": []
+}
+
+[2025-12-30T11:27:22.355Z] [Pipeline-V2] Quantity Selector result
+{
+  "success": true,
+  "quantified_count": 1,
+  "tokens": 0
+}
+
+[2025-12-30T11:27:22.361Z] [Pipeline-V2] Phase 4: Running Pricing Calculator
+
+[2025-12-30T11:27:22.364Z] [PricingCalculator] Starting pricing calculation
+{
+  "chat_id": "7690df76-4d33-48b7-8fff-fee463e52692",
+  "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4"
+}
+
+[2025-12-30T11:27:22.556Z] [PricingCalculator] Using DMC currency
+{
+  "currency": "USD",
+  "dmc_id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4"
+}
+
+[2025-12-30T11:27:22.558Z] [PricingCalculator] Activity check: Airport to Hotel Transfer
+{
+  "status": "combined",
+  "package_type": "transfer",
+  "has_quantity": false,
+  "quantity_summary": null
+}
+
+[2025-12-30T11:27:22.560Z] [PricingCalculator] Activity check: Day at Leisure
+{
+  "status": "placeholder",
+  "package_type": "free",
+  "has_quantity": false,
+  "quantity_summary": null
+}
+
+[2025-12-30T11:27:22.562Z] [PricingCalculator] Activity check: Mauritius Combo [Airport Transfers + Tours] - SIC
+{
+  "status": "priced",
+  "package_type": "combo",
+  "has_quantity": true,
+  "quantity_summary": {
+    "adult_count": 1,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0,
+    "exclusions": []
+  }
+}
+
+[2025-12-30T11:27:22.563Z] [PricingCalculator] Activity check: Full Day North Island Tour
+{
+  "status": "priced",
+  "package_type": "tour",
+  "has_quantity": true,
+  "quantity_summary": {
+    "adult_count": 0,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0
+  }
+}
+
+[2025-12-30T11:27:22.564Z] [PricingCalculator] Activity check: Full Day Ile Aux Cerf Island Tour
+{
+  "status": "priced",
+  "package_type": "tour",
+  "has_quantity": true,
+  "quantity_summary": {
+    "adult_count": 0,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0
+  }
+}
+
+[2025-12-30T11:27:22.566Z] [PricingCalculator] Activity check: Full Day South Island Tour
+{
+  "status": "priced",
+  "package_type": "tour",
+  "has_quantity": true,
+  "quantity_summary": {
+    "adult_count": 0,
+    "teenager_count": 0,
+    "child_count": 0,
+    "infant_count": 0
+  }
+}
+
+[2025-12-30T11:27:22.568Z] [PricingCalculator] Activity check: Day at Leisure
+{
+  "status": "placeholder",
+  "package_type": "free",
+  "has_quantity": false,
+  "quantity_summary": null
+}
+
+[2025-12-30T11:27:22.570Z] [PricingCalculator] Activity check: Hotel to Airport Transfer
+{
+  "status": "quantified",
+  "package_type": "transfer",
+  "has_quantity": true,
+  "quantity_summary": {
+    "exclusions": []
+  }
+}
+
+[2025-12-30T11:27:22.684Z] [PricingCalculator] Calling parallel price calculator
+{
+  "services_count": 1,
+  "hotels": 0,
+  "tours": 0,
+  "transfers": 1,
+  "combos": 0
+}
+
+
+============================================================
+[2025-12-30T11:27:22.686Z] PARALLEL PRICE CALCULATOR START
+============================================================
+
+[2025-12-30T11:27:22.688Z] [PriceCalculator] Services categorized
+{
+  "hotels": 0,
+  "tours": 0,
+  "transfers": 1,
+  "combos": 0,
+  "combo_basis": "auto (will use available rates)",
+  "country_code": "default"
+}
+
+[2025-12-30T11:27:22.690Z] [PriceCalculator] Task queue built
+{
+  "total_tasks": 1,
+  "hotels": 0,
+  "tours": 0,
+  "transfers": 1,
+  "combos": 0,
+  "max_parallel": 5
+}
+
+[2025-12-30T11:27:22.692Z] [PriceCalculator] Batch execution starting
+{
+  "total_tasks": 1,
+  "total_batches": 1,
+  "max_parallel": 5
+}
+
+[2025-12-30T11:27:22.693Z] [PriceCalculator] Batch 1 START
+{
+  "batch_index": 1,
+  "total_batches": 1,
+  "tasks": [
+    {
+      "type": "transfer",
+      "name": "Mauritius Airport Transfers"
+    }
+  ]
+}
+
+[2025-12-30T11:27:22.696Z] [TransferPriceCalculator] START
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "transfer_id": "05544607-4bd4-4419-89e9-a41fb91ecfa4",
+  "route": "N/A",
+  "basis": "SIC",
+  "travelers": {
+    "adults": 1,
+    "children": 0,
+    "child_ages": []
+  }
+}
+
+[2025-12-30T11:27:22.698Z] [TransferPriceCalculator] DB Rates & Eligible Counts
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "actual_rates": {
+    "sic_adult": 30,
+    "sic_child": 25,
+    "per_vehicle_rates": [
+      {
+        "type": "Sedan",
+        "capacity": 0,
+        "rate": 80
+      },
+      {
+        "type": "Van",
+        "capacity": 0,
+        "rate": 102
+      },
+      {
+        "type": "Coach",
+        "capacity": 0,
+        "rate": 175
+      }
+    ]
+  },
+  "eligible_counts": {
+    "adults": 1,
+    "children": 0,
+    "total": 1,
+    "total_passengers": 1,
+    "vehicles": 1
+  }
+}
+
+[2025-12-30T11:27:24.985Z] [TransferPriceCalculator] COMPLETE
+{
+  "transfer_name": "Mauritius Airport Transfers",
+  "line_items_count": 1,
+  "subtotal": 30,
+  "tokens_used": 2289
+}
+
+[2025-12-30T11:27:24.987Z] [PriceCalculator] Task completed: transfer
+{
+  "service_name": "Mauritius Airport Transfers",
+  "duration_ms": 2292,
+  "tokens_used": 2289,
+  "line_items_count": 1,
+  "subtotal": 30
+}
+
+[2025-12-30T11:27:24.990Z] [PriceCalculator] Batch 1 COMPLETE
+{
+  "successful": 1,
+  "failed": 0
+}
+
+[2025-12-30T11:27:24.992Z] [PriceAggregator] Aggregation complete
+{
+  "total_line_items": 1,
+  "successful_calculators": 1,
+  "failed_calculators": 0,
+  "subtotals": {
+    "accommodation": 0,
+    "meals": 0,
+    "supplements": 0,
+    "tours_transfers": 30
+  },
+  "grand_total": 30,
+  "per_adult": 30,
+  "per_child": 0
+}
+
+[2025-12-30T11:27:24.994Z] [PriceCalculator] COMPLETE
+{
+  "total_duration_ms": 2300,
+  "total_tasks": 1,
+  "successful": 1,
+  "failed": 0,
+  "total_tokens": 2289,
+  "tokens_by_type": {
+    "hotel": 0,
+    "tour": 0,
+    "transfer": 2289,
+    "combo": 0
+  },
+  "grand_total": 30,
+  "line_items_count": 1
+}
+
+[2025-12-30T11:27:24.996Z] [PricingCalculator] Tour pricing from TourPricingAgent
+{
+  "tour_line_items": 4,
+  "tour_total": 30
+}
+
+[2025-12-30T11:27:24.998Z] [PricingCalculator] Pricing complete
+{
+  "grand_total": 60,
+  "line_items_count": 5,
+  "tokens": 2289,
+  "currency": "USD",
+  "calculation_notes_count": 5
+}
+
+[2025-12-30T11:27:25.000Z] [Pipeline-V2] Pricing Calculator result
+{
+  "success": true,
+  "tokens": 2289
+}
+
+[2025-12-30T11:27:25.003Z] [Pipeline-V2] 🚀 Emitting itinerary-complete (complete)
+{
+  "days": 6,
+  "grand_total": 60,
+  "currency": "USD"
+}
+
+[2025-12-30T11:27:25.005Z] [Integration] 📤 Forwarding itinerary event
+{
+  "type": "itinerary-complete",
+  "status": "complete",
+  "has_data": true
+}
+
+[2025-12-30T11:27:25.011Z] [Pipeline-V2] Pipeline COMPLETE
+{
+  "total_tokens": 11331,
+  "errors_count": 0
+}
+
+[2025-12-30T11:27:25.016Z] [Integration] Pipeline result
+{
+  "success": true,
+  "has_itinerary": true,
+  "days_count": 6,
+  "total_tokens": 11331
+}
+
+[2025-12-30T11:27:25.018Z] [Integration] Converting itinerary
+{
+  "days_count": 6,
+  "destination": "Mauritius (MU)",
+  "travelers": "1A 0C"
+}
+
+[2025-12-30T11:27:25.020Z] [Integration] Day 1
+{
+  "activities": [
+    {
+      "activity": "Airport to Hotel Transfer",
+      "type": "transfer",
+      "status": "combined"
+    },
+    {
+      "activity": "Day at Leisure",
+      "type": "free",
+      "status": "placeholder"
+    },
+    {
+      "activity": "Mauritius Combo [Airport Transfers + Tours] - SIC",
+      "type": "combo",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:27:25.021Z] [Integration] SKIPPED activity
+{
+  "activity": "Airport to Hotel Transfer",
+  "status": "combined",
+  "reason": "not priced/quantified/mapped"
+}
+
+[2025-12-30T11:27:25.023Z] [Integration] SKIPPED activity
+{
+  "activity": "Day at Leisure",
+  "status": "placeholder",
+  "reason": "not priced/quantified/mapped"
+}
+
+[2025-12-30T11:27:25.024Z] [Integration] Day 2
+{
+  "activities": [
+    {
+      "activity": "Full Day North Island Tour",
+      "type": "tour",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:27:25.026Z] [Integration] Tour activity
+{
+  "activity": "Full Day North Island Tour",
+  "status": "priced"
+}
+
+[2025-12-30T11:27:25.028Z] [Integration] Day 3
+{
+  "activities": [
+    {
+      "activity": "Full Day Ile Aux Cerf Island Tour",
+      "type": "tour",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:27:25.030Z] [Integration] Tour activity
+{
+  "activity": "Full Day Ile Aux Cerf Island Tour",
+  "status": "priced"
+}
+
+[2025-12-30T11:27:25.031Z] [Integration] Day 4
+{
+  "activities": [
+    {
+      "activity": "Full Day South Island Tour",
+      "type": "tour",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:27:25.033Z] [Integration] Tour activity
+{
+  "activity": "Full Day South Island Tour",
+  "status": "priced"
+}
+
+[2025-12-30T11:27:25.034Z] [Integration] Day 5
+{
+  "activities": [
+    {
+      "activity": "Day at Leisure",
+      "type": "free",
+      "status": "placeholder"
+    }
+  ]
+}
+
+[2025-12-30T11:27:25.036Z] [Integration] SKIPPED activity
+{
+  "activity": "Day at Leisure",
+  "status": "placeholder",
+  "reason": "not priced/quantified/mapped"
+}
+
+[2025-12-30T11:27:25.037Z] [Integration] Day 6
+{
+  "activities": [
+    {
+      "activity": "Hotel to Airport Transfer",
+      "type": "transfer",
+      "status": "priced"
+    }
+  ]
+}
+
+[2025-12-30T11:27:25.039Z] [Integration] Converted to orchestrator format
+{
+  "hotels_count": 0,
+  "tours_count": 0,
+  "transfers_count": 1,
+  "combos_count": 1
+}
+
+[2025-12-30T11:27:25.041Z] [Workflow] New pipeline fast path complete
+{
+  "services_count": 2,
+  "total_tokens": 11331,
+  "has_itinerary": true,
+  "has_pricing": true
+}
+
+
+============================================================
+[2025-12-30T11:27:25.043Z] AI REMARKS AGENT START
+============================================================
+
+[2025-12-30T11:27:25.045Z] [AIRemarksAgent] Input data
+{
+  "services_count": 2,
+  "has_itinerary": true,
+  "has_scheduling_notes": 0,
+  "has_line_items": true,
+  "line_items_count": 5
+}
+
+[2025-12-30T11:27:25.047Z] [AIRemarksAgent] Raw data collected for LLM
+{
+  "sections_count": 8,
+  "raw_data": "\n**SERVICE: transfer (transfer)**\n\n**SERVICE: Mauritius Combo [Airport Transfers + Tours] - SIC (combo)**\n\n**PRICING LINE ITEMS (for occupancy context):**\n- One Way Hotel to Mauritius Airport Transfer (SIC Basis): $30 (1 Adult at $30.00 per person. SIC Transfer timings - 8 AM to 5 PM only daily.)\n- 2025-12-30 | Mauritius Combo [Airport Transfers + Tours] - SIC: $30\n- 2025-12-31 | Full Day North Island Tour - Included in combo package: $0\n- 2026-01-01 | Full Day Ile Aux Cerf Island Tour - Included in combo package: $0\n- 2026-01-02 | Full Day South Island Tour - Included in combo package: $0"
+}
+
+[2025-12-30T11:27:26.113Z] [AIRemarksAgent] Final output
+{
+  "remarks_count": 4,
+  "remarks": [
+    "The Mauritius Combo package includes three full-day tours at no additional cost: North Island, Ile Aux Cerf Island, and South Island tours.",
+    "The standalone One Way Hotel to Mauritius Airport Transfer is subject to specific operational timings, running only between 8 AM and 5 PM daily.",
+    "Please note that the itinerary includes three consecutive days (Dec 30, Dec 31, Jan 01, Jan 02) featuring tours or transfers, indicating a potentially busy travel period.",
+    "The Ile aux Cerfs Island Tour is scheduled for January 1st, which is a public holiday; please confirm local operating status if necessary, though it is included in your package."
+  ],
+  "tokens_used": 973
+}
+
+
+============================================================
+[2025-12-30T11:27:26.205Z] USER QUOTE FORMATTER START
+============================================================
+
+[2025-12-30T11:27:26.208Z] [UserQuoteFormatter] Input data DETAILED
+{
+  "services_count": 2,
+  "service_types": [
+    "transfer",
+    "combo"
+  ],
+  "has_hotel": false,
+  "has_combo": true,
+  "has_tour": false,
+  "has_transfer": true,
+  "line_items_count": 5,
+  "grand_total": 60,
+  "ai_remarks_count": 4,
+  "has_itinerary": true,
+  "using_itinerary_extraction": false,
+  "combo_details": [
+    {
+      "rates_count": 1,
+      "combo_names": [
+        "Mauritius Combo [Airport Transfers + Tours] - SIC"
+      ]
+    }
+  ],
+  "dmc_settings": {
+    "id": "2f2770d1-28eb-49d5-8a64-d3d8a18f14c4",
+    "name": "Mauritius Demo",
+    "streetAddress": "Mauritius",
+    "city": "",
+    "country": "MU",
+    "website": "https://www.rategen.ai/",
+    "pricing_breakup_rule": "total_gross",
+    "output_currency": "USD",
+    "allow_individual_service_rates": true,
+    "countryServing": [
+      "MU"
+    ],
+    "kill_switch": false,
+    "default_sell_policy": null,
+    "default_hotel_policy": "<ul class=\"list-disc\"><li class=\"list-item\"><p>If the user just asks for hotel rates in Mauritius and the duration is <strong>4 nights or more</strong>, <strong>always add Combo Pack </strong>of [Roundtrip Airport Transfers + Full Day North Island Tour + Full Day South Island Tour + Full Day Ile Aux Cerf Island Tour] on <strong>SIC basis</strong> by default as per tour operational days. If the user again sends a follow-up message to remove the transfers or tours or the whole combo pack, then you can do the needful.<br>Note: SIC tours cannot be done on arrival/departure days, Operational days for Ile Aux Cerf Tour SIC (Mon, Wed, Sat), Operational days for North Island Tour SIC (Tues, Fri), Operational days for South Island Tour SIC (Thurs, Sun)</p></li><li class=\"list-item\"><p>If the user just asks for hotel rates in Mauritius and the duration is <strong>3 nights or less</strong>, <strong>always add Combo Pack</strong> that includes [Roundtrip Airport Transfers + <strong>Any 2</strong> among Full Day North Island Tour / Full Day South Island Tour / Full Day Ile Aux Cerf Island Tour] on <strong>SIC basis </strong>by default<strong>,</strong> depending on the operational days of these tours and actual travel dates. If the user again sends a follow-up message to remove the transfers or tours or the whole combo pack, then you can do the needful.<br>Note: SIC tours cannot be done on arrival/departure days, Operational days for Ile Aux Cerf Tour SIC (Mon, Wed, Sat), Operational days for North Island Tour SIC (Tues, Fri), Operational days for South Island Tour SIC (Thurs, Sun)<br></p></li></ul><p></p>",
+    "default_tour_policy": "<ul class=\"list-disc\"><li class=\"list-item\"><p>Max 8 hours of tours can be done in a single day. If two or more tours combined takes more than 8 hours, then it has to be shifted to another day.</p></li><li class=\"list-item\"><p>South Island Tour, North Island Tour &amp; Ile Aux Cerf Island Tour - These 3 tours on SIC basis have to be done on separate days as per operational days of each tour. Also, these 3 can’t be done on arrival and departure days on SIC basis. </p></li><li class=\"list-item\"><p></p></li></ul><p></p>",
+    "default_transfer_policy": "<ul class=\"list-disc\"><li class=\"list-item\"><p>Whenever private transfers are required for any tour/activity in Mauritius and private transfer rates are missing, then always auto consider “full day car on disposal” rates.</p></li></ul><p></p>",
+    "default_travel_theme": null
+  }
+}
+
+[2025-12-30T11:27:26.210Z] [UserQuoteFormatter] Using unified template
+{
+  "template_name": "UniversalTemplate",
+  "service_types": [
+    "transfer",
+    "combo"
+  ],
+  "show_itinerary": true,
+  "pricing_breakup_rule": "total_gross"
+}
+
+
+============================================================
+[2025-12-30T11:27:26.213Z] INTERNAL BREAKUP FORMATTER START
+============================================================
+
+[2025-12-30T11:27:26.214Z] [InternalBreakupFormatter] Input data
+{
+  "line_items_count": 5,
+  "grand_total": 60,
+  "has_services": true
+}
+
+[2025-12-30T11:27:30.478Z] [InternalBreakupFormatter] Output generated
+{
+  "response_length": 1144,
+  "tokens_used": 2391
+}
+
+[2025-12-30T11:27:32.281Z] [UserQuoteFormatter] Output generated
+{
+  "response_length": 3562,
+  "tokens_used": 7875
+}
+

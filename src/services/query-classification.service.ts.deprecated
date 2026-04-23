@@ -1,0 +1,513 @@
+/**
+ * Query Classification Service
+ *
+ * This service categorizes user queries and extracts relevant information
+ * for processing by the travel agent system.
+ */
+
+import type { TravelQueryInfo } from "@/types/query-classification";
+import { QueryCategory, TransferType } from "@/types/query-classification";
+
+export class QueryClassificationService {
+  private readonly SERVICE_KEYWORDS = {
+    tour: [
+      "tour",
+      "excursion",
+      "sightseeing",
+      "day trip",
+      "package",
+      "itinerary",
+      "universal studios",
+      "sentosa",
+      "gardens by the bay",
+      "merlion park",
+      "city tour",
+      "half day",
+      "full day",
+      "adventure",
+      "experience",
+    ],
+    hotel: [
+      "hotel",
+      "accommodation",
+      "stay",
+      "resort",
+      "room",
+      "check in",
+      "check out",
+      "marina bay sands",
+      "resorts world",
+      "shangri la",
+      "holiday inn",
+    ],
+    transfer: [
+      "transfer",
+      "airport transfer",
+      "pickup",
+      "drop off",
+      "transport",
+      "roundtrip",
+      "one way",
+      "car",
+      "van",
+      "bus",
+      "private car",
+      "sic",
+      "coach",
+    ],
+    attraction: [
+      "ticket",
+      "entrance",
+      "attraction",
+      "museum",
+      "park",
+      "garden",
+      "universal studios",
+      "s.e.a. aquarium",
+      "adventure cove",
+      "wonderland",
+    ],
+  };
+
+  private readonly DESTINATION_KEYWORDS = [
+    "singapore",
+    "bangkok",
+    "dubai",
+    "malaysia",
+    "thailand",
+    "indonesia",
+    "japan",
+    "hong kong",
+    "macau",
+    "bali",
+    "phuket",
+    "kuala lumpur",
+  ];
+
+  private readonly TRANSFER_KEYWORDS = {
+    [TransferType.SIC]: ["sic", "seat in coach", "sharing", "group"],
+    [TransferType.PRIVATE]: ["private", "exclusive", "dedicated"],
+    [TransferType.PER_VEHICLE]: ["per vehicle", "by car", "by van"],
+  };
+
+  /**
+   * Categorize and extract information from user query
+   */
+  public classifyQuery(query: string): TravelQueryInfo {
+    const normalizedQuery = query.toLowerCase();
+
+    console.log("[QueryClassification] Classifying query:", query);
+
+    // Step 1: Determine category
+    const category = this.determineCategory(normalizedQuery);
+
+    // Step 2: Extract destination
+    const destination = this.extractDestination(normalizedQuery);
+
+    // Step 3: Extract duration
+    const duration = this.extractDuration(normalizedQuery);
+
+    // Step 4: Extract traveler count
+    const travelers = this.extractTravelers(normalizedQuery);
+
+    // Step 5: Extract dates
+    const dates = this.extractDates(normalizedQuery);
+
+    // Step 6: Extract services and specific requests
+    const { services, specificRequests } =
+      this.extractServices(normalizedQuery);
+
+    // Step 7: Extract transfer preferences
+    const { transferIncluded, ticketsOnly, transportType } =
+      this.extractTransferPreferences(normalizedQuery);
+
+    // Step 8: Check if it's a detailed itinerary request
+    const isDetailedItinerary =
+      this.isDetailedItineraryRequest(normalizedQuery);
+
+    const result: TravelQueryInfo = {
+      category,
+      services,
+      destination,
+      duration,
+      travelers,
+      dates,
+      specificRequests,
+      transferIncluded,
+      ticketsOnly,
+      isDetailedItinerary,
+      preferences: {
+        transportType,
+      },
+    };
+
+    console.log("[QueryClassification] Classified result:", result);
+    return result;
+  }
+
+  private determineCategory(query: string): QueryCategory {
+    // Check for general/follow-up queries first
+    if (this.isGeneralQuery(query)) {
+      return QueryCategory.GENERAL;
+    }
+
+    // Check for complete quote indicators
+    if (this.isCompleteQuoteRequest(query)) {
+      return QueryCategory.COMPLETE_QUOTE;
+    }
+
+    // Count service-specific keywords
+    const serviceCounts = {
+      tour: this.countKeywords(query, this.SERVICE_KEYWORDS.tour),
+      hotel: this.countKeywords(query, this.SERVICE_KEYWORDS.hotel),
+      transfer: this.countKeywords(query, this.SERVICE_KEYWORDS.transfer),
+      attraction: this.countKeywords(query, this.SERVICE_KEYWORDS.attraction),
+    };
+
+    // Find the service with the most keywords
+    const maxCount = Math.max(...Object.values(serviceCounts));
+
+    if (maxCount === 0) {
+      return QueryCategory.UNKNOWN;
+    }
+
+    const dominantService = Object.entries(serviceCounts).find(
+      ([_, count]) => count === maxCount
+    )?.[0];
+
+    switch (dominantService) {
+      case "tour":
+        return QueryCategory.TOUR_SERVICE;
+      case "hotel":
+        return QueryCategory.HOTEL_SERVICE;
+      case "transfer":
+        return QueryCategory.TRANSFER_SERVICE;
+      case "attraction":
+        return QueryCategory.ATTRACTION_SERVICE;
+      default:
+        return QueryCategory.UNKNOWN;
+    }
+  }
+
+  private isGeneralQuery(query: string): boolean {
+    const generalKeywords = [
+      "show me more",
+      "more options",
+      "other options",
+      "alternatives",
+      "something else",
+      "anything else",
+      "what else",
+      "tell me more",
+      "can you",
+      "could you",
+      "would you",
+      "please",
+      "customize",
+      "modify",
+      "change",
+      "update",
+      "different",
+      "another",
+      "instead",
+      "also",
+      "additionally",
+      "too",
+      "as well",
+    ];
+
+    // Short queries without service keywords are likely follow-ups
+    const words = query.split(/\s+/).length;
+    if (words <= 5 && generalKeywords.some((keyword) => query.includes(keyword))) {
+      return true;
+    }
+
+    // Questions without specific service mentions
+    const questionWords = ["what", "how", "why", "when", "where", "which", "can", "could", "would"];
+    const hasQuestion = questionWords.some((word) => query.startsWith(word));
+    const hasServiceKeyword =
+      this.SERVICE_KEYWORDS.tour.some((k) => query.includes(k)) ||
+      this.SERVICE_KEYWORDS.hotel.some((k) => query.includes(k)) ||
+      this.SERVICE_KEYWORDS.transfer.some((k) => query.includes(k)) ||
+      this.SERVICE_KEYWORDS.attraction.some((k) => query.includes(k));
+
+    // If it's a question without service keywords, it's general
+    if (hasQuestion && !hasServiceKeyword && words <= 10) {
+      return true;
+    }
+
+    return false;
+  }
+
+  private isCompleteQuoteRequest(query: string): boolean {
+    const quoteKeywords = [
+      "quote for",
+      "quotation",
+      "price for",
+      "cost of",
+      "how much",
+      "complete trip",
+      "entire trip",
+      "full package",
+      "all inclusive",
+      "day trip",
+      "3 day",
+      "4 day",
+      "5 day",
+      "package for",
+    ];
+
+    const duration = this.extractDuration(query);
+    return (
+      quoteKeywords.some((keyword) => query.includes(keyword)) &&
+      duration.days !== undefined &&
+      duration.days > 1
+    );
+  }
+
+  private extractDestination(query: string): string | undefined {
+    return this.DESTINATION_KEYWORDS.find((destination) =>
+      query.includes(destination)
+    );
+  }
+
+  private extractDuration(query: string): { days?: number; nights?: number } {
+    // Match patterns like "3 day", "4 nights", "5 days", "3 day 4 night", etc.
+    const dayMatch = query.match(/(\d+)\s*(?:day|days)/);
+    const nightMatch = query.match(/(\d+)\s*(?:night|nights)/);
+
+    return {
+      days: dayMatch ? parseInt(dayMatch[1]) : undefined,
+      nights: nightMatch ? parseInt(nightMatch[1]) : undefined,
+    };
+  }
+
+  private extractTravelers(query: string): {
+    adults: number;
+    children?: number;
+    infants?: number;
+  } {
+    const adultMatch = query.match(/(\d+)\s*(?:adults?|person|people|pax)/i);
+    const childMatch = query.match(/(\d+)\s*(?:children|child|kids?)/i);
+    const infantMatch = query.match(/(\d+)\s*(?:infants?|baby)/i);
+
+    return {
+      adults: adultMatch ? parseInt(adultMatch[1]) : 1,
+      children: childMatch ? parseInt(childMatch[1]) : undefined,
+      infants: infantMatch ? parseInt(infantMatch[1]) : undefined,
+    };
+  }
+
+  private extractDates(
+    query: string
+  ): { startDate?: string; endDate?: string; flexible?: boolean } | undefined {
+    // Look for date patterns
+    const datePatterns = [
+      /(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i,
+      /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+(\d{1,2})/i,
+    ];
+
+    // Check for flexibility indicators
+    const flexible =
+      query.includes("flexible") ||
+      query.includes("around") ||
+      query.includes("sometime") ||
+      query.includes("anytime");
+
+    return { flexible };
+  }
+
+  private extractServices(query: string): {
+    services: string[];
+    specificRequests: any;
+  } {
+    const services: string[] = [];
+    const specificRequests: any = {};
+
+    // Check for specific services
+    if (this.countKeywords(query, this.SERVICE_KEYWORDS.tour) > 0) {
+      services.push("tour");
+
+      // Extract specific tour names
+      const tourNames = [
+        "universal studios",
+        "sentosa",
+        "gardens by the bay",
+        "merlion park",
+        "city tour",
+        "night safari",
+        "jurong bird park",
+        "s.e.a. aquarium",
+      ];
+
+      tourNames.forEach((tour) => {
+        if (query.includes(tour)) {
+          if (!specificRequests.attractions) specificRequests.attractions = [];
+          specificRequests.attractions.push(tour);
+        }
+      });
+    }
+
+    if (this.countKeywords(query, this.SERVICE_KEYWORDS.hotel) > 0) {
+      services.push("hotel");
+
+      // Extract specific hotel names
+      const hotelNames = [
+        "marina bay sands",
+        "resorts world",
+        "shangri la",
+        "holiday inn",
+        "fullerton",
+        "ritz carlton",
+      ];
+
+      hotelNames.forEach((hotel) => {
+        if (query.includes(hotel)) {
+          if (!specificRequests.hotels) specificRequests.hotels = [];
+          specificRequests.hotels.push(hotel);
+        }
+      });
+    }
+
+    if (this.countKeywords(query, this.SERVICE_KEYWORDS.transfer) > 0) {
+      services.push("transfer");
+
+      // Extract transfer specifics
+      if (query.includes("airport")) {
+        specificRequests.transfers = {
+          type: "airport",
+          ...specificRequests.transfers,
+        };
+      }
+
+      if (query.includes("roundtrip") || query.includes("return")) {
+        specificRequests.transfers = {
+          ...specificRequests.transfers,
+          roundtrip: true,
+        };
+      }
+    }
+
+    if (this.countKeywords(query, this.SERVICE_KEYWORDS.attraction) > 0) {
+      services.push("attraction");
+
+      // Extract specific attraction names
+      const attractionNames = [
+        "universal studios",
+        "s.e.a. aquarium",
+        "adventure cove",
+        "gardens by the bay",
+        "sentosa",
+        "night safari",
+      ];
+
+      attractionNames.forEach((attraction) => {
+        if (query.includes(attraction)) {
+          if (!specificRequests.attractions) specificRequests.attractions = [];
+          specificRequests.attractions.push(attraction);
+        }
+      });
+    }
+
+    return { services, specificRequests };
+  }
+
+  private extractTransferPreferences(query: string): {
+    transferIncluded?: boolean;
+    ticketsOnly?: boolean;
+    transportType?: TransferType[];
+  } {
+    const result: {
+      transferIncluded?: boolean;
+      ticketsOnly?: boolean;
+      transportType?: TransferType[];
+    } = {};
+
+    // ✅ CHECK FOR TRANSFER INCLUSION FIRST (higher priority)
+    const transferInclusionKeywords = [
+      "with transfer",
+      "with transfers",
+      "with private transfer",
+      "with private transfers",
+      "with sic transfer",
+      "with sic transfers",
+      "including transfer",
+      "including transfers",
+      "and transfer",
+      "and transfers",
+      "+ transfer",
+      "+ transfers",
+      "includes transfer",
+      "includes transfers",
+    ];
+
+    if (transferInclusionKeywords.some((keyword) => query.includes(keyword))) {
+      result.transferIncluded = true;
+      result.ticketsOnly = false; // Explicitly disable tickets-only
+    }
+
+    // Check for tickets only (ONLY if transfer not explicitly requested)
+    if (!result.transferIncluded) {
+      const ticketsOnlyKeywords = [
+        "tickets only",
+        "entrance only",
+        "admission only",
+        "just tickets",
+        "only tickets",
+        "ticket only",
+        "only ticket",
+        "price for tickets",
+        "cost of tickets",
+        "how much for tickets",
+        // Removed overly broad: "what is the price for", "how much does", "cost of"
+      ];
+
+      if (ticketsOnlyKeywords.some((keyword) => query.includes(keyword))) {
+        result.ticketsOnly = true;
+        result.transferIncluded = false;
+      }
+    }
+
+    // Check transport type preferences
+    const transportTypes: TransferType[] = [];
+
+    Object.entries(this.TRANSFER_KEYWORDS).forEach(([type, keywords]) => {
+      if (keywords.some((keyword) => query.includes(keyword))) {
+        transportTypes.push(type as TransferType);
+      }
+    });
+
+    if (transportTypes.length > 0) {
+      result.transportType = transportTypes;
+    }
+
+    return result;
+  }
+
+  private isDetailedItineraryRequest(query: string): boolean {
+    const detailedIndicators = [
+      "day wise",
+      "day by day",
+      "day 1",
+      "day 2",
+      "day 3",
+      "detailed",
+      "step by step",
+      "hour by hour",
+      "morning",
+      "afternoon",
+      "evening",
+    ];
+
+    return detailedIndicators.some((indicator) => query.includes(indicator));
+  }
+
+  private countKeywords(text: string, keywords: string[]): number {
+    return keywords.reduce((count, keyword) => {
+      return count + (text.includes(keyword) ? 1 : 0);
+    }, 0);
+  }
+}
+
+// Export singleton instance
+export const queryClassificationService = new QueryClassificationService();
