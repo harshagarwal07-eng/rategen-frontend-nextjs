@@ -71,7 +71,10 @@ export default function Meal1FullscreenForm({
   }, []);
 
   const handleContextChange = useCallback((name: string, countryName: string) => {
-    setContextInfo((prev) => ({ ...prev, name, countryName }));
+    setContextInfo((prev) => {
+      if (prev.name === name && prev.countryName === countryName) return prev;
+      return { ...prev, name, countryName };
+    });
   }, []);
 
   // Close without discard check — used after successful saves

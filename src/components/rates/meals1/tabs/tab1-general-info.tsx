@@ -85,11 +85,24 @@ export default function Meal1GeneralInfoForm({
 
   const onContextChangeRef = useRef(onContextChange);
   onContextChangeRef.current = onContextChange;
+  const lastReportedContext = useRef<{ name: string; countryName: string } | null>(null);
+
+  // Derive countryName in render from a primitive id — depending on the
+  // countryOptions array would loop, since the shared hook returns a fresh
+  // `[]` reference every render while React Query data is loading.
+  const countryName = countryOptions.find((o) => o.value === countryId)?.label || "";
 
   useEffect(() => {
-    const countryName = countryOptions.find((o) => o.value === countryId)?.label || "";
-    onContextChangeRef.current?.(watchName || "", countryName);
-  }, [watchName, countryId, countryOptions]);
+    const name = watchName || "";
+    if (
+      lastReportedContext.current?.name === name &&
+      lastReportedContext.current?.countryName === countryName
+    ) {
+      return;
+    }
+    lastReportedContext.current = { name, countryName };
+    onContextChangeRef.current?.(name, countryName);
+  }, [watchName, countryName]);
 
   const searchCities = useCallback(
     (search: string) =>
