@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -24,14 +24,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
@@ -39,6 +31,7 @@ import {
 import { AlertModal } from "@/components/ui/alert-modal";
 import { Loader2, Plus, Trash2, ChevronDown, ChevronRight, Save } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   createPackage,
   updatePackage,
@@ -48,6 +41,16 @@ import {
   replaceCancellationPolicies,
 } from "@/data-access/meals1";
 import { MealPackage, MealCuisine, MealProduct } from "@/types/meals1";
+
+// ── Defaults ──────────────────────────────────────────────────
+
+const DEFAULT_AGE_BANDS = [
+  { band_type: "adult" as const, age_from: 12, age_to: 99, amount: 0 },
+  { band_type: "child" as const, age_from: 3, age_to: 11, amount: 0 },
+  { band_type: "infant" as const, age_from: 0, age_to: 2, amount: 0 },
+];
+
+// ── Schemas ───────────────────────────────────────────────────
 
 const AgeBandRowSchema = z.object({
   band_type: z.enum(["adult", "child", "infant"]),
@@ -72,11 +75,137 @@ const PackageFormSchema = z.object({
   inclusions: z.string().nullable().optional(),
   exclusions: z.string().nullable().optional(),
   is_preferred: z.boolean().optional(),
+  is_non_refundable: z.boolean().optional(),
   age_bands: z.array(AgeBandRowSchema),
   cancellation_policies: z.array(CancellationPolicyRowSchema),
 });
 
 type PackageFormValues = z.infer<typeof PackageFormSchema>;
+
+// ── Cancellation Policy Section ───────────────────────────────
+
+interface CancellationSectionProps {
+  form: ReturnType<typeof useForm<PackageFormValues>>;
+}
+
+function CancellationSection({ form }: CancellationSectionProps) {
+  const isNonRefundable = form.watch("is_non_refundable");
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "cancellation_policies",
+  });
+
+  return (
+    <div className="space-y-3">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block">
+        Cancellation Policy
+      </span>
+
+      <FormField
+        control={form.control}
+        name="is_non_refundable"
+        render={({ field }) => (
+          <div className="flex items-center gap-2">
+            <FormLabel className="text-xs font-medium mt-0">Non-Refundable</FormLabel>
+            <FormControl>
+              <Switch
+                checked={field.value ?? false}
+                onCheckedChange={(checked) => {
+                  field.onChange(checked);
+                  if (checked) form.setValue("cancellation_policies", []);
+                }}
+              />
+            </FormControl>
+            {field.value && (
+              <span className="text-xs text-muted-foreground">
+                100% charge applies. No cancellation rules needed.
+              </span>
+            )}
+          </div>
+        )}
+      />
+
+      {!isNonRefundable && (
+        <>
+          {fields.length > 0 && (
+            <div className="rounded-md border overflow-x-auto">
+              <div className="grid grid-cols-[160px_110px_80px_32px] gap-2 border-b bg-muted/50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground min-w-[400px]">
+                <span>Days Before</span>
+                <span>Charge Type</span>
+                <span>Amount</span>
+                <span />
+              </div>
+              {fields.map((field, index) => (
+                <div
+                  key={field.id}
+                  className="grid grid-cols-[160px_110px_80px_32px] items-center gap-2 px-3 py-1.5 border-b last:border-b-0 min-w-[400px]"
+                >
+                  <FormField
+                    control={form.control}
+                    name={`cancellation_policies.${index}.days_before`}
+                    render={({ field: f }) => (
+                      <Input type="number" min={0} className="h-7 text-xs" {...f} />
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`cancellation_policies.${index}.penalty_type`}
+                    render={({ field: f }) => (
+                      <div className="flex rounded border p-0.5">
+                        {(["percentage", "fixed"] as const).map((ct) => (
+                          <button
+                            key={ct}
+                            type="button"
+                            onClick={() => f.onChange(ct)}
+                            className={cn(
+                              "flex-1 rounded px-1 py-0.5 text-xs font-medium transition-colors",
+                              f.value === ct
+                                ? "bg-green-600 text-white"
+                                : "text-muted-foreground hover:bg-muted"
+                            )}
+                          >
+                            {ct === "percentage" ? "%" : "Fixed"}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name={`cancellation_policies.${index}.penalty_amount`}
+                    render={({ field: f }) => (
+                      <Input type="number" min={0} step="0.01" className="h-7 text-xs" {...f} />
+                    )}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => remove(index)}
+                    className="h-7 w-8 p-0 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => append({ days_before: 7, penalty_type: "percentage", penalty_amount: 100 })}
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Rule
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── PackageCard ───────────────────────────────────────────────
 
 interface PackageCardProps {
   mealId: string;
@@ -103,7 +232,7 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
             amount: pricing?.amount ?? 0,
           };
         })
-      : [{ band_type: "adult" as const, age_from: 12, age_to: 99, amount: 0 }];
+      : DEFAULT_AGE_BANDS;
 
   const form = useForm<PackageFormValues>({
     resolver: zodResolver(PackageFormSchema),
@@ -117,6 +246,7 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
       inclusions: pkg.inclusions || null,
       exclusions: pkg.exclusions || null,
       is_preferred: pkg.is_preferred || false,
+      is_non_refundable: pkg.is_non_refundable ?? false,
       age_bands: defaultAgeBands,
       cancellation_policies: pkg.meal_cancellation_policies?.map((cp) => ({
         days_before: cp.days_before,
@@ -126,18 +256,21 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
     },
   });
 
-  const { fields: ageBandFields, append: appendBand, remove: removeBand } = useFieldArray({ control: form.control, name: "age_bands" });
-  const { fields: cancellationFields, append: appendCancel, remove: removeCancel } = useFieldArray({ control: form.control, name: "cancellation_policies" });
+  const { fields: ageBandFields, append: appendBand, remove: removeBand } = useFieldArray({
+    control: form.control,
+    name: "age_bands",
+  });
 
   const onSave = async (values: PackageFormValues) => {
     setSaving(true);
     try {
-      const { age_bands, cancellation_policies, ...meta } = values;
+      const { age_bands, cancellation_policies, is_non_refundable, ...meta } = values;
       const { data: updatedPkg, error: pkgError } = await updatePackage(mealId, pkg.id!, {
         name: meta.name, type: meta.type, cuisine_id: meta.cuisine_id || null,
         venue_name: meta.venue_name || null, menu_url: meta.menu_url || null,
         description: meta.description || null, inclusions: meta.inclusions || null,
         exclusions: meta.exclusions || null, is_preferred: meta.is_preferred,
+        is_non_refundable: is_non_refundable ?? false,
       });
       if (pkgError) throw new Error(pkgError);
 
@@ -195,7 +328,8 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
           <CollapsibleContent>
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSave)} className="p-4 space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Row 1: Name, Type, Cuisine */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField control={form.control} name="name" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Package Name *</FormLabel>
@@ -229,6 +363,10 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
                       </Select>
                     </FormItem>
                   )} />
+                </div>
+
+                {/* Row 2: Venue, Menu URL */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField control={form.control} name="venue_name" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Venue Name</FormLabel>
@@ -241,25 +379,40 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
                       <FormControl><Input placeholder="https://..." className="h-9" {...field} value={field.value || ""} /></FormControl>
                     </FormItem>
                   )} />
-                  <FormField control={form.control} name="is_preferred" render={({ field }) => (
-                    <FormItem className="flex items-center gap-3 pt-6">
-                      <FormLabel className="mt-0">Preferred</FormLabel>
-                      <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                      <span className="text-sm text-muted-foreground">{field.value ? "Yes" : "No"}</span>
+                </div>
+
+                {/* Description */}
+                <FormField control={form.control} name="description" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Description</FormLabel>
+                    <FormControl><Textarea rows={2} placeholder="Describe this package..." {...field} value={field.value || ""} /></FormControl>
+                  </FormItem>
+                )} />
+
+                {/* Inclusions / Exclusions */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField control={form.control} name="inclusions" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Inclusions</FormLabel>
+                      <FormControl><Textarea rows={2} placeholder="What's included..." {...field} value={field.value || ""} /></FormControl>
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="exclusions" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Exclusions</FormLabel>
+                      <FormControl><Textarea rows={2} placeholder="What's not included..." {...field} value={field.value || ""} /></FormControl>
                     </FormItem>
                   )} />
                 </div>
-                <FormField control={form.control} name="description" render={({ field }) => (
-                  <FormItem><FormLabel>Description</FormLabel><FormControl><Textarea rows={2} {...field} value={field.value || ""} /></FormControl></FormItem>
+
+                {/* Preferred */}
+                <FormField control={form.control} name="is_preferred" render={({ field }) => (
+                  <FormItem className="flex items-center gap-3">
+                    <FormLabel className="mt-0">Preferred</FormLabel>
+                    <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                    <span className="text-sm text-muted-foreground">{field.value ? "Yes" : "No"}</span>
+                  </FormItem>
                 )} />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField control={form.control} name="inclusions" render={({ field }) => (
-                    <FormItem><FormLabel>Inclusions</FormLabel><FormControl><Textarea rows={2} {...field} value={field.value || ""} /></FormControl></FormItem>
-                  )} />
-                  <FormField control={form.control} name="exclusions" render={({ field }) => (
-                    <FormItem><FormLabel>Exclusions</FormLabel><FormControl><Textarea rows={2} {...field} value={field.value || ""} /></FormControl></FormItem>
-                  )} />
-                </div>
 
                 {/* Age Bands */}
                 <div>
@@ -270,13 +423,21 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground mb-2">At least one adult band required.</p>
-                  <div className="border rounded-md overflow-hidden">
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Band</TableHead><TableHead>Age From</TableHead><TableHead>Age To</TableHead><TableHead>Amount</TableHead><TableHead className="w-10" /></TableRow></TableHeader>
-                      <TableBody>
+                  <div className="rounded-md border overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Band Type</th>
+                          <th className="px-3 py-2 text-left">Age From</th>
+                          <th className="px-3 py-2 text-left">Age To</th>
+                          <th className="px-3 py-2 text-left">Rate</th>
+                          <th className="px-3 py-2 w-8" />
+                        </tr>
+                      </thead>
+                      <tbody>
                         {ageBandFields.map((field, index) => (
-                          <TableRow key={field.id}>
-                            <TableCell>
+                          <tr key={field.id} className="border-t">
+                            <td className="px-3 py-2">
                               <FormField control={form.control} name={`age_bands.${index}.band_type`} render={({ field: f }) => (
                                 <Select onValueChange={f.onChange} value={f.value}>
                                   <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
@@ -287,66 +448,27 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
                                   </SelectContent>
                                 </Select>
                               )} />
-                            </TableCell>
-                            <TableCell><FormField control={form.control} name={`age_bands.${index}.age_from`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-20" {...f} />} /></TableCell>
-                            <TableCell><FormField control={form.control} name={`age_bands.${index}.age_to`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-20" {...f} />} /></TableCell>
-                            <TableCell><FormField control={form.control} name={`age_bands.${index}.amount`} render={({ field: f }) => <Input type="number" min={0} step="0.01" className="h-8 w-24" {...f} />} /></TableCell>
-                            <TableCell>
-                              <Button type="button" variant="ghost" size="sm" onClick={() => removeBand(index)} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
+                            </td>
+                            <td className="px-3 py-2"><FormField control={form.control} name={`age_bands.${index}.age_from`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-20 text-xs" {...f} />} /></td>
+                            <td className="px-3 py-2"><FormField control={form.control} name={`age_bands.${index}.age_to`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-20 text-xs" {...f} />} /></td>
+                            <td className="px-3 py-2"><FormField control={form.control} name={`age_bands.${index}.amount`} render={({ field: f }) => <Input type="number" min={0} step="0.01" className="h-8 w-24 text-xs" {...f} />} /></td>
+                            <td className="px-3 py-2">
+                              <button type="button" onClick={() => removeBand(index)} className="text-muted-foreground hover:text-destructive transition-colors">
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </td>
+                          </tr>
                         ))}
                         {ageBandFields.length === 0 && (
-                          <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-4">Add at least one adult band.</TableCell></TableRow>
+                          <tr><td colSpan={5} className="px-3 py-3 text-center text-xs text-muted-foreground">No bands. Add at least one adult band.</td></tr>
                         )}
-                      </TableBody>
-                    </Table>
+                      </tbody>
+                    </table>
                   </div>
                 </div>
 
-                {/* Cancellation Policies */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-semibold">Cancellation Policies</h4>
-                    <Button type="button" variant="outline" size="sm" onClick={() => appendCancel({ days_before: 7, penalty_type: "percentage", penalty_amount: 100 })}>
-                      <Plus className="h-3 w-3 mr-1" />Add Policy
-                    </Button>
-                  </div>
-                  <div className="border rounded-md overflow-hidden">
-                    <Table>
-                      <TableHeader><TableRow><TableHead>Days Before</TableHead><TableHead>Penalty Type</TableHead><TableHead>Amount</TableHead><TableHead className="w-10" /></TableRow></TableHeader>
-                      <TableBody>
-                        {cancellationFields.map((field, index) => (
-                          <TableRow key={field.id}>
-                            <TableCell><FormField control={form.control} name={`cancellation_policies.${index}.days_before`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-24" {...f} />} /></TableCell>
-                            <TableCell>
-                              <FormField control={form.control} name={`cancellation_policies.${index}.penalty_type`} render={({ field: f }) => (
-                                <Select onValueChange={f.onChange} value={f.value}>
-                                  <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="percentage">Percentage</SelectItem>
-                                    <SelectItem value="fixed">Fixed</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              )} />
-                            </TableCell>
-                            <TableCell><FormField control={form.control} name={`cancellation_policies.${index}.penalty_amount`} render={({ field: f }) => <Input type="number" min={0} step="0.01" className="h-8 w-24" {...f} />} /></TableCell>
-                            <TableCell>
-                              <Button type="button" variant="ghost" size="sm" onClick={() => removeCancel(index)} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {cancellationFields.length === 0 && (
-                          <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-4">No cancellation policies.</TableCell></TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
+                {/* Cancellation Policy */}
+                <CancellationSection form={form} />
 
                 <div className="flex justify-end pt-2">
                   <Button type="submit" disabled={saving} size="sm" className="bg-green-600 hover:bg-green-700">
@@ -362,6 +484,8 @@ function PackageCard({ mealId, pkg, cuisines, onSaved, onDeleted }: PackageCardP
   );
 }
 
+// ── NewPackageForm ─────────────────────────────────────────────
+
 interface NewPackageFormProps {
   mealId: string;
   cuisines: MealCuisine[];
@@ -371,26 +495,40 @@ interface NewPackageFormProps {
 
 function NewPackageForm({ mealId, cuisines, onCreated, onCancel }: NewPackageFormProps) {
   const [saving, setSaving] = useState(false);
+
   const form = useForm<PackageFormValues>({
     resolver: zodResolver(PackageFormSchema),
     defaultValues: {
-      name: "", type: "veg", cuisine_id: null, venue_name: null, menu_url: null,
-      description: null, inclusions: null, exclusions: null, is_preferred: false,
-      age_bands: [{ band_type: "adult", age_from: 12, age_to: 99, amount: 0 }],
+      name: "",
+      type: "veg",
+      cuisine_id: null,
+      venue_name: null,
+      menu_url: null,
+      description: null,
+      inclusions: null,
+      exclusions: null,
+      is_preferred: false,
+      is_non_refundable: false,
+      age_bands: DEFAULT_AGE_BANDS,
       cancellation_policies: [],
     },
   });
-  const { fields: ageBandFields, append: appendBand, remove: removeBand } = useFieldArray({ control: form.control, name: "age_bands" });
+
+  const { fields: ageBandFields, append: appendBand, remove: removeBand } = useFieldArray({
+    control: form.control,
+    name: "age_bands",
+  });
 
   const onSave = async (values: PackageFormValues) => {
     setSaving(true);
     try {
-      const { age_bands, cancellation_policies, ...meta } = values;
+      const { age_bands, cancellation_policies, is_non_refundable, ...meta } = values;
       const { data: newPkg, error: pkgError } = await createPackage(mealId, {
         name: meta.name, type: meta.type, cuisine_id: meta.cuisine_id || null,
         venue_name: meta.venue_name || null, menu_url: meta.menu_url || null,
         description: meta.description || null, inclusions: meta.inclusions || null,
         exclusions: meta.exclusions || null, is_preferred: meta.is_preferred,
+        is_non_refundable: is_non_refundable ?? false,
       });
       if (pkgError || !newPkg?.id) throw new Error(pkgError || "No package ID");
 
@@ -415,6 +553,7 @@ function NewPackageForm({ mealId, cuisines, onCreated, onCancel }: NewPackageFor
       <h4 className="font-semibold text-sm">New Package</h4>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSave)} className="space-y-4">
+          {/* Row 1: Name, Type, Cuisine */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <FormField control={form.control} name="name" render={({ field }) => (
               <FormItem><FormLabel>Package Name *</FormLabel><FormControl><Input placeholder="e.g. Premium Buffet" className="h-9" {...field} /></FormControl><FormMessage /></FormItem>
@@ -446,6 +585,55 @@ function NewPackageForm({ mealId, cuisines, onCreated, onCancel }: NewPackageFor
             )} />
           </div>
 
+          {/* Row 2: Venue, Menu URL */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField control={form.control} name="venue_name" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Venue Name</FormLabel>
+                <FormControl><Input placeholder="e.g. Garden Restaurant" className="h-9" {...field} value={field.value || ""} /></FormControl>
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="menu_url" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Menu URL</FormLabel>
+                <FormControl><Input placeholder="https://..." className="h-9" {...field} value={field.value || ""} /></FormControl>
+              </FormItem>
+            )} />
+          </div>
+
+          {/* Description */}
+          <FormField control={form.control} name="description" render={({ field }) => (
+            <FormItem>
+              <FormLabel>Description</FormLabel>
+              <FormControl><Textarea rows={2} placeholder="Describe this package..." {...field} value={field.value || ""} /></FormControl>
+            </FormItem>
+          )} />
+
+          {/* Inclusions / Exclusions */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField control={form.control} name="inclusions" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Inclusions</FormLabel>
+                <FormControl><Textarea rows={2} placeholder="What's included..." {...field} value={field.value || ""} /></FormControl>
+              </FormItem>
+            )} />
+            <FormField control={form.control} name="exclusions" render={({ field }) => (
+              <FormItem>
+                <FormLabel>Exclusions</FormLabel>
+                <FormControl><Textarea rows={2} placeholder="What's not included..." {...field} value={field.value || ""} /></FormControl>
+              </FormItem>
+            )} />
+          </div>
+
+          {/* Preferred */}
+          <FormField control={form.control} name="is_preferred" render={({ field }) => (
+            <FormItem className="flex items-center gap-3">
+              <FormLabel className="mt-0">Preferred</FormLabel>
+              <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+              <span className="text-sm text-muted-foreground">{field.value ? "Yes" : "No"}</span>
+            </FormItem>
+          )} />
+
           {/* Age Bands */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -454,13 +642,21 @@ function NewPackageForm({ mealId, cuisines, onCreated, onCancel }: NewPackageFor
                 <Plus className="h-3 w-3 mr-1" />Add Band
               </Button>
             </div>
-            <div className="border rounded-md overflow-hidden">
-              <Table>
-                <TableHeader><TableRow><TableHead>Band</TableHead><TableHead>Age From</TableHead><TableHead>Age To</TableHead><TableHead>Amount</TableHead><TableHead className="w-10" /></TableRow></TableHeader>
-                <TableBody>
+            <div className="rounded-md border overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Band Type</th>
+                    <th className="px-3 py-2 text-left">Age From</th>
+                    <th className="px-3 py-2 text-left">Age To</th>
+                    <th className="px-3 py-2 text-left">Rate</th>
+                    <th className="px-3 py-2 w-8" />
+                  </tr>
+                </thead>
+                <tbody>
                   {ageBandFields.map((field, index) => (
-                    <TableRow key={field.id}>
-                      <TableCell>
+                    <tr key={field.id} className="border-t">
+                      <td className="px-3 py-2">
                         <FormField control={form.control} name={`age_bands.${index}.band_type`} render={({ field: f }) => (
                           <Select onValueChange={f.onChange} value={f.value}>
                             <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
@@ -471,21 +667,27 @@ function NewPackageForm({ mealId, cuisines, onCreated, onCancel }: NewPackageFor
                             </SelectContent>
                           </Select>
                         )} />
-                      </TableCell>
-                      <TableCell><FormField control={form.control} name={`age_bands.${index}.age_from`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-20" {...f} />} /></TableCell>
-                      <TableCell><FormField control={form.control} name={`age_bands.${index}.age_to`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-20" {...f} />} /></TableCell>
-                      <TableCell><FormField control={form.control} name={`age_bands.${index}.amount`} render={({ field: f }) => <Input type="number" min={0} step="0.01" className="h-8 w-24" {...f} />} /></TableCell>
-                      <TableCell>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeBand(index)} className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                      </td>
+                      <td className="px-3 py-2"><FormField control={form.control} name={`age_bands.${index}.age_from`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-20 text-xs" {...f} />} /></td>
+                      <td className="px-3 py-2"><FormField control={form.control} name={`age_bands.${index}.age_to`} render={({ field: f }) => <Input type="number" min={0} className="h-8 w-20 text-xs" {...f} />} /></td>
+                      <td className="px-3 py-2"><FormField control={form.control} name={`age_bands.${index}.amount`} render={({ field: f }) => <Input type="number" min={0} step="0.01" className="h-8 w-24 text-xs" {...f} />} /></td>
+                      <td className="px-3 py-2">
+                        <button type="button" onClick={() => removeBand(index)} className="text-muted-foreground hover:text-destructive transition-colors">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
+                  {ageBandFields.length === 0 && (
+                    <tr><td colSpan={5} className="px-3 py-3 text-center text-xs text-muted-foreground">No bands. Add at least one adult band.</td></tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
+
+          {/* Cancellation Policy */}
+          <CancellationSection form={form} />
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={onCancel}>Cancel</Button>
@@ -499,7 +701,8 @@ function NewPackageForm({ mealId, cuisines, onCreated, onCancel }: NewPackageFor
   );
 }
 
-// Thin wrapper form used by the fullscreen form's formRef/onNext pattern
+// ── Meal1PackagesForm (wrapper for fullscreen form) ────────────
+
 const DoneFormSchema = z.object({});
 type DoneFormValues = z.infer<typeof DoneFormSchema>;
 
@@ -516,7 +719,6 @@ export default function Meal1PackagesForm({ initialData, cuisines, onNext, setIs
   const [showNewForm, setShowNewForm] = useState(false);
   const mealId = initialData.id!;
 
-  // Invisible form hooked to formRef so footer "Save & Next" triggers onNext
   const form = useForm<DoneFormValues>({ resolver: zodResolver(DoneFormSchema) });
   const onSubmit = () => {
     setIsLoading?.(true);
@@ -530,7 +732,6 @@ export default function Meal1PackagesForm({ initialData, cuisines, onNext, setIs
         <p className="text-muted-foreground">Add packages with age bands, pricing, and cancellation policies</p>
       </div>
 
-      {/* Hidden form tied to formRef */}
       <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="hidden" />
 
       <div className="flex items-center justify-between">

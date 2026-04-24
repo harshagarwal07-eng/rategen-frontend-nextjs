@@ -40,6 +40,7 @@ export interface MealPackage {
   exclusions?: string | null;
   images?: string[] | null;
   is_preferred?: boolean;
+  is_non_refundable?: boolean;
   min_pax?: number | null;
   max_pax?: number | null;
   advance_booking_hours?: number | null;
