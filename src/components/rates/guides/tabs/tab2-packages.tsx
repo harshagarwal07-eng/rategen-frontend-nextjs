@@ -290,8 +290,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
           name: values.name,
           guide_type: values.guide_type,
           duration_type: values.duration_type,
-          duration_hours:
-            values.duration_type === "multi_day" ? values.duration_hours ?? null : null,
+          duration_hours: values.duration_hours ?? null,
           description: values.description || null,
           is_active: values.is_active,
           languages: values.languages,
@@ -505,30 +504,28 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   />
                 </div>
 
-                {watchDurationType === "multi_day" && (
-                  <FormField
-                    control={form.control}
-                    name="duration_hours"
-                    render={({ field }) => (
-                      <FormItem className="max-w-xs">
-                        <FormLabel>Duration (Hours)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            className="h-9"
-                            {...field}
-                            value={field.value ?? ""}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              field.onChange(v === "" ? null : Number(v));
-                            }}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                )}
+                <FormField
+                  control={form.control}
+                  name="duration_hours"
+                  render={({ field }) => (
+                    <FormItem className="max-w-xs">
+                      <FormLabel>Duration (Hours)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          className="h-9"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            field.onChange(v === "" ? null : Number(v));
+                          }}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
