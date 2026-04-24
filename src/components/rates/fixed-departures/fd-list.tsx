@@ -101,7 +101,7 @@ export function FDList() {
   if (isLoading) return <DataTableSkeleton columnCount={7} rowCount={10} />;
 
   return (
-    <div className="flex flex-col gap-4 p-4">
+    <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative w-64">
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useDebounce } from "@/hooks/use-debounce";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, ChevronsUpDown, ChevronRight, Save, X } from "lucide-react";
+import { ChevronRight, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -20,15 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { cn } from "@/lib/utils";
+import { MultiSelectSearch } from "@/components/ui/multi-select-search";
+import { Autocomplete } from "@/components/ui/autocomplete";
 import {
   fdGetCountries,
   fdGetCitiesByCountry,
@@ -43,6 +40,7 @@ import {
 } from "@/data-access/fixed-departures";
 import { FDGeneralInfoSchema, type IFDGeneralInfo } from "@/components/forms/schemas/fixed-departures-schema";
 import type { FDPackageDetail, FDCity } from "@/types/fixed-departures";
+import type { IOption } from "@/types/common";
 
 const DEFAULT_AGE_BANDS = [
   { band_name: "Infant", age_from: 0, age_to: 2, band_order: 1 },
@@ -63,10 +61,6 @@ interface Props {
 
 export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdvance }: Props) {
   const [isSaving, setIsSaving] = useState(false);
-  const [citySearch, setCitySearch] = useState("");
-  const [departureCitySearch, setDepartureCitySearch] = useState("");
-  const debouncedCitySearch = useDebounce(citySearch, 300);
-  const debouncedDepartureCitySearch = useDebounce(departureCitySearch, 300);
 
   const { data: countries = [] } = useQuery({
     queryKey: ["fd-meta-countries"],
@@ -153,48 +147,7 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
   const ageRestriction = form.watch("age_restriction");
   const bannerUrl = form.watch("banner_image_url");
 
-  const citiesQuery = useQuery({
-    queryKey: ["fd-cities-search", selectedCountries, debouncedCitySearch],
-    queryFn: async () => {
-      if (selectedCountries.length === 0) return [] as FDCity[];
-      const all = await Promise.all(
-        selectedCountries.map((cid) => fdGetCitiesByCountry(cid, debouncedCitySearch || undefined))
-      );
-      const flat: FDCity[] = all.flat();
-      const map = new Map<string, FDCity>();
-      for (const c of flat) map.set(c.id, c);
-      return Array.from(map.values()).sort((a, b) => a.city_name.localeCompare(b.city_name));
-    },
-    enabled: selectedCountries.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const departureCitiesQuery = useQuery({
-    queryKey: ["fd-departure-cities-search", selectedCountries, debouncedDepartureCitySearch],
-    queryFn: async () => {
-      if (selectedCountries.length === 0) return [] as FDCity[];
-      const all = await Promise.all(
-        selectedCountries.map((cid) => fdGetCitiesByCountry(cid, debouncedDepartureCitySearch || undefined))
-      );
-      const flat: FDCity[] = all.flat();
-      const map = new Map<string, FDCity>();
-      for (const c of flat) map.set(c.id, c);
-      return Array.from(map.values()).sort((a, b) => a.city_name.localeCompare(b.city_name));
-    },
-    enabled: selectedCountries.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const availableCities = citiesQuery.data ?? [];
-  const availableDepartureCities = departureCitiesQuery.data ?? [];
-
-  // Label for the currently-selected departure city (needed in edit mode when it may not be in search results)
-  const departureCityId = form.watch("departure_city_id");
-  const departureCityLabel =
-    availableDepartureCities.find((c) => c.id === departureCityId)?.city_name ??
-    existingPkgCities.find((c) => c.id === departureCityId)?.city_name ??
-    undefined;
-
+  // Clear cities when countries cleared
   useEffect(() => {
     if (selectedCountries.length === 0) {
       if (selectedCities.length > 0) form.setValue("city_ids", []);
@@ -206,6 +159,59 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
     if (currencies.length > 0) return currencies.map((c) => c.code);
     return FALLBACK_CURRENCIES;
   }, [currencies]);
+
+  // Countries fetch: client-side prefix filter over the loaded list
+  const countriesFetchFn = useCallback(
+    async (search: string) => {
+      const q = search.trim().toLowerCase();
+      return countries
+        .filter((c) => !q || c.country_name.toLowerCase().startsWith(q))
+        .map((c) => ({ id: c.id, label: c.country_name }));
+    },
+    [countries]
+  );
+
+  // Cities fetch: prefix search across all selected countries, merged + deduped
+  const citiesFetchFn = useCallback(
+    async (search: string): Promise<{ id: string; label: string }[]> => {
+      if (selectedCountries.length === 0) return [];
+      const all = await Promise.all(
+        selectedCountries.map((cid) => fdGetCitiesByCountry(cid, search || undefined))
+      );
+      const map = new Map<string, string>();
+      for (const city of (all.flat() as FDCity[])) map.set(city.id, city.city_name);
+      return Array.from(map.entries())
+        .map(([id, label]) => ({ id, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    },
+    [selectedCountries]
+  );
+
+  // Departure city fetch: same as cities but returns IOption for Autocomplete
+  const departureCitySearchFn = useCallback(
+    async (search: string): Promise<IOption[]> => {
+      if (selectedCountries.length === 0) return [];
+      const all = await Promise.all(
+        selectedCountries.map((cid) => fdGetCitiesByCountry(cid, search || undefined))
+      );
+      const map = new Map<string, string>();
+      for (const city of (all.flat() as FDCity[])) map.set(city.id, city.city_name);
+      return Array.from(map.entries())
+        .map(([value, label]) => ({ value, label }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+    },
+    [selectedCountries]
+  );
+
+  // Hydrate departure city label in edit mode
+  const departureCityFetchByValue = useCallback(
+    async (id: string): Promise<IOption | null> => {
+      const existing = existingPkgCities.find((c) => c.id === id);
+      if (existing) return { value: existing.id, label: (existing as FDCity).city_name };
+      return null;
+    },
+    [existingPkgCities]
+  );
 
   const onSubmit = async (values: IFDGeneralInfo) => {
     setIsSaving(true);
@@ -293,10 +299,10 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
             control={form.control}
             name="country_ids"
             render={({ field }) => (
-              <MultiPicker
-                placeholder="Select countries..."
-                options={countries.map((c) => ({ value: c.id, label: c.country_name }))}
-                values={field.value}
+              <MultiSelectSearch
+                placeholder="Search countries..."
+                fetchFn={countriesFetchFn}
+                value={field.value}
                 onChange={field.onChange}
               />
             )}
@@ -311,14 +317,12 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
             control={form.control}
             name="city_ids"
             render={({ field }) => (
-              <MultiPicker
+              <MultiSelectSearch
                 placeholder={selectedCountries.length === 0 ? "Select countries first" : "Search cities..."}
-                options={availableCities.map((c) => ({ value: c.id, label: c.city_name }))}
-                values={field.value}
+                fetchFn={citiesFetchFn}
+                value={field.value}
                 onChange={field.onChange}
                 disabled={selectedCountries.length === 0}
-                onSearchChange={setCitySearch}
-                isLoading={citiesQuery.isFetching}
               />
             )}
           />
@@ -330,15 +334,14 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
             control={form.control}
             name="departure_city_id"
             render={({ field }) => (
-              <SinglePicker
+              <Autocomplete
+                mode="server"
+                value={field.value ?? undefined}
+                onChange={(v) => field.onChange(v || null)}
+                onSearch={departureCitySearchFn}
+                fetchByValue={departureCityFetchByValue}
                 placeholder={selectedCountries.length === 0 ? "Select countries first" : "Search departure city..."}
-                options={availableDepartureCities.map((c) => ({ value: c.id, label: c.city_name }))}
-                value={field.value ?? null}
-                valueLabel={departureCityLabel}
-                onChange={(v) => field.onChange(v)}
                 disabled={selectedCountries.length === 0}
-                onSearchChange={setDepartureCitySearch}
-                isLoading={departureCitiesQuery.isFetching}
               />
             )}
           />
@@ -529,191 +532,5 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
         </Button>
       </div>
     </form>
-  );
-}
-
-interface PickerOption {
-  value: string;
-  label: string;
-}
-
-function MultiPicker({
-  placeholder,
-  options,
-  values,
-  onChange,
-  disabled,
-  onSearchChange,
-  isLoading,
-}: {
-  placeholder: string;
-  options: PickerOption[];
-  values: string[];
-  onChange: (v: string[]) => void;
-  disabled?: boolean;
-  onSearchChange?: (q: string) => void;
-  isLoading?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  // Keep labels for selected values even when they scroll out of search results
-  const [selectedLabels, setSelectedLabels] = useState<Record<string, string>>({});
-  useEffect(() => {
-    const additions: Record<string, string> = {};
-    for (const o of options) {
-      if (values.includes(o.value)) additions[o.value] = o.label;
-    }
-    if (Object.keys(additions).length > 0) {
-      setSelectedLabels((prev) => ({ ...prev, ...additions }));
-    }
-  }, [options, values]);
-  const displayLabels = values.map((v) => selectedLabels[v]).filter(Boolean) as string[];
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          disabled={disabled}
-          className={cn("min-h-9 h-auto w-full justify-between px-3 py-1.5 font-normal", values.length === 0 && "text-muted-foreground")}
-        >
-          <div className="flex flex-wrap gap-1 items-center">
-            {displayLabels.length === 0 ? (
-              <span>{placeholder}</span>
-            ) : (
-              displayLabels.slice(0, 5).map((l) => (
-                <Badge key={l} variant="secondary" className="text-[11px] font-normal py-0 px-1.5">{l}</Badge>
-              ))
-            )}
-            {displayLabels.length > 5 && <span className="text-xs">+{displayLabels.length - 5}</span>}
-          </div>
-          <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="p-0" align="start">
-        <Command shouldFilter={!onSearchChange}>
-          <CommandInput placeholder="Search..." onValueChange={onSearchChange} />
-          <CommandList>
-            {isLoading ? (
-              <div className="py-6 text-center text-sm text-muted-foreground">Loading...</div>
-            ) : (
-              <>
-                <CommandEmpty>No results.</CommandEmpty>
-                <CommandGroup className="max-h-64 overflow-auto">
-                  {options.map((o) => {
-                    const checked = values.includes(o.value);
-                    return (
-                      <CommandItem
-                        key={o.value}
-                        value={o.value}
-                        onSelect={() => {
-                          onChange(checked ? values.filter((v) => v !== o.value) : [...values, o.value]);
-                        }}
-                      >
-                        <Check className={cn("mr-2 h-4 w-4", checked ? "opacity-100" : "opacity-0")} />
-                        {o.label}
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              </>
-            )}
-          </CommandList>
-        </Command>
-        {values.length > 0 && (
-          <div className="border-t px-2 py-1.5 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">{values.length} selected</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => onChange([])}
-            >
-              <X className="h-3 w-3" /> Clear
-            </Button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function SinglePicker({
-  placeholder,
-  options,
-  value,
-  valueLabel,
-  onChange,
-  disabled,
-  onSearchChange,
-  isLoading,
-}: {
-  placeholder: string;
-  options: PickerOption[];
-  value: string | null;
-  valueLabel?: string;
-  onChange: (v: string | null) => void;
-  disabled?: boolean;
-  onSearchChange?: (q: string) => void;
-  isLoading?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const label = options.find((o) => o.value === value)?.label ?? valueLabel;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          disabled={disabled}
-          className={cn("h-9 w-full justify-between px-3 font-normal", !label && "text-muted-foreground")}
-        >
-          {label ?? placeholder}
-          <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="p-0" align="start">
-        <Command shouldFilter={!onSearchChange}>
-          <CommandInput placeholder="Search..." onValueChange={onSearchChange} />
-          <CommandList>
-            {isLoading ? (
-              <div className="py-6 text-center text-sm text-muted-foreground">Loading...</div>
-            ) : (
-              <>
-                <CommandEmpty>No results.</CommandEmpty>
-                <CommandGroup className="max-h-64 overflow-auto">
-                  <CommandItem
-                    value="__none__"
-                    onSelect={() => {
-                      onChange(null);
-                      setOpen(false);
-                    }}
-                  >
-                    <Check className={cn("mr-2 h-4 w-4", value == null ? "opacity-100" : "opacity-0")} />
-                    <span className="italic text-muted-foreground">None</span>
-                  </CommandItem>
-                  {options.map((o) => (
-                    <CommandItem
-                      key={o.value}
-                      value={o.value}
-                      onSelect={() => {
-                        onChange(o.value);
-                        setOpen(false);
-                      }}
-                    >
-                      <Check className={cn("mr-2 h-4 w-4", value === o.value ? "opacity-100" : "opacity-0")} />
-                      {o.label}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </>
-            )}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
   );
 }
