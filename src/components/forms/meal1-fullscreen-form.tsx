@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { ChevronLeft, ChevronRight, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MealProduct } from "@/types/meals1";
 import Meal1GeneralInfoForm from "@/components/rates/meals1/tabs/tab1-general-info";
@@ -114,15 +114,17 @@ export default function Meal1FullscreenForm({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent
         className="max-w-full sm:max-w-full h-full p-0 gap-0 flex flex-col"
+        showCloseButton={false}
         onInteractOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">Meal Configuration</DialogTitle>
 
-        {/* Fixed Header — Stepper */}
+        {/* Fixed Header — Stepper + Close */}
         <div className="sticky top-0 z-10">
-          <div className="border-b bg-muted px-6 py-3">
-            <div className="flex justify-center">
+          <div className="border-b bg-muted px-4 py-3">
+            <div className="flex items-center justify-between">
+              <div className="w-8" />
               <div className="flex bg-muted rounded-lg p-1">
                 {FORM_STEPS.map((step, index) => (
                   <button
@@ -155,6 +157,16 @@ export default function Meal1FullscreenForm({
                   </button>
                 ))}
               </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleClose}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </Button>
             </div>
           </div>
         </div>
