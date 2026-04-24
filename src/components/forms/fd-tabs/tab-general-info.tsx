@@ -187,12 +187,13 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
     [selectedCountries]
   );
 
-  // Departure city fetch: same as cities but returns IOption for Autocomplete
+  // Departure city fetch: global search across all countries, not scoped to selected countries
   const departureCitySearchFn = useCallback(
     async (search: string): Promise<IOption[]> => {
-      if (selectedCountries.length === 0) return [];
+      const q = search.trim();
+      if (!q) return []; // Require input to avoid querying all 252 countries on popover open
       const all = await Promise.all(
-        selectedCountries.map((cid) => fdGetCitiesByCountry(cid, search || undefined))
+        countries.map((c) => fdGetCitiesByCountry(c.id, q))
       );
       const map = new Map<string, string>();
       for (const city of (all.flat() as FDCity[])) map.set(city.id, city.city_name);
@@ -200,7 +201,7 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
         .map(([value, label]) => ({ value, label }))
         .sort((a, b) => a.label.localeCompare(b.label));
     },
-    [selectedCountries]
+    [countries]
   );
 
   // Hydrate departure city label in edit mode
