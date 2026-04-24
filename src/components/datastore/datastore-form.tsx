@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import ToursDatastoreForm from "@/components/forms/tours-datastore-form";
 import TransfersDatastoreForm from "../forms/transfers-datastore-form";
-import GuidesDatastoreForm from "../forms/guides-datastore-form";
 import HotelsDatastoreForm from "../forms/hotels-datastore-form";
 import CarOnDisposalDatastoreForm from "../forms/car-on-disposal-datastore-form";
 
@@ -32,8 +31,5 @@ export default function DatastoreForm({ onSuccess }: Props) {
     );
   }
 
-  if (pathname.includes("guides")) {
-    return <GuidesDatastoreForm initialData={null} onSuccess={onSuccess} />;
-  }
   return null;
 }
