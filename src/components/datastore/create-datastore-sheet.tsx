@@ -128,7 +128,7 @@ export default function CreateDatastoreSheet() {
       type: "active",
     });
     queryClient.invalidateQueries({
-      queryKey: ["getAllMealsByUser"],
+      queryKey: ["meals"],
       exact: false,
       type: "active",
     });

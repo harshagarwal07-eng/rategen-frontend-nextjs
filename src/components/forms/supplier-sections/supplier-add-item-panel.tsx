@@ -23,7 +23,7 @@ import { addSupplierItem } from "@/data-access/suppliers";
 import { getAllToursByUser } from "@/data-access/tours";
 import { getAllTransfersByUser } from "@/data-access/transfers";
 import { getAllHotelsByUser } from "@/data-access/hotels";
-import { getAllMealsByUser } from "@/data-access/meals";
+import { listMeals } from "@/data-access/meals";
 import { getAllGuidesByUser } from "@/data-access/guides";
 import type { ItemTypes, ISupplierTeamMemberData } from "@/types/suppliers";
 import { IOption } from "@/types/common";
@@ -119,7 +119,7 @@ export default function SupplierAddItemPanel({ supplierId, teamMembers, category
 
   const { data: mealsData } = useQuery({
     queryKey: ["supplier-meals-list"],
-    queryFn: () => getAllMealsByUser(defaultParams),
+    queryFn: () => listMeals(),
     enabled: activeType === "meal",
     staleTime: 5 * 60 * 1000,
   });
@@ -156,7 +156,7 @@ export default function SupplierAddItemPanel({ supplierId, teamMembers, category
       case "transfer":
         return transfers.map((t: any) => ({ value: t.id, label: t.transfer_name }));
       case "meal":
-        return meals.map((m: any) => ({ value: m.id, label: m.meal_name }));
+        return meals.map((m: any) => ({ value: m.id, label: m.name }));
       case "guide":
         return guides.map((g: any) => ({ value: g.id, label: g.guide_type }));
       default:

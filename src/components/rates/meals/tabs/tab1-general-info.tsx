@@ -17,9 +17,8 @@ import { Autocomplete } from "@/components/ui/autocomplete";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useCountryCityOptions } from "@/hooks/use-country-city-options";
 import { fetchCitiesByCountryId, fetchCityById } from "@/data-access/datastore";
-import { MealProduct } from "@/types/meals1";
+import { MealProduct } from "@/types/meals";
 import { CURRENCY_OPTIONS } from "@/constants/data";
-import { cn } from "@/lib/utils";
 
 const GeneralInfoSchema = z.object({
   id: z.string().optional(),
@@ -31,7 +30,7 @@ const GeneralInfoSchema = z.object({
 
 type GeneralInfoValues = z.infer<typeof GeneralInfoSchema>;
 
-interface Meal1GeneralInfoFormProps {
+interface MealGeneralInfoFormProps {
   initialData?: MealProduct | null;
   onNext: (data: GeneralInfoValues) => void;
   setIsLoading?: (loading: boolean) => void;
@@ -40,14 +39,14 @@ interface Meal1GeneralInfoFormProps {
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export default function Meal1GeneralInfoForm({
+export default function MealGeneralInfoForm({
   initialData,
   onNext,
   setIsLoading,
   formRef,
   onContextChange,
   onDirtyChange,
-}: Meal1GeneralInfoFormProps) {
+}: MealGeneralInfoFormProps) {
   const form = useForm<GeneralInfoValues>({
     resolver: zodResolver(GeneralInfoSchema),
     mode: "onBlur",
@@ -63,7 +62,6 @@ export default function Meal1GeneralInfoForm({
   const countryId = form.watch("country_id");
   const watchName = form.watch("name");
 
-  // Report dirty state to parent so the tab stepper can show the yellow dot
   const { isDirty } = form.formState;
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
@@ -76,7 +74,6 @@ export default function Meal1GeneralInfoForm({
     }
   }, [isDirty]);
 
-  // Clear parent dirty tracking when this tab unmounts (unsaved edits are lost on remount)
   useEffect(() => {
     return () => { onDirtyChangeRef.current?.(false); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -87,9 +84,6 @@ export default function Meal1GeneralInfoForm({
   onContextChangeRef.current = onContextChange;
   const lastReportedContext = useRef<{ name: string; countryName: string } | null>(null);
 
-  // Derive countryName in render from a primitive id — depending on the
-  // countryOptions array would loop, since the shared hook returns a fresh
-  // `[]` reference every render while React Query data is loading.
   const countryName = countryOptions.find((o) => o.value === countryId)?.label || "";
 
   useEffect(() => {
@@ -145,7 +139,6 @@ export default function Meal1GeneralInfoForm({
           onSubmit={form.handleSubmit(onSubmit)}
           className="space-y-6"
         >
-          {/* Row 1: Name + Currency */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
               control={form.control}
@@ -179,7 +172,6 @@ export default function Meal1GeneralInfoForm({
             />
           </div>
 
-          {/* Row 2: Country + City */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
               control={form.control}

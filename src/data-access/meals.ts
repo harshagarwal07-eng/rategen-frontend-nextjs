@@ -1,165 +1,107 @@
-"use server";
+"use client";
 
-import { DatastoreSearchParams } from "@/types/datastore";
-import { createClient } from "@/utils/supabase/server";
-import { getCurrentUser } from "./auth";
-import { IMealsDatastore } from "@/components/forms/schemas/meals-datastore-schema";
-import { SupplierAssociation } from "@/types/suppliers";
+import http from "@/lib/api";
+import {
+  MealProduct,
+  MealPackage,
+  MealAgePolicies,
+  MealPricing,
+  MealCancellationPolicy,
+  MealCuisine,
+} from "@/types/meals";
 
-export async function getAllMealsByUser(params: DatastoreSearchParams) {
-  const supabase = await createClient();
+type Result<T> = { data: T | null; error: string | null };
 
-  const user = await getCurrentUser();
-  if (!user) return { data: [], totalItems: 0 };
-
-  const { sort, country, page = 1, perPage = 25, currency, meal_name: mealName } = params;
-
-  const start = (page - 1) * perPage;
-  const end = start + perPage - 1;
-
-  const query = supabase
-    .from("meals")
-    .select(
-      `*, 
-      countries!meals_country_fkey(country_name), 
-      cities!meals_city_fkey(city_name)`,
-      {
-        count: "exact",
-      }
-    )
-    .eq("dmc_id", user.dmc.id)
-    .order(sort?.[0]?.id ?? "created_at", {
-      ascending: !(sort?.[0]?.desc ?? true),
-    })
-    .limit(perPage)
-    .range(start, end);
-
-  if (country?.length > 0) query.in("country", country);
-  if (currency?.length > 0) query.in("currency", currency);
-  if (mealName) query.ilike("meal_name", `%${mealName}%`);
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    console.error(`Error fetching meal for user ${user.id}: ${error.message}`);
-    return { data: [], totalItems: 0 };
+function unwrap<T>(raw: any): Result<T> {
+  if (raw && typeof raw === "object" && !Array.isArray(raw) && raw.error) {
+    return { data: null, error: raw.error };
   }
-
-  // Transform the data to flatten the joined field
-  const transformedData =
-    data?.map((item) => ({
-      ...item,
-      country_name: item.countries?.country_name || "N/A",
-    })) || [];
-
-  return { data: transformedData, totalItems: count ?? 0 };
+  return { data: raw as T, error: null };
 }
 
-export async function getMealById(id: string) {
-  const supabase = await createClient();
-
-  const user = await getCurrentUser();
-  if (!user) return { data: null, error: "User not found" };
-
-  const { data, error } = await supabase
-    .from("meals")
-    .select(
-      `*,
-      countries!meals_country_fkey(country_name),
-      cities!meals_city_fkey(city_name),
-      supplier_items:rategen_supplier_items(
-        id,
-        supplier_id,
-        supplier:rategen_suppliers(name, is_active),
-        pocs:rategen_supplier_item_pocs(team_member_id, is_primary)
-      )`
-    )
-    .eq("id", id)
-    .eq("dmc_id", user.dmc.id)
-    .single();
-
-  if (error) {
-    console.error(`Error fetching meal ${id}: ${error.message}`);
-    return { data: null, error: error.message };
-  }
-
-  const supplierAssociations: SupplierAssociation[] = Object.values(
-    ((data as any).supplier_items || []).reduce((acc: any, item: any) => {
-      const sid = item.supplier_id;
-      if (!acc[sid]) {
-        acc[sid] = {
-          supplier_id: sid,
-          supplier_name: item.supplier?.name ?? undefined,
-          is_active: item.supplier?.is_active ?? true,
-          poc_ids: [],
-          primary_poc_id: undefined,
-          package_ids: [],
-          package_names: {},
-        };
-      }
-      (item.pocs || []).forEach((p: any) => {
-        if (!acc[sid].poc_ids.includes(p.team_member_id)) acc[sid].poc_ids.push(p.team_member_id);
-        if (p.is_primary) acc[sid].primary_poc_id = p.team_member_id;
-      });
-      return acc;
-    }, {})
-  ) as SupplierAssociation[];
-
-  // Transform the data to flatten the joined field
-  const transformedData = {
-    ...data,
-    country_name: (data as any).countries?.country_name || "N/A",
-    supplier_associations: supplierAssociations,
-  };
-
-  return { data: transformedData, error: null };
+export async function listMeals(): Promise<Result<MealProduct[]>> {
+  const raw = await (http.get("/api/meals") as any);
+  return unwrap<MealProduct[]>(raw);
 }
 
-export async function createMeal(meal: IMealsDatastore) {
-  const supabase = await createClient();
-
-  const user = await getCurrentUser();
-  if (!user) return { error: "User not found" };
-
-  const { data, error } = await supabase
-    .from("meals")
-    .insert({ ...meal, state: meal.state || null, created_by: user.id, dmc_id: user.dmc.id })
-    .select()
-    .single();
-
-  if (error) return { error: error.message };
-
-  return { data };
+export async function getMealById(id: string): Promise<Result<MealProduct>> {
+  const raw = await (http.get(`/api/meals/${id}`) as any);
+  return unwrap<MealProduct>(raw);
 }
 
-export const updateMeal = async (id: string, meal: IMealsDatastore) => {
-  const supabase = await createClient();
+export async function createMeal(
+  data: Pick<MealProduct, "name" | "currency" | "country_id" | "geo_id">
+): Promise<Result<MealProduct>> {
+  const raw = await (http.post("/api/meals", data) as any);
+  return unwrap<MealProduct>(raw);
+}
 
-  const user = await getCurrentUser();
+export async function updateMeal(
+  id: string,
+  data: Partial<Pick<MealProduct, "name" | "currency" | "country_id" | "geo_id">>
+): Promise<Result<MealProduct>> {
+  const raw = await (http.put(`/api/meals/${id}`, data) as any);
+  return unwrap<MealProduct>(raw);
+}
 
-  if (!user) return { error: "User not found" };
+export async function deleteMeal(id: string): Promise<Result<{ deleted: boolean }>> {
+  const raw = await (http.delete(`/api/meals/${id}`) as any);
+  return unwrap<{ deleted: boolean }>(raw);
+}
 
-  // Remove fields that come from joins or shouldn't be updated
-  const { countries, country_name, cities, supplier_items, supplier_associations, ...cleanMeal } = meal as any;
+export async function listCuisines(): Promise<Result<MealCuisine[]>> {
+  const raw = await (http.get("/api/meals/master/cuisines") as any);
+  return unwrap<MealCuisine[]>(raw);
+}
 
-  const { data, error } = await supabase
-    .from("meals")
-    .update({ ...cleanMeal, state: cleanMeal.state || null, dmc_id: user.dmc.id })
-    .eq("id", id)
-    .eq("dmc_id", user.dmc.id)
-    .select()
-    .single();
-  if (error) return { error: error.message };
+export async function createPackage(
+  mealId: string,
+  data: Omit<MealPackage, "id" | "meal_product_id" | "created_at" | "updated_at" | "cuisine" | "meal_age_policies" | "meal_pricing" | "meal_cancellation_policies">
+): Promise<Result<MealPackage>> {
+  const raw = await (http.post(`/api/meals/${mealId}/packages`, data) as any);
+  return unwrap<MealPackage>(raw);
+}
 
-  return { data };
-};
+export async function updatePackage(
+  mealId: string,
+  packageId: string,
+  data: Partial<Omit<MealPackage, "id" | "meal_product_id" | "created_at" | "updated_at" | "cuisine" | "meal_age_policies" | "meal_pricing" | "meal_cancellation_policies">>
+): Promise<Result<MealPackage>> {
+  const raw = await (http.put(`/api/meals/${mealId}/packages/${packageId}`, data) as any);
+  return unwrap<MealPackage>(raw);
+}
 
-export const deleteMeal = async (id: string) => {
-  const supabase = await createClient();
+export async function deletePackage(
+  mealId: string,
+  packageId: string
+): Promise<Result<{ deleted: boolean }>> {
+  const raw = await (http.delete(`/api/meals/${mealId}/packages/${packageId}`) as any);
+  return unwrap<{ deleted: boolean }>(raw);
+}
 
-  const { error } = await supabase.from("meals").delete().eq("id", id);
+export async function replaceAgePolicies(
+  mealId: string,
+  packageId: string,
+  policies: MealAgePolicies[]
+): Promise<Result<MealAgePolicies[]>> {
+  const raw = await (http.post(`/api/meals/${mealId}/packages/${packageId}/age-policies`, policies) as any);
+  return unwrap<MealAgePolicies[]>(raw);
+}
 
-  if (error) return { error: error.message };
+export async function replacePricing(
+  mealId: string,
+  packageId: string,
+  pricing: MealPricing[]
+): Promise<Result<MealPricing[]>> {
+  const raw = await (http.post(`/api/meals/${mealId}/packages/${packageId}/pricing`, pricing) as any);
+  return unwrap<MealPricing[]>(raw);
+}
 
-  return { data: null };
-};
+export async function replaceCancellationPolicies(
+  mealId: string,
+  packageId: string,
+  policies: MealCancellationPolicy[]
+): Promise<Result<MealCancellationPolicy[]>> {
+  const raw = await (http.post(`/api/meals/${mealId}/packages/${packageId}/cancellation-policies`, policies) as any);
+  return unwrap<MealCancellationPolicy[]>(raw);
+}

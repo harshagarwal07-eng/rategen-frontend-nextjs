@@ -40,8 +40,8 @@ import {
   replaceAgePolicies,
   replacePricing,
   replaceCancellationPolicies,
-} from "@/data-access/meals1";
-import { MealPackage, MealCuisine, MealProduct, MealAgePolicies, MealPricing, MealCancellationPolicy } from "@/types/meals1";
+} from "@/data-access/meals";
+import { MealPackage, MealCuisine, MealProduct, MealAgePolicies, MealPricing, MealCancellationPolicy } from "@/types/meals";
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -282,7 +282,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
 
     const isPending = !pkg.id;
 
-    // Keep a ref so the imperative save() always reads the latest pkg
     const pkgRef = useRef(pkg);
     pkgRef.current = pkg;
 
@@ -329,7 +328,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
       name: "age_bands",
     });
 
-    // Values for collapsed summary
     const watchName = form.watch("name");
     const watchType = form.watch("type");
     const watchCuisineId = form.watch("cuisine_id");
@@ -339,11 +337,9 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
     const rateDisplay =
       adultBand !== undefined ? `${adultBand.amount} ${currency}` : "—";
 
-    // Dirty state subscription — reading isDirty here subscribes to RHF dirty changes
     const { isDirty } = form.formState;
     const isCardDirty = isDirty || isPending;
 
-    // Report dirty state to parent — guard prevents calling with the same value twice
     const onDirtyChangeRef = useRef(onDirtyChange);
     onDirtyChangeRef.current = onDirtyChange;
     const localIdRef = useRef(pkg._localId);
@@ -357,7 +353,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
       }
     }, [isCardDirty]);
 
-    // Save logic exposed to parent via ref
     useImperativeHandle(ref, () => ({
       save: async (): Promise<SaveResult> => {
         const currentPkg = pkgRef.current;
@@ -413,7 +408,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
             meal_cancellation_policies: (cancelR.data ?? []) as MealCancellationPolicy[],
           };
 
-          // Reset form to saved values so isDirty becomes false
           form.reset({
             name: updatedPkg.name,
             type: updatedPkg.type,
@@ -466,7 +460,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
-                {/* Yellow dot: unsaved changes indicator */}
                 {isCardDirty && (
                   <span className="w-2 h-2 rounded-full bg-yellow-500 shrink-0" aria-label="Unsaved changes" />
                 )}
@@ -521,7 +514,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
           <AccordionContent className="px-4 pb-4">
             <Form {...form}>
               <form className="space-y-5 pt-2">
-                {/* Row 1: Name, Type, Cuisine */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
@@ -587,7 +579,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   />
                 </div>
 
-                {/* Row 2: Venue, Menu URL */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -625,7 +616,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   />
                 </div>
 
-                {/* Description */}
                 <FormField
                   control={form.control}
                   name="description"
@@ -644,7 +634,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   )}
                 />
 
-                {/* Inclusions / Exclusions */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -682,7 +671,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   />
                 </div>
 
-                {/* Preferred */}
                 <FormField
                   control={form.control}
                   name="is_preferred"
@@ -699,7 +687,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   )}
                 />
 
-                {/* Age Bands & Pricing */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h4 className="text-sm font-semibold">Age Bands & Pricing</h4>
@@ -821,7 +808,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   </div>
                 </div>
 
-                {/* Cancellation Policy */}
                 <CancellationSection form={form} />
               </form>
             </Form>
@@ -832,12 +818,12 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
   }
 );
 
-// ── Meal1PackagesForm (wrapper for fullscreen form) ────────────
+// ── MealPackagesForm (wrapper for fullscreen form) ────────────
 
 const DoneFormSchema = z.object({});
 type DoneFormValues = z.infer<typeof DoneFormSchema>;
 
-interface Meal1PackagesFormProps {
+interface MealPackagesFormProps {
   initialData: MealProduct;
   cuisines: MealCuisine[];
   onNext: (data: Record<string, unknown>) => void;
@@ -846,14 +832,14 @@ interface Meal1PackagesFormProps {
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export default function Meal1PackagesForm({
+export default function MealPackagesForm({
   initialData,
   cuisines,
   onNext,
   setIsLoading,
   formRef,
   onDirtyChange,
-}: Meal1PackagesFormProps) {
+}: MealPackagesFormProps) {
   const mealId = initialData.id!;
   const currency = initialData.currency || "";
 
@@ -864,12 +850,10 @@ export default function Meal1PackagesForm({
   const [pendingDeletes, setPendingDeletes] = useState<PackageStateEntry[]>([]);
   const [dirtySet, setDirtySet] = useState<Set<string>>(new Set());
 
-  // Refs for each card's imperative handle
   const cardRefsMap = useRef<Map<string, React.RefObject<PackageCardHandle | null>>>(new Map());
 
   const form = useForm<DoneFormValues>({ resolver: zodResolver(DoneFormSchema) });
 
-  // Aggregate dirty state and report to parent — guard prevents calling with the same value twice
   const anyDirty = dirtySet.size > 0 || pendingDeletes.length > 0;
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
@@ -882,7 +866,6 @@ export default function Meal1PackagesForm({
     }
   }, [anyDirty]);
 
-  // Clear parent dirty state when this tab unmounts (edits are lost on remount)
   useEffect(() => {
     return () => { onDirtyChangeRef.current?.(false); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -890,7 +873,7 @@ export default function Meal1PackagesForm({
   const handlePackageDirtyChange = useCallback((localId: string, isDirty: boolean) => {
     setDirtySet((prev) => {
       const alreadyPresent = prev.has(localId);
-      if (isDirty === alreadyPresent) return prev; // no actual change — return same ref
+      if (isDirty === alreadyPresent) return prev;
       const next = new Set(prev);
       if (isDirty) next.add(localId);
       else next.delete(localId);
@@ -973,14 +956,12 @@ export default function Meal1PackagesForm({
     );
     if (prevLocalId !== newLocalId) {
       setOpenCards((prev) => prev.map((id) => (id === prevLocalId ? newLocalId : id)));
-      // Move ref to new key
       const existingRef = cardRefsMap.current.get(prevLocalId);
       if (existingRef) {
         cardRefsMap.current.delete(prevLocalId);
         cardRefsMap.current.set(newLocalId, existingRef);
       }
     }
-    // Clear dirty for this package (form.reset() was already called inside the card's save())
     setDirtySet((prev) => {
       const next = new Set(prev);
       next.delete(prevLocalId);
@@ -990,7 +971,6 @@ export default function Meal1PackagesForm({
   };
 
   const handleDeleted = (localId: string) => {
-    // If the package has a real server ID, mark it for deletion on next Save
     const pkg = packages.find((p) => p._localId === localId);
     if (pkg?.id) {
       setPendingDeletes((prev) => [...prev, pkg]);
@@ -1012,7 +992,6 @@ export default function Meal1PackagesForm({
     let saved = 0;
     const failures: string[] = [];
 
-    // 1. DELETE packages marked for removal
     for (const pkg of pendingDeletes) {
       if (pkg.id) {
         const { error } = await deletePackage(mealId, pkg.id);
@@ -1024,7 +1003,6 @@ export default function Meal1PackagesForm({
       }
     }
 
-    // 2. Save each remaining package sequentially
     const packagesSnapshot = [...packages];
     for (const pkg of packagesSnapshot) {
       const cardRef = cardRefsMap.current.get(pkg._localId);
@@ -1049,7 +1027,6 @@ export default function Meal1PackagesForm({
       toast.error(
         `Saved ${successCount} of ${total}. ${failures.join(" ")}`
       );
-      // Keep only undeleted packages in pendingDeletes (those that failed to delete)
       const failedDeleteNames = failures
         .filter((f) => f.includes("(delete)"))
         .map((f) => f.match(/"([^"]+)" \(delete\)/)?.[1] ?? "");

@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 import { getHotelsForPicker } from "@/data-access/hotels";
-import { getAllMealsByUser } from "@/data-access/meals";
+import { listMeals } from "@/data-access/meals";
 import { getAllGuidesByUser } from "@/data-access/guides";
 import { searchTourPackages } from "@/data-access/tours";
 import { searchTransferPackages } from "@/data-access/transfers";
@@ -324,12 +324,12 @@ export default function AddActivityPopover({
           break;
         }
         case "meal": {
-          const { data } = await getAllMealsByUser({ ...params, meal_name: query || undefined });
+          const { data } = await listMeals();
           results = (data || []).map((item: any) => ({
             id: item.id,
-            name: item.meal_name || item.name,
-            description: item.meal_type,
-            location: `${item.city_name || ""}, ${item.country_name || ""}`.replace(/^,\s*|,\s*$/g, ""),
+            name: item.name,
+            description: undefined,
+            location: [item.location?.city_name, item.country?.country_name].filter(Boolean).join(", "),
             category: "meal" as ServiceType,
             data: item,
           }));
