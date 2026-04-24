@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -36,6 +36,7 @@ interface Meal1GeneralInfoFormProps {
   onNext: (data: GeneralInfoValues) => void;
   setIsLoading?: (loading: boolean) => void;
   formRef?: React.RefObject<HTMLFormElement>;
+  onContextChange?: (name: string, countryName: string) => void;
 }
 
 export default function Meal1GeneralInfoForm({
@@ -43,6 +44,7 @@ export default function Meal1GeneralInfoForm({
   onNext,
   setIsLoading,
   formRef,
+  onContextChange,
 }: Meal1GeneralInfoFormProps) {
   const form = useForm<GeneralInfoValues>({
     resolver: zodResolver(GeneralInfoSchema),
@@ -57,8 +59,17 @@ export default function Meal1GeneralInfoForm({
   });
 
   const countryId = form.watch("country_id");
+  const watchName = form.watch("name");
 
   const { countries: countryOptions, isLoadingCountries } = useCountryCityOptions({});
+
+  const onContextChangeRef = useRef(onContextChange);
+  onContextChangeRef.current = onContextChange;
+
+  useEffect(() => {
+    const countryName = countryOptions.find((o) => o.value === countryId)?.label || "";
+    onContextChangeRef.current?.(watchName || "", countryName);
+  }, [watchName, countryId, countryOptions]);
 
   const searchCities = useCallback(
     (search: string) =>

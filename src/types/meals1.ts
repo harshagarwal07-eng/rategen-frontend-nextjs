@@ -22,7 +22,9 @@ export interface MealPricing {
 export interface MealCancellationPolicy {
   id?: string;
   meal_package_id?: string;
-  days_before: number;
+  from_days: number;
+  to_days: number;
+  date_anchor: "after_booking" | "before_service";
   penalty_type: "percentage" | "fixed";
   penalty_amount: number;
 }
