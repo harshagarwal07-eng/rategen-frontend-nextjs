@@ -29,6 +29,7 @@ import { Autocomplete } from "@/components/ui/autocomplete";
 import {
   fdGetCountries,
   fdGetCitiesByCountry,
+  fdGetCitiesGlobal,
   fdGetCurrencies,
   fdGetPackageCountries,
   fdGetPackageCities,
@@ -187,21 +188,17 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
     [selectedCountries]
   );
 
-  // Departure city fetch: global search across all countries, not scoped to selected countries
+  // Departure city fetch: global search across all countries via single endpoint
   const departureCitySearchFn = useCallback(
     async (search: string): Promise<IOption[]> => {
       const q = search.trim();
-      if (!q) return []; // Require input to avoid querying all 252 countries on popover open
-      const all = await Promise.all(
-        countries.map((c) => fdGetCitiesByCountry(c.id, q))
-      );
-      const map = new Map<string, string>();
-      for (const city of (all.flat() as FDCity[])) map.set(city.id, city.city_name);
-      return Array.from(map.entries())
-        .map(([value, label]) => ({ value, label }))
+      if (!q) return [];
+      const cities = await fdGetCitiesGlobal(q);
+      return cities
+        .map((c) => ({ value: c.id, label: c.city_name }))
         .sort((a, b) => a.label.localeCompare(b.label));
     },
-    [countries]
+    []
   );
 
   // Hydrate departure city label in edit mode

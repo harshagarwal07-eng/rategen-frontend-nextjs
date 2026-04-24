@@ -504,28 +504,47 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   />
                 </div>
 
-                <FormField
-                  control={form.control}
-                  name="duration_hours"
-                  render={({ field }) => (
-                    <FormItem className="max-w-xs">
-                      <FormLabel>Duration (Hours)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          className="h-9"
-                          {...field}
-                          value={field.value ?? ""}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            field.onChange(v === "" ? null : Number(v));
-                          }}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="duration_hours"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Duration (Hours)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            className="h-9"
+                            {...field}
+                            value={field.value ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              field.onChange(v === "" ? null : Number(v));
+                            }}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="is_active"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col justify-end pb-1">
+                        <div className="flex items-center gap-3">
+                          <FormLabel className="mt-0">Active</FormLabel>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                          <span className="text-sm text-muted-foreground">
+                            {field.value ? "Yes" : "No"}
+                          </span>
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
                 <FormField
                   control={form.control}
@@ -575,22 +594,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="is_active"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center gap-3">
-                      <FormLabel className="mt-0">Active</FormLabel>
-                      <FormControl>
-                        <Switch checked={field.value} onCheckedChange={field.onChange} />
-                      </FormControl>
-                      <span className="text-sm text-muted-foreground">
-                        {field.value ? "Yes" : "No"}
-                      </span>
-                    </FormItem>
-                  )}
-                />
-
                 <OperationalHoursSection form={form} />
                 <TiersSection
                   form={form}
@@ -613,58 +616,72 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
 
 function OperationalHoursSection({ form }: { form: ReturnType<typeof useForm<PackageFormValues>> }) {
   const hours = form.watch("operational_hours");
+
+  const getContextLabel = (day: string, active: boolean, startTime: string | null, endTime: string | null): string => {
+    if (!active) {
+      return `Guide not available on ${day}`;
+    }
+    if (!startTime && !endTime) {
+      return `Guide available 24x7 on ${day}`;
+    }
+    return "Standard working hours";
+  };
+
   return (
     <div className="space-y-2">
       <h4 className="text-sm font-semibold">Operational Hours</h4>
-      <div className="rounded-md border overflow-x-auto">
-        <div className="grid grid-cols-[140px_80px_120px_120px] gap-2 border-b bg-muted/50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground min-w-[500px]">
-          <span>Day</span>
-          <span>Active</span>
-          <span>Start</span>
-          <span>End</span>
-        </div>
+      <div className="space-y-3">
         {DAYS.map((d, index) => {
           const row = hours[index];
           const active = row?.is_active ?? false;
+          const contextLabel = getContextLabel(d.label, active, row?.start_time ?? null, row?.end_time ?? null);
           return (
-            <div
-              key={d.key}
-              className="grid grid-cols-[140px_80px_120px_120px] items-center gap-2 px-3 py-1.5 border-b last:border-b-0 min-w-[500px]"
-            >
-              <span className="text-sm">{d.label}</span>
-              <FormField
-                control={form.control}
-                name={`operational_hours.${index}.is_active`}
-                render={({ field }) => (
-                  <Switch checked={field.value} onCheckedChange={field.onChange} />
-                )}
-              />
-              <FormField
-                control={form.control}
-                name={`operational_hours.${index}.start_time`}
-                render={({ field }) => (
-                  <Input
-                    type="time"
-                    className="h-8 text-xs"
-                    disabled={!active}
-                    value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value || null)}
+            <div key={d.key} className="border rounded-md p-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">{d.label}</span>
+                <FormField
+                  control={form.control}
+                  name={`operational_hours.${index}.is_active`}
+                  render={({ field }) => (
+                    <Switch checked={field.value} onCheckedChange={field.onChange} />
+                  )}
+                />
+              </div>
+              {active && (
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  <FormField
+                    control={form.control}
+                    name={`operational_hours.${index}.start_time`}
+                    render={({ field }) => (
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">Start</label>
+                        <Input
+                          type="time"
+                          className="h-8 text-xs"
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value || null)}
+                        />
+                      </div>
+                    )}
                   />
-                )}
-              />
-              <FormField
-                control={form.control}
-                name={`operational_hours.${index}.end_time`}
-                render={({ field }) => (
-                  <Input
-                    type="time"
-                    className="h-8 text-xs"
-                    disabled={!active}
-                    value={field.value ?? ""}
-                    onChange={(e) => field.onChange(e.target.value || null)}
+                  <FormField
+                    control={form.control}
+                    name={`operational_hours.${index}.end_time`}
+                    render={({ field }) => (
+                      <div>
+                        <label className="text-xs text-muted-foreground block mb-1">End</label>
+                        <Input
+                          type="time"
+                          className="h-8 text-xs"
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value || null)}
+                        />
+                      </div>
+                    )}
                   />
-                )}
-              />
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">{contextLabel}</p>
             </div>
           );
         })}
