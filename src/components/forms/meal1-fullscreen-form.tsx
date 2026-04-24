@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { ChevronLeft, ChevronRight, Loader2, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MealProduct } from "@/types/meals1";
@@ -161,6 +161,7 @@ export default function Meal1FullscreenForm({
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogTitle className="sr-only">Meal Configuration</DialogTitle>
+          <DialogDescription className="sr-only">Edit meal product details and packages</DialogDescription>
 
           {/* Fixed Header */}
           <div className="sticky top-0 z-10">
@@ -318,9 +319,9 @@ export default function Meal1FullscreenForm({
       <Dialog open={showDiscardDialog} onOpenChange={(open) => !open && setShowDiscardDialog(false)}>
         <DialogContent className="max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
           <DialogTitle>Unsaved changes</DialogTitle>
-          <p className="text-sm text-muted-foreground mt-1">
+          <DialogDescription>
             You have unsaved changes. Discard?
-          </p>
+          </DialogDescription>
           <div className="flex justify-end gap-2 mt-4">
             <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
               Keep editing

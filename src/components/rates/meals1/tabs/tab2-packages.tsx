@@ -30,7 +30,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { AlertModal } from "@/components/ui/alert-modal";
-import { Loader2, Plus, Trash2, ChevronDown, Copy } from "lucide-react";
+import { Plus, Trash2, ChevronDown, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -343,14 +343,18 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
     const { isDirty } = form.formState;
     const isCardDirty = isDirty || isPending;
 
-    // Report dirty state to parent
+    // Report dirty state to parent — guard prevents calling with the same value twice
     const onDirtyChangeRef = useRef(onDirtyChange);
     onDirtyChangeRef.current = onDirtyChange;
     const localIdRef = useRef(pkg._localId);
     localIdRef.current = pkg._localId;
+    const lastReportedCardDirty = useRef<boolean | undefined>(undefined);
 
     useEffect(() => {
-      onDirtyChangeRef.current(localIdRef.current, isCardDirty);
+      if (lastReportedCardDirty.current !== isCardDirty) {
+        lastReportedCardDirty.current = isCardDirty;
+        onDirtyChangeRef.current(localIdRef.current, isCardDirty);
+      }
     }, [isCardDirty]);
 
     // Save logic exposed to parent via ref
@@ -865,13 +869,17 @@ export default function Meal1PackagesForm({
 
   const form = useForm<DoneFormValues>({ resolver: zodResolver(DoneFormSchema) });
 
-  // Aggregate dirty state and report to parent
+  // Aggregate dirty state and report to parent — guard prevents calling with the same value twice
   const anyDirty = dirtySet.size > 0 || pendingDeletes.length > 0;
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
+  const lastReportedAnyDirty = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
-    onDirtyChangeRef.current?.(anyDirty);
+    if (lastReportedAnyDirty.current !== anyDirty) {
+      lastReportedAnyDirty.current = anyDirty;
+      onDirtyChangeRef.current?.(anyDirty);
+    }
   }, [anyDirty]);
 
   // Clear parent dirty state when this tab unmounts (edits are lost on remount)
@@ -881,6 +889,8 @@ export default function Meal1PackagesForm({
 
   const handlePackageDirtyChange = useCallback((localId: string, isDirty: boolean) => {
     setDirtySet((prev) => {
+      const alreadyPresent = prev.has(localId);
+      if (isDirty === alreadyPresent) return prev; // no actual change — return same ref
       const next = new Set(prev);
       if (isDirty) next.add(localId);
       else next.delete(localId);

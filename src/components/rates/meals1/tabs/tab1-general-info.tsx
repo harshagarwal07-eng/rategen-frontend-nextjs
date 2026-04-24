@@ -67,9 +67,13 @@ export default function Meal1GeneralInfoForm({
   const { isDirty } = form.formState;
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
+  const lastReportedDirty = useRef<boolean | undefined>(undefined);
 
   useEffect(() => {
-    onDirtyChangeRef.current?.(isDirty);
+    if (lastReportedDirty.current !== isDirty) {
+      lastReportedDirty.current = isDirty;
+      onDirtyChangeRef.current?.(isDirty);
+    }
   }, [isDirty]);
 
   // Clear parent dirty tracking when this tab unmounts (unsaved edits are lost on remount)
