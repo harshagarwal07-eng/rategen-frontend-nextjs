@@ -37,6 +37,7 @@ interface Meal1GeneralInfoFormProps {
   setIsLoading?: (loading: boolean) => void;
   formRef?: React.RefObject<HTMLFormElement>;
   onContextChange?: (name: string, countryName: string) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export default function Meal1GeneralInfoForm({
@@ -45,6 +46,7 @@ export default function Meal1GeneralInfoForm({
   setIsLoading,
   formRef,
   onContextChange,
+  onDirtyChange,
 }: Meal1GeneralInfoFormProps) {
   const form = useForm<GeneralInfoValues>({
     resolver: zodResolver(GeneralInfoSchema),
@@ -60,6 +62,20 @@ export default function Meal1GeneralInfoForm({
 
   const countryId = form.watch("country_id");
   const watchName = form.watch("name");
+
+  // Report dirty state to parent so the tab stepper can show the yellow dot
+  const { isDirty } = form.formState;
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+
+  useEffect(() => {
+    onDirtyChangeRef.current?.(isDirty);
+  }, [isDirty]);
+
+  // Clear parent dirty tracking when this tab unmounts (unsaved edits are lost on remount)
+  useEffect(() => {
+    return () => { onDirtyChangeRef.current?.(false); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { countries: countryOptions, isLoadingCountries } = useCountryCityOptions({});
 
