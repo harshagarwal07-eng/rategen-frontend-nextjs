@@ -39,7 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { getHotelsForPicker } from "@/data-access/hotels";
 import { listMeals } from "@/data-access/meals";
-import { getAllGuidesByUser } from "@/data-access/guides";
+import { listGuides } from "@/data-access/guides";
 import { searchTourPackages } from "@/data-access/tours";
 import { searchTransferPackages } from "@/data-access/transfers";
 import { searchLibraryItems, type LibraryItem } from "@/data-access/itinerary-library";
@@ -336,12 +336,19 @@ export default function AddActivityPopover({
           break;
         }
         case "guide": {
-          const { data } = await getAllGuidesByUser({ ...params, guide_name: query || undefined });
-          results = (data || []).map((item: any) => ({
-            id: item.id,
-            name: item.guide_name || item.name,
-            description: item.language || item.specialization,
-            location: `${item.city_name || ""}, ${item.country_name || ""}`.replace(/^,\s*|,\s*$/g, ""),
+          const needle = (query || "").toLowerCase();
+          const { data } = await listGuides();
+          const filtered = needle
+            ? (data || []).filter((g) =>
+                [g.name, g.country?.country_name, g.city?.city_name]
+                  .filter(Boolean)
+                  .some((v) => v!.toLowerCase().includes(needle)),
+              )
+            : (data || []);
+          results = filtered.map((item) => ({
+            id: item.id!,
+            name: item.name,
+            location: [item.city?.city_name, item.country?.country_name].filter(Boolean).join(", "),
             category: "guide" as ServiceType,
             data: item,
           }));

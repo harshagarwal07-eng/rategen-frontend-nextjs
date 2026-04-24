@@ -1,172 +1,178 @@
-"use server";
+"use client";
 
-import { DatastoreSearchParams } from "@/types/datastore";
-import { createClient } from "@/utils/supabase/server";
-import { getCurrentUser } from "./auth";
-import { IGuidesDatastore } from "@/components/forms/schemas/guides-datastore-schema";
-import { SupplierAssociation } from "@/types/suppliers";
+import axios from "axios";
+import { http } from "@/lib/api";
+import { env } from "@/lib/env";
+import { createClient } from "@/utils/supabase/client";
+import {
+  Guide,
+  GuidePackage,
+  GuidePackageOperationalHour,
+  GuidePackageSupplement,
+  GuidePackageTier,
+  GuideSupplementMaster,
+  Language,
+} from "@/types/guides";
 
-export async function getAllGuidesByUser(params: DatastoreSearchParams) {
-  const supabase = await createClient();
+type Result<T> = { data: T | null; error: string | null };
 
-  const user = await getCurrentUser();
-  if (!user) return { data: [], totalItems: 0 };
-
-  const { sort, country, page = 1, perPage = 25, guide_type, currency } = params;
-
-  const start = (page - 1) * perPage;
-  const end = start + perPage - 1;
-
-  const query = supabase
-    .from("guides")
-    .select(
-      `*, 
-      countries!guides_country_fkey(country_name), 
-      cities!guides_city_fkey(city_name)`,
-      {
-        count: "exact",
-      }
-    )
-    .eq("dmc_id", user.dmc.id)
-    .order(sort?.[0]?.id ?? "created_at", {
-      ascending: !(sort?.[0]?.desc ?? true),
-    })
-    .limit(perPage)
-    .range(start, end);
-  if (country?.length > 0) query.ilikeAnyOf("country", country);
-  if (guide_type?.length > 0) query.ilikeAnyOf("guide_type", guide_type);
-  if (currency?.length > 0) query.ilikeAnyOf("currency", currency);
-
-  const { data, error, count } = await query;
-  if (error) {
-    console.error(`Error fetching guide for user ${user.id}: ${error.message}`);
-    return { data: [], totalItems: 0 };
+function unwrap<T>(raw: unknown): Result<T> {
+  if (raw && typeof raw === "object" && !Array.isArray(raw) && "error" in (raw as Record<string, unknown>)) {
+    const err = (raw as { error?: unknown }).error;
+    if (err) return { data: null, error: String(err) };
   }
-
-  // Transform the data to flatten the joined field
-  const transformedData =
-    data?.map((item) => ({
-      ...item,
-      country_name: item.countries?.country_name || "N/A",
-    })) || [];
-
-  return { data: transformedData, totalItems: count ?? 0 };
+  return { data: raw as T, error: null };
 }
 
-export async function getGuideById(id: string) {
-  const supabase = await createClient();
+async function authedAxios() {
+  const supabase = createClient();
+  const { data: { session } } = await supabase.auth.getSession();
+  return axios.create({
+    baseURL: env.API_URL,
+    headers: {
+      "Content-Type": "application/json",
+      ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+    },
+  });
+}
 
-  const user = await getCurrentUser();
-  if (!user) return { data: null, error: "User not found" };
+function axiosErrorMessage(e: unknown): string {
+  if (axios.isAxiosError(e)) return e.response?.data?.message || e.message;
+  if (e instanceof Error) return e.message;
+  return "Request failed";
+}
 
-  const { data, error } = await supabase
-    .from("guides")
-    .select(
-      `*,
-      countries!guides_country_fkey(country_name),
-      cities!guides_city_fkey(city_name),
-      supplier_items:rategen_supplier_items(
-        id,
-        supplier_id,
-        supplier:rategen_suppliers(name, is_active),
-        pocs:rategen_supplier_item_pocs(team_member_id, is_primary)
-      )`
-    )
-    .eq("id", id)
-    .eq("dmc_id", user.dmc.id)
-    .single();
+// ── Guide CRUD ───────────────────────────────────────────────
 
-  if (error) {
-    console.error(`Error fetching guide ${id}: ${error.message}`);
-    return { data: null, error: error.message };
+export async function listGuides(): Promise<Result<Guide[]>> {
+  const raw = await http.get<Guide[]>("/api/guides");
+  return unwrap<Guide[]>(raw);
+}
+
+export async function getGuideById(id: string): Promise<Result<Guide>> {
+  const raw = await http.get<Guide>(`/api/guides/${id}`);
+  return unwrap<Guide>(raw);
+}
+
+export type GuideCreatePayload = {
+  name: string;
+  country_id?: string | null;
+  city_id?: string | null;
+  currency: string;
+  is_active: boolean;
+};
+
+export async function createGuide(data: GuideCreatePayload): Promise<Result<Guide>> {
+  const raw = await http.post<Guide>("/api/guides", data);
+  return unwrap<Guide>(raw);
+}
+
+export async function patchGuide(
+  id: string,
+  data: Partial<GuideCreatePayload>,
+): Promise<Result<Guide>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.patch<Guide>(`/api/guides/${id}`, data);
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
   }
-
-  const supplierAssociations: SupplierAssociation[] = Object.values(
-    ((data as any).supplier_items || []).reduce((acc: any, item: any) => {
-      const sid = item.supplier_id;
-      if (!acc[sid]) {
-        acc[sid] = {
-          supplier_id: sid,
-          supplier_name: item.supplier?.name ?? undefined,
-          is_active: item.supplier?.is_active ?? true,
-          poc_ids: [],
-          primary_poc_id: undefined,
-          package_ids: [],
-          package_names: {},
-        };
-      }
-      (item.pocs || []).forEach((p: any) => {
-        if (!acc[sid].poc_ids.includes(p.team_member_id)) acc[sid].poc_ids.push(p.team_member_id);
-        if (p.is_primary) acc[sid].primary_poc_id = p.team_member_id;
-      });
-      return acc;
-    }, {})
-  ) as SupplierAssociation[];
-
-  // Transform the data to flatten the joined field
-  const transformedData = {
-    ...data,
-    country_name: (data as any).countries?.country_name || "N/A",
-    city_name: (data as any).cities?.city_name || "N/A",
-    supplier_associations: supplierAssociations,
-  };
-
-  return { data: transformedData, error: null };
 }
 
-export async function createGuide(guide: IGuidesDatastore) {
-  const supabase = await createClient();
-
-  const user = await getCurrentUser();
-  if (!user) return { error: "User not found" };
-  const { data, error } = await supabase
-    .from("guides")
-    .insert({ ...guide, state: guide.state || null, created_by: user.id, dmc_id: user.dmc.id })
-    .select()
-    .single();
-  if (error) return { error: error.message };
-
-  return { data };
+export async function deleteGuide(id: string): Promise<Result<{ deleted: boolean }>> {
+  const raw = await http.delete<{ deleted: boolean }>(`/api/guides/${id}`);
+  return unwrap<{ deleted: boolean }>(raw);
 }
 
-export const updateGuide = async (id: string, guide: IGuidesDatastore) => {
-  const supabase = await createClient();
+// ── Package CRUD ─────────────────────────────────────────────
 
-  const user = await getCurrentUser();
-
-  if (!user) return { error: "User not found" };
-
-  // Remove fields that come from joins or shouldn't be updated
-  const { countries, country_name, cities, city_name, supplier_items, supplier_associations, ...cleanGuide } = guide as any;
-
-  const { data, error } = await supabase
-    .from("guides")
-    .update({ ...cleanGuide, state: cleanGuide.state || null, dmc_id: user.dmc.id })
-    .eq("id", id)
-    .eq("dmc_id", user.dmc.id)
-    .select()
-    .single();
-  if (error) return { error: error.message };
-
-  return { data };
+export type GuidePackageCreatePayload = {
+  name: string;
+  guide_type: GuidePackage["guide_type"];
+  duration_type: GuidePackage["duration_type"];
+  duration_hours?: number | null;
+  description?: string | null;
+  is_active: boolean;
+  languages?: string[];
 };
 
-export const deleteGuide = async (id: string) => {
-  const supabase = await createClient();
+export async function createPackage(
+  guideId: string,
+  data: GuidePackageCreatePayload,
+): Promise<Result<GuidePackage>> {
+  const raw = await http.post<GuidePackage>(`/api/guides/${guideId}/packages`, data);
+  return unwrap<GuidePackage>(raw);
+}
 
-  const { error } = await supabase.from("guides").delete().eq("id", id);
+export async function patchPackage(
+  guideId: string,
+  packageId: string,
+  data: Partial<GuidePackageCreatePayload>,
+): Promise<Result<GuidePackage>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.patch<GuidePackage>(`/api/guides/${guideId}/packages/${packageId}`, data);
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
 
-  if (error) return { error: error.message };
+export async function deletePackage(
+  guideId: string,
+  packageId: string,
+): Promise<Result<{ deleted: boolean }>> {
+  const raw = await http.delete<{ deleted: boolean }>(`/api/guides/${guideId}/packages/${packageId}`);
+  return unwrap<{ deleted: boolean }>(raw);
+}
 
-  return { data: null };
-};
+// ── Sub-resource full-replace (PUT) ──────────────────────────
 
-export const bulkDeleteGuides = async (ids: string[]) => {
-  const supabase = await createClient();
+export async function replacePackageTiers(
+  guideId: string,
+  packageId: string,
+  tiers: Omit<GuidePackageTier, "id" | "package_id">[],
+): Promise<Result<GuidePackageTier[]>> {
+  const raw = await http.put<GuidePackageTier[]>(
+    `/api/guides/${guideId}/packages/${packageId}/tiers`,
+    tiers,
+  );
+  return unwrap<GuidePackageTier[]>(raw);
+}
 
-  const { error } = await supabase.from("guides").delete().in("id", ids);
+export async function replacePackageOperationalHours(
+  guideId: string,
+  packageId: string,
+  hours: Omit<GuidePackageOperationalHour, "id" | "package_id">[],
+): Promise<Result<GuidePackageOperationalHour[]>> {
+  const raw = await http.put<GuidePackageOperationalHour[]>(
+    `/api/guides/${guideId}/packages/${packageId}/operational-hours`,
+    hours,
+  );
+  return unwrap<GuidePackageOperationalHour[]>(raw);
+}
 
-  if (error) return { error: error.message };
+export async function replacePackageSupplements(
+  guideId: string,
+  packageId: string,
+  supplements: Omit<GuidePackageSupplement, "id" | "package_id">[],
+): Promise<Result<GuidePackageSupplement[]>> {
+  const raw = await http.put<GuidePackageSupplement[]>(
+    `/api/guides/${guideId}/packages/${packageId}/supplements`,
+    supplements,
+  );
+  return unwrap<GuidePackageSupplement[]>(raw);
+}
 
-  return { data: null };
-};
+// ── Master data ──────────────────────────────────────────────
+
+export async function listGuideSupplements(): Promise<Result<GuideSupplementMaster[]>> {
+  const raw = await http.get<GuideSupplementMaster[]>("/api/guides/master/supplements");
+  return unwrap<GuideSupplementMaster[]>(raw);
+}
+
+export async function listLanguages(): Promise<Result<Language[]>> {
+  const raw = await http.get<Language[]>("/api/master/languages");
+  return unwrap<Language[]>(raw);
+}

@@ -9,7 +9,6 @@ import { getAllHotelsByUser } from "@/data-access/hotels";
 import { getAllToursByUser } from "@/data-access/tours";
 import { getAllTransfersByUser } from "@/data-access/transfers";
 import { getAllCarOnDisposalsByUser } from "@/data-access/car-on-disposal";
-import { getAllGuidesByUser } from "@/data-access/guides";
 import { DatastoreSearchParams } from "@/types/datastore";
 
 type Tab = {
@@ -69,13 +68,6 @@ export default function TabNavigation({
         queryClient.prefetchQuery({
           queryKey: ["getAllCarOnDisposalsByUser", params],
           queryFn: () => getAllCarOnDisposalsByUser(params),
-          staleTime: 2 * 60 * 1000,
-        });
-        break;
-      case "/rates/guides":
-        queryClient.prefetchQuery({
-          queryKey: ["getAllGuidesByUser", params],
-          queryFn: () => getAllGuidesByUser(params),
           staleTime: 2 * 60 * 1000,
         });
         break;

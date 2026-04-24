@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,116 +8,79 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { MoreVertical, Edit, Trash, Files, Eye } from "lucide-react";
+import { Spinner } from "@/components/ui/spinner";
+import { MoreVertical, Eye, Trash, Edit } from "lucide-react";
 import { AlertModal } from "@/components/ui/alert-modal";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { deleteGuide, getGuideById } from "@/data-access/guides";
+import { Guide } from "@/types/guides";
 import GuideFullscreenForm from "@/components/forms/guide-fullscreen-form";
-import GuideFullscreenView from "@/components/forms/guide-fullscreen-view";
-import { deleteGuide } from "@/data-access/guides";
-import { IGuidesDatastore } from "@/components/forms/schemas/guides-datastore-schema";
-import { getGuideById } from "@/data-access/guides";
-import { getSyncedColumns } from "@/data-access/common";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Spinner } from "@/components/ui/spinner";
 
 interface CellActionProps {
-  data: IGuidesDatastore;
+  data: Guide;
 }
 
-export default function CellAction({ data }: CellActionProps) {
-  const router = useRouter();
+export function CellAction({ data }: CellActionProps) {
   const queryClient = useQueryClient();
-
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
-  const [editFormOpen, setEditFormOpen] = useState(false);
-  const [editData, setEditData] = useState(null);
-  const [editLoading, setEditLoading] = useState(false);
-  const [viewOpen, setViewOpen] = useState(false);
-  const [duplicateFormOpen, setDuplicateFormOpen] = useState(false);
-  const [duplicateData, setDuplicateData] = useState<IGuidesDatastore | null>(null);
-  const [syncedColumns, setSyncedColumns] = useState<string[]>([]);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formData, setFormData] = useState<Guide | null>(null);
+  const [loadingForm, setLoadingForm] = useState(false);
 
   const onConfirmDelete = async () => {
     try {
       setLoading(true);
       const { error } = await deleteGuide(data.id!);
       if (error) throw new Error(error);
-      toast.success("Guide deleted.");
-      router.refresh();
-      invalidateQueries();
+      toast.success(`Deleted "${data.name}".`);
+      queryClient.invalidateQueries({ queryKey: ["guides"], exact: false, type: "active" });
     } catch (error) {
-      console.error(error);
-      toast.error("Something went wrong");
+      toast.error(error instanceof Error ? error.message : "Something went wrong");
     } finally {
       setOpen(false);
       setLoading(false);
     }
   };
 
-  const handleFormSuccess = () => {
-    setEditFormOpen(false);
-    setEditData(null);
-    invalidateQueries();
-  };
-
-  const handleEditFromView = () => {
-    setViewOpen(false);
-    setEditFormOpen(true);
-  };
-
-  const handleDuplicateSuccess = () => {
-    setDuplicateFormOpen(false);
-    setDuplicateData(null);
-    invalidateQueries();
-  };
-
-  const onEdit = async () => {
-    setEditLoading(true);
+  const handleEditOpen = async () => {
+    setLoadingForm(true);
     try {
-      const { data: guide, error: guideError } = await getGuideById(data.id!);
-      const { data: syncedColumns, error: syncedColumnsError } = await getSyncedColumns(["guide"]);
-      if (guideError || syncedColumnsError) {
+      const result = await getGuideById(data.id!);
+      if (result.error) {
         toast.error("Failed to load guide details");
-        console.error(guideError || syncedColumnsError);
         return;
       }
-      setEditData(guide);
-      setSyncedColumns(syncedColumns || []);
-      setEditFormOpen(true);
-    } catch (error) {
-      toast.error("Failed to prepare duplicate");
-      console.error(error);
+      setFormData(result.data!);
+      setFormOpen(true);
+    } catch {
+      toast.error("Failed to load guide details");
     } finally {
-      setEditLoading(false);
+      setLoadingForm(false);
     }
   };
 
-  const onDuplicate = () => {
-    const duplicatedData = { ...data };
-    delete duplicatedData.id;
-    delete duplicatedData.guide_datastore_id;
-    delete duplicatedData.is_unlinked;
-    setDuplicateData(duplicatedData);
-    setDuplicateFormOpen(true);
-  };
-
-  const invalidateQueries = () => {
-    queryClient.invalidateQueries({
-      queryKey: ["getAllGuidesByUser"],
-      exact: false,
-      type: "active",
-    });
+  const handleFormSuccess = () => {
+    setFormOpen(false);
+    setFormData(null);
+    queryClient.invalidateQueries({ queryKey: ["guides"], exact: false, type: "active" });
   };
 
   return (
     <>
-      <AlertModal isOpen={open} onClose={() => setOpen(false)} onConfirm={onConfirmDelete} loading={loading} />
+      <AlertModal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        onConfirm={onConfirmDelete}
+        loading={loading}
+        title="Delete Guide?"
+        description={`This will permanently delete ${data.name} and all their packages, tiers, operational hours, and supplements. This cannot be undone.`}
+      />
 
-      {/* loading Dialog */}
-      <Dialog open={editLoading}>
+      <Dialog open={loadingForm}>
         <DialogTitle className="sr-only">Loading guide...</DialogTitle>
         <DialogContent className="sm:max-w-md" showCloseButton={false}>
           <div className="flex flex-col items-center justify-center py-8 gap-4">
@@ -129,8 +91,13 @@ export default function CellAction({ data }: CellActionProps) {
       </Dialog>
 
       <div className="flex items-center gap-2">
-        <Button variant="ghost" className="h-8 w-8 p-0" onClick={() => setViewOpen(true)}>
-          <span className="sr-only">View</span>
+        <Button
+          variant="ghost"
+          className="h-8 w-8 p-0"
+          onClick={handleEditOpen}
+          disabled={loadingForm}
+        >
+          <span className="sr-only">Edit</span>
           <Eye className="h-4 w-4" />
         </Button>
 
@@ -143,48 +110,28 @@ export default function CellAction({ data }: CellActionProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>Actions</DropdownMenuLabel>
-
-            <DropdownMenuItem onClick={onEdit}>
-              <Edit className="mr-2 h-4 w-4" /> Update
+            <DropdownMenuItem onClick={handleEditOpen} disabled={loadingForm}>
+              <Edit className="mr-2 h-4 w-4" /> {loadingForm ? "Loading..." : "Edit"}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onDuplicate}>
-              <Files className="mr-2 h-4 w-4" /> Duplicate
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setOpen(true)}>
+            <DropdownMenuItem
+              onClick={() => setOpen(true)}
+              className="text-destructive focus:text-destructive"
+            >
               <Trash className="mr-2 h-4 w-4" /> Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
 
-      {/* View Guide - only render when opened */}
-      {viewOpen && (
-        <GuideFullscreenView
-          isOpen={viewOpen}
-          onClose={() => setViewOpen(false)}
-          guideData={data}
-          onEdit={handleEditFromView}
-        />
-      )}
-
-      {/* Edit Guide Form - only render when opened */}
-      {editFormOpen && (
+      {formOpen && formData && (
         <GuideFullscreenForm
-          isOpen={editFormOpen}
-          onClose={() => setEditFormOpen(false)}
-          initialData={editData}
-          syncedColumns={syncedColumns}
+          isOpen={formOpen}
+          onClose={() => {
+            setFormOpen(false);
+            setFormData(null);
+          }}
+          initialData={formData}
           onSuccess={handleFormSuccess}
-        />
-      )}
-
-      {/* Duplicate Guide Form - only render when opened */}
-      {duplicateFormOpen && (
-        <GuideFullscreenForm
-          isOpen={duplicateFormOpen}
-          onClose={() => setDuplicateFormOpen(false)}
-          initialData={duplicateData}
-          onSuccess={handleDuplicateSuccess}
         />
       )}
     </>

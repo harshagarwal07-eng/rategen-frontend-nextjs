@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { getCommonPinningStyles } from "@/lib/data-table";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Guide } from "@/types/guide";
+import { Guide } from "@/types/guides";
 import { Checkbox } from "@/components/ui/checkbox";
 
 interface GuidesDataTableProps extends React.ComponentProps<"div"> {
@@ -21,11 +21,7 @@ interface GuidesDataTableProps extends React.ComponentProps<"div"> {
   actionBar?: React.ReactNode;
 }
 
-export function GuidesDataTable({
-  table,
-  actionBar,
-  children,
-}: GuidesDataTableProps) {
+export function GuidesDataTable({ table, actionBar, children }: GuidesDataTableProps) {
   return (
     <div className="flex flex-1 flex-col space-y-4">
       {children}
@@ -37,17 +33,13 @@ export function GuidesDataTable({
                 <TableHeader className="sticky top-0 z-10 bg-background">
                   {table.getHeaderGroups().map((headerGroup) => (
                     <TableRow key={headerGroup.id}>
-                      {/* Add checkbox column header */}
                       <TableHead className="w-[50px] min-w-[50px] max-w-[50px] bg-muted border-r border-border">
                         <Checkbox
                           checked={
                             table.getIsAllPageRowsSelected() ||
-                            (table.getIsSomePageRowsSelected() &&
-                              "indeterminate")
+                            (table.getIsSomePageRowsSelected() && "indeterminate")
                           }
-                          onCheckedChange={(value) =>
-                            table.toggleAllPageRowsSelected(!!value)
-                          }
+                          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
                           aria-label="Select all"
                           className="translate-y-[2px]"
                         />
@@ -56,19 +48,11 @@ export function GuidesDataTable({
                         <TableHead
                           key={header.id}
                           colSpan={header.colSpan}
-                          style={{
-                            ...getCommonPinningStyles({
-                              column: header.column,
-                              isHeader: true,
-                            }),
-                          }}
+                          style={{ ...getCommonPinningStyles({ column: header.column, isHeader: true }) }}
                         >
                           {header.isPlaceholder
                             ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
+                            : flexRender(header.column.columnDef.header, header.getContext())}
                         </TableHead>
                       ))}
                     </TableRow>
@@ -77,36 +61,22 @@ export function GuidesDataTable({
                 <TableBody>
                   {table.getRowModel().rows?.length ? (
                     table.getRowModel().rows.map((row) => (
-                      <TableRow
-                        key={row.id}
-                        data-state={row.getIsSelected() && "selected"}
-                      >
-                        {/* Checkbox cell - always first */}
+                      <TableRow key={row.id} data-state={row.getIsSelected() && "selected"}>
                         <TableCell className="w-[50px] min-w-[50px] max-w-[50px] bg-background border-r border-border">
                           <Checkbox
                             checked={row.getIsSelected()}
-                            onCheckedChange={(value) =>
-                              row.toggleSelected(!!value)
-                            }
+                            onCheckedChange={(value) => row.toggleSelected(!!value)}
                             aria-label="Select row"
                             className="translate-y-[2px]"
                           />
                         </TableCell>
-                        {/* Regular table cells */}
                         {row.getVisibleCells().map((cell) => (
                           <TableCell
                             key={cell.id}
-                            style={{
-                              ...getCommonPinningStyles({
-                                column: cell.column,
-                              }),
-                            }}
+                            style={{ ...getCommonPinningStyles({ column: cell.column }) }}
                             className="bg-background"
                           >
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext()
-                            )}
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
                           </TableCell>
                         ))}
                       </TableRow>
@@ -130,9 +100,7 @@ export function GuidesDataTable({
       </div>
       <div className="flex flex-col gap-2.5">
         <DataTablePagination table={table} />
-        {actionBar &&
-          table.getFilteredSelectedRowModel().rows.length > 0 &&
-          actionBar}
+        {actionBar && table.getFilteredSelectedRowModel().rows.length > 0 && actionBar}
       </div>
     </div>
   );

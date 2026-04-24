@@ -1,44 +1,37 @@
 "use client";
 
+import { useState } from "react";
 import { GuidesDataTable } from "./guides-data-table";
 import { DataTableToolbar } from "@/components/ui/table/data-table-toolbar";
 import { BulkDeleteToolbar } from "./bulk-delete-toolbar";
 import { useDataTable } from "@/hooks/use-data-table";
 import { ColumnDef } from "@tanstack/react-table";
 import { parseAsInteger, useQueryState } from "nuqs";
-import { Guide } from "@/types/guide";
+import { Guide } from "@/types/guides";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import GuideFullscreenForm from "@/components/forms/guide-fullscreen-form";
 
 interface Props {
   data: { data: Guide[]; totalItems: number };
-  columns: ColumnDef<Guide, any>[];
-  showImportButton?: boolean;
-  showAddButton?: boolean;
+  columns: ColumnDef<Guide, unknown>[];
 }
 
-export function GuidesDataTableWrapper({
-  data,
-  columns,
-  showImportButton = false,
-  showAddButton = false,
-}: Props) {
+export function GuidesDataTableWrapper({ data, columns }: Props) {
+  const queryClient = useQueryClient();
   const [pageSize] = useQueryState("perPage", parseAsInteger.withDefault(100));
-
+  const [newFormOpen, setNewFormOpen] = useState(false);
   const pageCount = Math.ceil(data.totalItems / pageSize);
 
-  // Use the provided columns
-  const activeColumns = columns;
-
-  // Find the first data column (skip actions column)
-  const firstDataColumn = activeColumns.find(
-    (col) => col.id && col.id !== "actions" && col.enablePinning
+  const firstDataColumn = columns.find(
+    (col) => col.id && col.id !== "actions" && (col as { enablePinning?: boolean }).enablePinning,
   );
-
-  // Find the actions column
-  const actionsColumn = activeColumns.find((col) => col.id === "actions");
+  const actionsColumn = columns.find((col) => col.id === "actions");
 
   const { table } = useDataTable({
     data: data.data,
-    columns: activeColumns,
+    columns,
     pageCount,
     shallow: false,
     debounceMs: 500,
@@ -47,40 +40,43 @@ export function GuidesDataTableWrapper({
         left: firstDataColumn?.id ? [firstDataColumn.id] : [],
         right: actionsColumn?.id ? [actionsColumn.id] : [],
       },
-      columnVisibility: {
-        cancellation: false,
-        remarks: false,
-        examples: false,
-        description: false,
-      },
     },
   });
 
-  const selectedRows = table
-    .getSelectedRowModel()
-    .rows.map((row) => row.original);
+  const selectedRows = table.getSelectedRowModel().rows.map((row) => row.original);
   const hasSelection = selectedRows.length > 0;
 
-  const handleClearSelection = () => {
-    table.resetRowSelection();
+  const handleNewSuccess = () => {
+    setNewFormOpen(false);
+    queryClient.invalidateQueries({ queryKey: ["guides"], exact: false, type: "active" });
   };
 
   return (
-    <GuidesDataTable table={table}>
-      <div className="flex items-center justify-between">
-        {hasSelection ? (
-          <BulkDeleteToolbar
-            selectedRows={selectedRows}
-            onClearSelection={handleClearSelection}
-          />
-        ) : (
-          <DataTableToolbar
-            table={table}
-            showImportButton={showImportButton}
-            showAddButton={showAddButton}
-          />
-        )}
-      </div>
-    </GuidesDataTable>
+    <>
+      <GuidesDataTable table={table}>
+        <div className="flex items-center justify-between">
+          {hasSelection ? (
+            <BulkDeleteToolbar
+              selectedRows={selectedRows}
+              onClearSelection={() => table.resetRowSelection()}
+            />
+          ) : (
+            <DataTableToolbar table={table}>
+              <Button size="sm" onClick={() => setNewFormOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" />
+                New Guide
+              </Button>
+            </DataTableToolbar>
+          )}
+        </div>
+      </GuidesDataTable>
+
+      <GuideFullscreenForm
+        isOpen={newFormOpen}
+        onClose={() => setNewFormOpen(false)}
+        initialData={null}
+        onSuccess={handleNewSuccess}
+      />
+    </>
   );
 }

@@ -8,7 +8,6 @@ import TourFullscreenForm from "@/components/forms/tour-fullscreen-form";
 import TransferFullscreenForm from "@/components/forms/transfer-fullscreen-form";
 import ComboFullscreenForm from "@/components/forms/combo-fullscreen-form";
 import MealFullscreenForm from "@/components/forms/meal-fullscreen-form";
-import GuideFullscreenForm from "@/components/forms/guide-fullscreen-form";
 import { DocumentType } from "@/types/common";
 import Show from "../ui/show";
 import { usePathname } from "next/navigation";
@@ -46,10 +45,6 @@ export default function CreateDatastoreSheet() {
     if (pathname.includes("meals")) {
       return setActiveTab(DocumentType.MEALS);
     }
-
-    if (pathname.includes("guides")) {
-      return setActiveTab(DocumentType.GUIDES);
-    }
   }, [pathname]);
 
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -58,7 +53,6 @@ export default function CreateDatastoreSheet() {
   const [transferFormOpen, setTransferFormOpen] = useState(false);
   const [comboFormOpen, setComboFormOpen] = useState(false);
   const [mealFormOpen, setMealFormOpen] = useState(false);
-  const [guideFormOpen, setGuideFormOpen] = useState(false);
   const [tourChoiceDialogOpen, setTourChoiceDialogOpen] = useState(false);
   const [aiSearchDialogOpen, setAISearchDialogOpen] = useState(false);
   const [tourInitialData, setTourInitialData] = useState<any>(null);
@@ -70,7 +64,6 @@ export default function CreateDatastoreSheet() {
     setTransferFormOpen(false);
     setComboFormOpen(false);
     setMealFormOpen(false);
-    setGuideFormOpen(false);
     setTourChoiceDialogOpen(false);
     setAISearchDialogOpen(false);
     setTourInitialData(null);
@@ -88,8 +81,6 @@ export default function CreateDatastoreSheet() {
       setComboFormOpen(true);
     } else if (activeTab === DocumentType.MEALS) {
       setMealFormOpen(true);
-    } else if (activeTab === DocumentType.GUIDES) {
-      setGuideFormOpen(true);
     } else {
       setSheetOpen(true);
     }
@@ -129,11 +120,6 @@ export default function CreateDatastoreSheet() {
     });
     queryClient.invalidateQueries({
       queryKey: ["meals"],
-      exact: false,
-      type: "active",
-    });
-    queryClient.invalidateQueries({
-      queryKey: ["getAllGuidesByUser"],
       exact: false,
       type: "active",
     });
@@ -208,13 +194,6 @@ export default function CreateDatastoreSheet() {
 
       {/* Meal Full-screen Form */}
       <MealFullscreenForm isOpen={mealFormOpen} onClose={() => setMealFormOpen(false)} onSuccess={handleFormSuccess} />
-
-      {/* Guide Full-screen Form */}
-      <GuideFullscreenForm
-        isOpen={guideFormOpen}
-        onClose={() => setGuideFormOpen(false)}
-        onSuccess={handleFormSuccess}
-      />
 
       {/* Other Services Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

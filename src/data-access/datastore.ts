@@ -446,29 +446,6 @@ export const copyMealsDatastore = async (ids: string[]) => {
   return { success: true };
 };
 
-export const copyGuidesDatastore = async (ids: string[]) => {
-  const supabase = await createClient();
-
-  const user = await getCurrentUser();
-  if (!user) return { error: "User not found" };
-
-  const { data, error } = await supabase.from("guides_datastore").select("*").in("id", ids);
-
-  if (error) return { error: error.message };
-
-  const { error: insertError } = await supabase.from("guides").insert(
-    data.map((item) => ({
-      ...item,
-      created_by: user.id,
-      dmc_id: user.dmc.id,
-    }))
-  );
-
-  if (insertError) return { error: insertError.message };
-
-  return { success: true };
-};
-
 // Fetch all countries (with optional search) — backed by GET /api/geo/countries.
 // Backend has no search param; countries master is small (252 rows) so we
 // filter client-side on country_name to preserve the existing call contract.

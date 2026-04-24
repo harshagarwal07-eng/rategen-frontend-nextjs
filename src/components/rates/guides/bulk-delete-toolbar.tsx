@@ -3,121 +3,84 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import { bulkDeleteGuides } from "@/data-access/guides";
-import { useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { Guide } from "@/types/guide";
+import { toast } from "sonner";
+import { deleteGuide } from "@/data-access/guides";
+import { useQueryClient } from "@tanstack/react-query";
+import { Guide } from "@/types/guides";
 
 interface BulkDeleteToolbarProps {
   selectedRows: Guide[];
   onClearSelection: () => void;
 }
 
-export function BulkDeleteToolbar({
-  selectedRows,
-  onClearSelection,
-}: BulkDeleteToolbarProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function BulkDeleteToolbar({ selectedRows, onClearSelection }: BulkDeleteToolbarProps) {
   const [loading, setLoading] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   const handleBulkDelete = async () => {
     try {
       setLoading(true);
-      const ids = selectedRows.map((row) => row.id!);
-      const { error } = await bulkDeleteGuides(ids);
-
-      if (error) throw new Error(error);
-
-      toast.success(`${selectedRows.length} guide${selectedRows.length > 1 ? 's' : ''} deleted successfully.`);
+      const results = await Promise.all(selectedRows.map((row) => deleteGuide(row.id!)));
+      const errors = results.filter((r) => r.error);
+      if (errors.length > 0) throw new Error(`Failed to delete ${errors.length} guide(s)`);
+      toast.success(`Deleted ${selectedRows.length} guide(s)`);
       onClearSelection();
-
-      // Refresh data
-      queryClient.invalidateQueries({
-        queryKey: ["getAllGuidesByUser"],
-        exact: false,
-        type: "active",
-      });
-      router.refresh();
+      queryClient.invalidateQueries({ queryKey: ["guides"], exact: false, type: "active" });
     } catch (error) {
-      console.error(error);
-      toast.error("Failed to delete guides");
+      toast.error(error instanceof Error ? error.message : "Failed to delete guides");
     } finally {
       setLoading(false);
-      setIsOpen(false);
+      setShowConfirmDialog(false);
     }
   };
 
-  if (selectedRows.length === 0) return null;
-
   return (
     <>
-      <div className="flex items-center gap-2 p-2 bg-muted/50 border rounded-md">
+      <div className="flex items-center gap-2">
         <span className="text-sm text-muted-foreground">
-          {selectedRows.length} guide{selectedRows.length > 1 ? 's' : ''} selected
+          {selectedRows.length} guide{selectedRows.length !== 1 ? "s" : ""} selected
         </span>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={() => setIsOpen(true)}
-          disabled={loading}
-        >
+        <Button variant="destructive" size="sm" onClick={() => setShowConfirmDialog(true)} disabled={loading}>
           <Trash2 className="h-4 w-4 mr-2" />
           Delete Selected
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onClearSelection}
-          disabled={loading}
-        >
-          Clear Selection
+        <Button variant="outline" size="sm" onClick={onClearSelection} disabled={loading}>
+          Cancel
         </Button>
       </div>
 
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Guides</DialogTitle>
+            <DialogTitle>Confirm Bulk Delete</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete the following {selectedRows.length} guide{selectedRows.length > 1 ? 's' : ''}? This action cannot be undone.
+              Delete {selectedRows.length} guide{selectedRows.length !== 1 ? "s" : ""}? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="max-h-60 overflow-y-auto border rounded-md p-3">
+          <div className="max-h-60 overflow-y-auto">
             <ul className="space-y-1">
               {selectedRows.map((guide) => (
-                <li key={guide.id} className="text-sm">
-                  • {guide.guide_type}
+                <li key={guide.id} className="text-sm text-muted-foreground">
+                  • {guide.name}
                 </li>
               ))}
             </ul>
           </div>
-
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsOpen(false)}
-              disabled={loading}
-            >
+            <Button variant="outline" onClick={() => setShowConfirmDialog(false)} disabled={loading}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              onClick={handleBulkDelete}
-              disabled={loading}
-            >
-              {loading ? "Deleting..." : "Delete Guides"}
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={loading}>
+              {loading ? "Deleting..." : `Delete ${selectedRows.length} Guide${selectedRows.length !== 1 ? "s" : ""}`}
             </Button>
           </DialogFooter>
         </DialogContent>

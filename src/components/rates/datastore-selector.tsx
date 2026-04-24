@@ -18,7 +18,6 @@ import { Separator } from "@/components/ui/separator";
 import { useState } from "react";
 import {
   copyCarOnDisposalsDatastore,
-  copyGuidesDatastore,
   copyhotelsDatastore,
   copyMealsDatastore,
   copyToursDatastore,
@@ -26,10 +25,8 @@ import {
 } from "@/data-access/datastore";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import MealsDataStore from "./meals/meals-datastore";
 import HotelsDatastore from "./hotels/hotels-datastore";
 import CarOnDisposalsDataStore from "./car-on-disposal/car-on-disposal-datastore";
-import GuidesDataStore from "./guides/guides-datastore";
 
 type Props = {
   documentType: string;
@@ -66,9 +63,6 @@ export default function DatastoreSelector({
         break;
       case "meals":
         ({ error } = await copyMealsDatastore(selectedIds));
-        break;
-      case "guides":
-        ({ error } = await copyGuidesDatastore(selectedIds));
         break;
       default:
         error = "Invalid document type";
@@ -111,11 +105,6 @@ export default function DatastoreSelector({
       exact: false,
       type: "active",
     });
-    queryClient.invalidateQueries({
-      queryKey: ["getAllGuidesByUser"],
-      exact: false,
-      type: "active",
-    });
   };
 
   return (
@@ -147,12 +136,6 @@ export default function DatastoreSelector({
         </Show>
         <Show when={documentType === "car-on-disposal"}>
           <CarOnDisposalsDataStore setSelectedIds={setSelectedIds} />
-        </Show>
-        <Show when={documentType === "meals"}>
-          <MealsDataStore setSelectedIds={setSelectedIds} />
-        </Show>
-        <Show when={documentType === "guides"}>
-          <GuidesDataStore setSelectedIds={setSelectedIds} />
         </Show>
         <Separator />
 
