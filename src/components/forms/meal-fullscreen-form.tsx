@@ -165,7 +165,26 @@ export default function MealFullscreenForm({
           <DialogDescription className="sr-only">Edit meal product details and packages</DialogDescription>
 
           <div className="sticky top-0 z-10">
-            <div className="bg-muted px-4 py-1 flex justify-end border-b">
+            <div className="border-b bg-background px-6 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                {displayName ? (
+                  <span className="font-semibold text-base">{displayName}</span>
+                ) : (
+                  <span className="text-muted-foreground italic">New Meal</span>
+                )}
+                {displayCountry && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="text-muted-foreground">{displayCountry}</span>
+                  </>
+                )}
+                {displayCity && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="text-muted-foreground">{displayCity}</span>
+                  </>
+                )}
+              </div>
               <Button
                 type="button"
                 variant="ghost"
@@ -178,27 +197,7 @@ export default function MealFullscreenForm({
               </Button>
             </div>
 
-            <div className="border-b bg-background px-6 py-2 flex items-center gap-2 text-sm min-h-[36px]">
-              {displayName ? (
-                <span className="font-semibold">{displayName}</span>
-              ) : (
-                <span className="text-muted-foreground italic">New Meal</span>
-              )}
-              {displayCountry && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span className="text-muted-foreground">{displayCountry}</span>
-                </>
-              )}
-              {displayCity && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span className="text-muted-foreground">{displayCity}</span>
-                </>
-              )}
-            </div>
-
-            <div className="border-b bg-muted px-4 py-3">
+            <div className="border-b bg-muted px-4 py-1">
               <div className="flex justify-center">
                 <div className="flex bg-muted rounded-lg p-1">
                   {FORM_STEPS.map((step, index) => {
