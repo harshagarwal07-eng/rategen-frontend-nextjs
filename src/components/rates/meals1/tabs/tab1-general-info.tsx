@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -59,11 +59,6 @@ export default function Meal1GeneralInfoForm({
   const countryId = form.watch("country_id");
 
   const { countries: countryOptions, isLoadingCountries } = useCountryCityOptions({});
-
-  const handleCitySearch = useCallback(
-    (search: string) => countryId ? fetchCitiesByCountryId(countryId, search) : Promise.resolve([]),
-    [countryId]
-  );
 
   useEffect(() => {
     form.setValue("geo_id", "", { shouldValidate: false });
@@ -167,7 +162,11 @@ export default function Meal1GeneralInfoForm({
                     mode="server"
                     value={field.value}
                     onChange={field.onChange}
-                    onSearch={handleCitySearch}
+                    onSearch={(search) =>
+                      countryId
+                        ? fetchCitiesByCountryId(countryId, search)
+                        : Promise.resolve([])
+                    }
                     fetchByValue={(id) => fetchCityById(id)}
                     placeholder="Search city..."
                     disabled={!countryId}
