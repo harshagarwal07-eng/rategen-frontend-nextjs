@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
@@ -62,6 +63,10 @@ interface Props {
 
 export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdvance }: Props) {
   const [isSaving, setIsSaving] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
+  const [departureCitySearch, setDepartureCitySearch] = useState("");
+  const debouncedCitySearch = useDebounce(citySearch, 300);
+  const debouncedDepartureCitySearch = useDebounce(departureCitySearch, 300);
 
   const { data: countries = [] } = useQuery({
     queryKey: ["fd-meta-countries"],
@@ -148,31 +153,54 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
   const ageRestriction = form.watch("age_restriction");
   const bannerUrl = form.watch("banner_image_url");
 
-  const citiesQueries = useQuery({
-    queryKey: ["fd-cities-for-countries", selectedCountries],
+  const citiesQuery = useQuery({
+    queryKey: ["fd-cities-search", selectedCountries, debouncedCitySearch],
     queryFn: async () => {
       if (selectedCountries.length === 0) return [] as FDCity[];
-      const all = await Promise.all(selectedCountries.map((cid) => fdGetCitiesByCountry(cid)));
+      const all = await Promise.all(
+        selectedCountries.map((cid) => fdGetCitiesByCountry(cid, debouncedCitySearch || undefined))
+      );
       const flat: FDCity[] = all.flat();
       const map = new Map<string, FDCity>();
       for (const c of flat) map.set(c.id, c);
       return Array.from(map.values()).sort((a, b) => a.city_name.localeCompare(b.city_name));
     },
     enabled: selectedCountries.length > 0,
-    staleTime: 15 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
-  const availableCities = citiesQueries.data ?? [];
+  const departureCitiesQuery = useQuery({
+    queryKey: ["fd-departure-cities-search", selectedCountries, debouncedDepartureCitySearch],
+    queryFn: async () => {
+      if (selectedCountries.length === 0) return [] as FDCity[];
+      const all = await Promise.all(
+        selectedCountries.map((cid) => fdGetCitiesByCountry(cid, debouncedDepartureCitySearch || undefined))
+      );
+      const flat: FDCity[] = all.flat();
+      const map = new Map<string, FDCity>();
+      for (const c of flat) map.set(c.id, c);
+      return Array.from(map.values()).sort((a, b) => a.city_name.localeCompare(b.city_name));
+    },
+    enabled: selectedCountries.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const availableCities = citiesQuery.data ?? [];
+  const availableDepartureCities = departureCitiesQuery.data ?? [];
+
+  // Label for the currently-selected departure city (needed in edit mode when it may not be in search results)
+  const departureCityId = form.watch("departure_city_id");
+  const departureCityLabel =
+    availableDepartureCities.find((c) => c.id === departureCityId)?.city_name ??
+    existingPkgCities.find((c) => c.id === departureCityId)?.city_name ??
+    undefined;
 
   useEffect(() => {
-    if (selectedCountries.length === 0 && selectedCities.length > 0) {
-      form.setValue("city_ids", []);
-    } else if (availableCities.length > 0) {
-      const allowed = new Set(availableCities.map((c) => c.id));
-      const kept = selectedCities.filter((id) => allowed.has(id));
-      if (kept.length !== selectedCities.length) form.setValue("city_ids", kept);
+    if (selectedCountries.length === 0) {
+      if (selectedCities.length > 0) form.setValue("city_ids", []);
+      form.setValue("departure_city_id", null);
     }
-  }, [selectedCountries, availableCities, selectedCities, form]);
+  }, [selectedCountries, selectedCities, form]);
 
   const currencyCodes = useMemo(() => {
     if (currencies.length > 0) return currencies.map((c) => c.code);
@@ -284,11 +312,13 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
             name="city_ids"
             render={({ field }) => (
               <MultiPicker
-                placeholder={selectedCountries.length === 0 ? "Select countries first" : "Select cities..."}
+                placeholder={selectedCountries.length === 0 ? "Select countries first" : "Search cities..."}
                 options={availableCities.map((c) => ({ value: c.id, label: c.city_name }))}
                 values={field.value}
                 onChange={field.onChange}
                 disabled={selectedCountries.length === 0}
+                onSearchChange={setCitySearch}
+                isLoading={citiesQuery.isFetching}
               />
             )}
           />
@@ -301,11 +331,14 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
             name="departure_city_id"
             render={({ field }) => (
               <SinglePicker
-                placeholder={selectedCountries.length === 0 ? "Select countries first" : "Select departure city..."}
-                options={availableCities.map((c) => ({ value: c.id, label: c.city_name }))}
+                placeholder={selectedCountries.length === 0 ? "Select countries first" : "Search departure city..."}
+                options={availableDepartureCities.map((c) => ({ value: c.id, label: c.city_name }))}
                 value={field.value ?? null}
+                valueLabel={departureCityLabel}
                 onChange={(v) => field.onChange(v)}
                 disabled={selectedCountries.length === 0}
+                onSearchChange={setDepartureCitySearch}
+                isLoading={departureCitiesQuery.isFetching}
               />
             )}
           />
@@ -510,15 +543,30 @@ function MultiPicker({
   values,
   onChange,
   disabled,
+  onSearchChange,
+  isLoading,
 }: {
   placeholder: string;
   options: PickerOption[];
   values: string[];
   onChange: (v: string[]) => void;
   disabled?: boolean;
+  onSearchChange?: (q: string) => void;
+  isLoading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const selectedLabels = options.filter((o) => values.includes(o.value)).map((o) => o.label);
+  // Keep labels for selected values even when they scroll out of search results
+  const [selectedLabels, setSelectedLabels] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const additions: Record<string, string> = {};
+    for (const o of options) {
+      if (values.includes(o.value)) additions[o.value] = o.label;
+    }
+    if (Object.keys(additions).length > 0) {
+      setSelectedLabels((prev) => ({ ...prev, ...additions }));
+    }
+  }, [options, values]);
+  const displayLabels = values.map((v) => selectedLabels[v]).filter(Boolean) as string[];
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -531,39 +579,46 @@ function MultiPicker({
           className={cn("min-h-9 h-auto w-full justify-between px-3 py-1.5 font-normal", values.length === 0 && "text-muted-foreground")}
         >
           <div className="flex flex-wrap gap-1 items-center">
-            {selectedLabels.length === 0 ? (
+            {displayLabels.length === 0 ? (
               <span>{placeholder}</span>
             ) : (
-              selectedLabels.slice(0, 5).map((l) => (
+              displayLabels.slice(0, 5).map((l) => (
                 <Badge key={l} variant="secondary" className="text-[11px] font-normal py-0 px-1.5">{l}</Badge>
               ))
             )}
-            {selectedLabels.length > 5 && <span className="text-xs">+{selectedLabels.length - 5}</span>}
+            {displayLabels.length > 5 && <span className="text-xs">+{displayLabels.length - 5}</span>}
           </div>
           <ChevronsUpDown className="h-4 w-4 opacity-50 shrink-0" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search..." />
+        <Command shouldFilter={!onSearchChange}>
+          <CommandInput placeholder="Search..." onValueChange={onSearchChange} />
           <CommandList>
-            <CommandEmpty>No results.</CommandEmpty>
-            <CommandGroup className="max-h-64 overflow-auto">
-              {options.map((o) => {
-                const checked = values.includes(o.value);
-                return (
-                  <CommandItem
-                    key={o.value}
-                    onSelect={() => {
-                      onChange(checked ? values.filter((v) => v !== o.value) : [...values, o.value]);
-                    }}
-                  >
-                    <Check className={cn("mr-2 h-4 w-4", checked ? "opacity-100" : "opacity-0")} />
-                    {o.label}
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
+            {isLoading ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">Loading...</div>
+            ) : (
+              <>
+                <CommandEmpty>No results.</CommandEmpty>
+                <CommandGroup className="max-h-64 overflow-auto">
+                  {options.map((o) => {
+                    const checked = values.includes(o.value);
+                    return (
+                      <CommandItem
+                        key={o.value}
+                        value={o.value}
+                        onSelect={() => {
+                          onChange(checked ? values.filter((v) => v !== o.value) : [...values, o.value]);
+                        }}
+                      >
+                        <Check className={cn("mr-2 h-4 w-4", checked ? "opacity-100" : "opacity-0")} />
+                        {o.label}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              </>
+            )}
           </CommandList>
         </Command>
         {values.length > 0 && (
@@ -589,17 +644,23 @@ function SinglePicker({
   placeholder,
   options,
   value,
+  valueLabel,
   onChange,
   disabled,
+  onSearchChange,
+  isLoading,
 }: {
   placeholder: string;
   options: PickerOption[];
   value: string | null;
+  valueLabel?: string;
   onChange: (v: string | null) => void;
   disabled?: boolean;
+  onSearchChange?: (q: string) => void;
+  isLoading?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const label = options.find((o) => o.value === value)?.label;
+  const label = options.find((o) => o.value === value)?.label ?? valueLabel;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -615,33 +676,41 @@ function SinglePicker({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search..." />
+        <Command shouldFilter={!onSearchChange}>
+          <CommandInput placeholder="Search..." onValueChange={onSearchChange} />
           <CommandList>
-            <CommandEmpty>No results.</CommandEmpty>
-            <CommandGroup className="max-h-64 overflow-auto">
-              <CommandItem
-                onSelect={() => {
-                  onChange(null);
-                  setOpen(false);
-                }}
-              >
-                <Check className={cn("mr-2 h-4 w-4", value == null ? "opacity-100" : "opacity-0")} />
-                <span className="italic text-muted-foreground">None</span>
-              </CommandItem>
-              {options.map((o) => (
-                <CommandItem
-                  key={o.value}
-                  onSelect={() => {
-                    onChange(o.value);
-                    setOpen(false);
-                  }}
-                >
-                  <Check className={cn("mr-2 h-4 w-4", value === o.value ? "opacity-100" : "opacity-0")} />
-                  {o.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {isLoading ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">Loading...</div>
+            ) : (
+              <>
+                <CommandEmpty>No results.</CommandEmpty>
+                <CommandGroup className="max-h-64 overflow-auto">
+                  <CommandItem
+                    value="__none__"
+                    onSelect={() => {
+                      onChange(null);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", value == null ? "opacity-100" : "opacity-0")} />
+                    <span className="italic text-muted-foreground">None</span>
+                  </CommandItem>
+                  {options.map((o) => (
+                    <CommandItem
+                      key={o.value}
+                      value={o.value}
+                      onSelect={() => {
+                        onChange(o.value);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check className={cn("mr-2 h-4 w-4", value === o.value ? "opacity-100" : "opacity-0")} />
+                      {o.label}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

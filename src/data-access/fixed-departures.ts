@@ -35,8 +35,10 @@ export async function fdGetCountries(): Promise<FDCountry[]> {
   return data;
 }
 
-export async function fdGetCitiesByCountry(countryId: string): Promise<FDCity[]> {
-  const { data } = await fdApi.get<FDCity[]>(`${BASE}/meta/countries/${countryId}/cities`);
+export async function fdGetCitiesByCountry(countryId: string, search?: string): Promise<FDCity[]> {
+  const { data } = await fdApi.get<FDCity[]>(`${BASE}/meta/countries/${countryId}/cities`, {
+    params: search ? { search } : {},
+  });
   return data;
 }
 
