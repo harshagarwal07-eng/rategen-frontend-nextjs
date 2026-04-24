@@ -9,7 +9,7 @@ export type DurationType = "half_day" | "full_day" | "multi_day" | "per_service"
 
 export type DayOfWeek = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 
-export type RateUnit = "day" | "guide" | "hour" | "unit";
+export type RateUnit = "adult" | "day" | "guide" | "hour" | "unit";
 
 export interface Language {
   id: string;

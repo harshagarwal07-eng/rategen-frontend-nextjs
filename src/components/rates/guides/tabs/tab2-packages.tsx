@@ -103,10 +103,11 @@ const DURATION_TYPE_OPTIONS: { value: DurationType; label: string }[] = [
 ];
 
 const RATE_UNIT_OPTIONS: { value: RateUnit; label: string }[] = [
-  { value: "day", label: "day" },
-  { value: "guide", label: "guide" },
-  { value: "hour", label: "hour" },
-  { value: "unit", label: "unit" },
+  { value: "adult", label: "Per Adult" },
+  { value: "day", label: "Per Day" },
+  { value: "guide", label: "Per Guide" },
+  { value: "hour", label: "Per Hour" },
+  { value: "unit", label: "Per Unit" },
 ];
 
 // ── Schemas ───────────────────────────────────────────────────
@@ -122,7 +123,7 @@ const TierRowSchema = z.object({
   min_pax: z.coerce.number().min(0),
   max_pax: z.union([z.coerce.number().min(0), z.null()]),
   rate_per_guide: z.coerce.number().min(0),
-  rate_unit: z.enum(["day", "guide", "hour", "unit"]).nullable(),
+  rate_unit: z.enum(["adult", "day", "guide", "hour", "unit"]).nullable(),
 });
 
 const SupplementRowSchema = z.object({
@@ -130,7 +131,7 @@ const SupplementRowSchema = z.object({
   supplement_name: z.string(),
   is_included: z.boolean(),
   rate_value: z.coerce.number().nullable(),
-  rate_unit: z.enum(["day", "guide", "hour", "unit"]).nullable(),
+  rate_unit: z.enum(["adult", "day", "guide", "hour", "unit"]).nullable(),
   is_per_actuals: z.boolean(),
 });
 
