@@ -2,8 +2,26 @@
 
 import { DatastoreSearchParams } from "@/types/datastore";
 import { createClient } from "@/utils/supabase/server";
+import { env } from "@/lib/env";
 import { cache } from "react";
 import { getCurrentUser } from "./auth";
+
+async function geoFetch<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${env.API_URL}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error(`Geo fetch ${path} failed: ${res.status} ${res.statusText}`);
+      return null;
+    }
+    return (await res.json()) as T;
+  } catch (err) {
+    console.error(`Geo fetch ${path} error:`, err);
+    return null;
+  }
+}
 
 async function fetchTransfersStaticDataCache(query: string, column: string) {
   const supabase = await createClient();
@@ -451,19 +469,19 @@ export const copyGuidesDatastore = async (ids: string[]) => {
   return { success: true };
 };
 
-// Fetch all countries (with optional search)
+// Fetch all countries (with optional search) — backed by GET /api/geo/countries.
+// Backend has no search param; countries master is small (252 rows) so we
+// filter client-side on country_name to preserve the existing call contract.
 export async function fetchCountries(search: string = "") {
-  const supabase = await createClient();
-  let query = supabase
-    .from("countries")
-    .select("id, country_name, country_code")
-    .order("country_name", { ascending: true });
-  if (search) {
-    query = query.ilike("country_name", `%${search}%`);
-  }
-  const { data, error } = await query;
-  if (error) return [];
-  return data.map((country) => ({
+  const data = await geoFetch<Array<{ id: string; country_code: string; country_name: string }>>(
+    "/api/geo/countries"
+  );
+  if (!data) return [];
+  const needle = search.trim().toLowerCase();
+  const rows = needle
+    ? data.filter((c) => c.country_name.toLowerCase().includes(needle))
+    : data;
+  return rows.map((country) => ({
     label: country.country_name,
     value: country.id,
     code: country.country_code,
@@ -487,23 +505,28 @@ export async function fetchCities(search: string = "") {
   }));
 }
 
-// Fetch cities by country UUID (with optional search)
+// Fetch cities by country UUID (with optional search) — backed by GET /api/geo/cities.
+// Endpoint is typeahead-shaped: always prefix-matches `search` and caps at limit=50.
+// city_code / state_code are not in the new response (spec §4.3); map them to undefined.
 export async function fetchCitiesByCountryId(countryId: string, search: string = "") {
-  const supabase = await createClient();
-  let query = supabase
-    .from("vw_cities_with_state_and_country")
-    .select("id, city_name, city_code, state_code, country_code")
-    .eq("country_id", countryId);
-  if (search) {
-    query = query.ilike("city_name", `${search}%`).limit(50);
-  }
-  const { data, error } = await query;
-  if (error) return [];
+  const params = new URLSearchParams({ country_ids: countryId, limit: "50" });
+  if (search) params.set("search", search);
+  const data = await geoFetch<
+    Array<{
+      id: string;
+      city_name: string;
+      state_id: string | null;
+      state_name: string | null;
+      country_id: string;
+      country_code: string;
+    }>
+  >(`/api/geo/cities?${params.toString()}`);
+  if (!data) return [];
   return data.map((city) => ({
     label: city.city_name,
     value: city.id,
-    code: city.city_code,
-    state_code: city.state_code,
+    code: undefined as string | undefined,
+    state_code: undefined as string | undefined,
     country_code: city.country_code,
   }));
 }
@@ -548,23 +571,18 @@ export async function fetchCitiesByStateId(stateId: string, search: string = "")
   }));
 }
 
-// Fetch cities by country UUID (with optional search)
+// Fetch states for a country UUID — backed by GET /api/geo/countries/:id/states.
+// Backend response does not include country_code; map it to undefined.
 export async function fetchStatesByCountryId(countryId: string) {
-  const supabase = await createClient();
-
-  let query = supabase
-    .from("vw_states_with_country")
-    .select("id, state_name, state_code, country_code")
-    .eq("country_id", countryId);
-
-  const { data, error } = await query;
-  if (error) return [];
-
+  const data = await geoFetch<
+    Array<{ id: string; state_code: string; state_name: string; country_id: string }>
+  >(`/api/geo/countries/${countryId}/states`);
+  if (!data) return [];
   return data.map((state) => ({
     label: state.state_name,
     value: state.id,
     code: state.state_code,
-    country_code: state.country_code,
+    country_code: undefined as string | undefined,
   }));
 }
 
