@@ -30,6 +30,7 @@ import { createContract, updateContract } from "@/data-access/dmc-contracts";
 import { listMarkets } from "@/data-access/dmc-markets";
 import { DmcContract } from "@/types/dmc-contracts";
 import MarketCreateModal from "@/components/forms/dmc-hotel-sections/market-create-modal";
+import { MarketCountriesTooltip } from "@/components/forms/dmc-hotel-sections/market-countries-tooltip";
 import { toast } from "sonner";
 
 const dateRangeSchema = z
@@ -190,13 +191,20 @@ export default function ContractFormModal({
                         New Market
                       </button>
                     </div>
-                    <Autocomplete
-                      mode="client"
-                      options={marketOptions}
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Select market (optional)"
-                    />
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <Autocomplete
+                          mode="client"
+                          options={marketOptions}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Select market (optional)"
+                        />
+                      </div>
+                      {field.value && (
+                        <MarketCountriesTooltip marketId={field.value} />
+                      )}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

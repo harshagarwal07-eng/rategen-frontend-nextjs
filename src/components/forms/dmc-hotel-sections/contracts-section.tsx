@@ -28,6 +28,7 @@ import { listContracts, deleteContract, updateContract } from "@/data-access/dmc
 import { DmcContract } from "@/types/dmc-contracts";
 import { toast } from "sonner";
 import ContractFormModal from "./contract-form-modal";
+import { MarketCountriesTooltip } from "./market-countries-tooltip";
 
 interface ContractsSectionProps {
   hotelId: string;
@@ -181,6 +182,7 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead className="w-[200px]">Name</TableHead>
+                <TableHead className="w-[160px]">Market</TableHead>
                 <TableHead className="w-[120px]">Stay From</TableHead>
                 <TableHead className="w-[120px]">Stay Till</TableHead>
                 <TableHead className="w-[120px]">Booking From</TableHead>
@@ -192,13 +194,13 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     Loading contracts…
                   </TableCell>
                 </TableRow>
               ) : contracts.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No contracts yet. Click "Add Contract" to create one.
                   </TableCell>
                 </TableRow>
@@ -232,6 +234,16 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
                         >
                           {contract.name}
                         </button>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {contract.market ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="text-foreground">{contract.market.name}</span>
+                          <MarketCountriesTooltip marketId={contract.market.id} />
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
