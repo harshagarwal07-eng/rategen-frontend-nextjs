@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  eachDayOfInterval,
-  format,
-  getDate,
-  getDay,
-  parseISO,
-} from "date-fns";
+import { format, parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -46,8 +40,12 @@ import {
   computeReturnDate,
   formatDateDisplay,
 } from "./departure-form";
+import {
+  generateDates,
+  type BulkFrequency,
+} from "./departure-bulk-generate";
 
-type Frequency = "daily" | "weekly" | "monthly" | "custom";
+type Frequency = BulkFrequency;
 
 const FREQUENCY_LABEL: Record<Frequency, string> = {
   daily: "Daily",
@@ -69,61 +67,6 @@ const WEEKDAY_OPTIONS: { value: number; label: string }[] = [
 
 const HARD_CAP = 365;
 const SOFT_CAP = 100;
-
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function generateDates(
-  fromIso: string,
-  toIso: string,
-  frequency: Frequency,
-  weekdays: number[],
-): string[] {
-  if (!fromIso || !toIso) return [];
-  let from: Date, to: Date;
-  try {
-    from = parseISO(fromIso);
-    to = parseISO(toIso);
-  } catch {
-    return [];
-  }
-  if (to < from) return [];
-
-  if (frequency === "daily") {
-    return eachDayOfInterval({ start: from, end: to }).map(isoDate);
-  }
-  if (frequency === "weekly") {
-    const out: string[] = [];
-    let cursor = from;
-    while (cursor <= to) {
-      out.push(isoDate(cursor));
-      cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 7);
-    }
-    return out;
-  }
-  if (frequency === "monthly") {
-    const targetDay = getDate(from);
-    const fromYear = from.getFullYear();
-    const fromMonth = from.getMonth();
-    const out: string[] = [];
-    // Walk one month at a time. JS Date wraps overflow days (Feb 31 → Mar 3),
-    // so we detect the wrap by checking that getDate matches the target.
-    for (let i = 0; i < 12 * 100; i++) {
-      const candidate = new Date(fromYear, fromMonth + i, targetDay);
-      if (candidate > to) break;
-      if (candidate.getDate() !== targetDay) continue;
-      if (candidate < from) continue;
-      out.push(isoDate(candidate));
-    }
-    return out;
-  }
-  // custom
-  if (weekdays.length === 0) return [];
-  return eachDayOfInterval({ start: from, end: to })
-    .filter((d) => weekdays.includes(getDay(d)))
-    .map(isoDate);
-}
 
 interface Props {
   open: boolean;
