@@ -48,6 +48,9 @@ const DEFAULT_AGE_BANDS = [
   { band_name: "Adult", age_from: 12, age_to: 99, band_order: 3 },
 ];
 
+// Stable empty-array sentinel — avoids new-reference-on-every-render when useQuery returns undefined
+const EMPTY_ROWS: never[] = [];
+
 const FALLBACK_CURRENCIES = ["USD", "EUR", "GBP", "INR", "AED", "AUD", "CAD", "SGD"];
 
 interface Props {
@@ -81,13 +84,13 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
     staleTime: 30 * 60 * 1000,
   });
 
-  const { data: existingPkgCountries = [] } = useQuery({
+  const { data: existingPkgCountries = EMPTY_ROWS } = useQuery({
     queryKey: ["fd-pkg-countries", packageId],
     queryFn: () => fdGetPackageCountries(packageId as string),
     enabled: !!packageId,
   });
 
-  const { data: existingPkgCities = [] } = useQuery({
+  const { data: existingPkgCities = EMPTY_ROWS } = useQuery({
     queryKey: ["fd-pkg-cities", packageId],
     queryFn: () => fdGetPackageCities(packageId as string),
     enabled: !!packageId,
@@ -163,11 +166,12 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
     [existingPkgCities],
   );
 
-  // Clear cities when countries cleared
+  // Clear cities when countries cleared — guard prevents redundant setValue calls that would
+  // trigger form.watch re-renders even when values haven't actually changed
   useEffect(() => {
     if (selectedCountries.length === 0) {
       if (selectedCities.length > 0) form.setValue("city_ids", []);
-      form.setValue("departure_city_id", null);
+      if (form.getValues("departure_city_id") != null) form.setValue("departure_city_id", null);
     }
   }, [selectedCountries, selectedCities, form]);
 
