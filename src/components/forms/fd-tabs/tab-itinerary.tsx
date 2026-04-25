@@ -738,7 +738,7 @@ function DayBody({
                     : `${meals.length} selected`}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-72 max-h-[280px] overflow-y-auto p-2" align="start">
+            <PopoverContent className="w-72 max-h-[280px] overflow-y-auto p-2" align="start" onWheelCapture={(e) => e.stopPropagation()}>
               <div className="flex flex-col gap-1">
                 {allMealOptions.map((m) => (
                   <div
