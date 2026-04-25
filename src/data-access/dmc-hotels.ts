@@ -60,7 +60,7 @@ export async function createHotel(data: CreateHotelPayload): Promise<Result<DmcH
 }
 
 export async function updateHotel(id: string, data: Partial<CreateHotelPayload>): Promise<Result<DmcHotel>> {
-  const raw = await http.put<DmcHotel>(`/api/hotels/${id}`, data);
+  const raw = await http.patch<DmcHotel>(`/api/hotels/${id}`, data);
   return unwrap<DmcHotel>(raw);
 }
 

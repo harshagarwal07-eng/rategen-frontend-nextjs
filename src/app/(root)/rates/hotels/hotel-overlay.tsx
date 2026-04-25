@@ -31,22 +31,38 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
   const [activeTab, setActiveTab] = useState("general-info");
   const [hotel, setHotel] = useState<DmcHotel | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [internalHotelId, setInternalHotelId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen && hotelId) {
+    if (isOpen) {
       setActiveTab("general-info");
-      setLoading(true);
-      getHotel(hotelId).then((result) => {
-        if (!result.error && result.data) setHotel(result.data);
-        setLoading(false);
-      });
+      setInternalHotelId(hotelId);
+      if (hotelId) {
+        setLoading(true);
+        getHotel(hotelId).then((result) => {
+          if (!result.error && result.data) setHotel(result.data);
+          setLoading(false);
+        });
+      }
     } else {
       setHotel(null);
+      setIsDirty(false);
+      setInternalHotelId(null);
     }
   }, [isOpen, hotelId]);
 
+  const handleClose = () => {
+    if (isDirty) {
+      setShowDiscardDialog(true);
+      return;
+    }
+    onClose();
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) handleClose(); }}>
       <DialogContent
         className="max-w-full sm:max-w-full h-full p-0 gap-0 flex flex-col"
         showCloseButton={false}
@@ -62,15 +78,17 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                 <span className="text-muted-foreground italic">Loading…</span>
               ) : hotel ? (
                 <span className="font-semibold text-base">{hotel.name}</span>
+              ) : internalHotelId ? (
+                <span className="text-muted-foreground italic">Loading…</span>
               ) : (
-                <span className="text-muted-foreground italic">Hotel</span>
+                <span className="font-semibold text-base">New Hotel</span>
               )}
             </div>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              onClick={onClose}
+              onClick={handleClose}
               className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
             >
               <X className="h-4 w-4" />
@@ -117,10 +135,41 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
 
         <div className="flex-1 overflow-hidden flex flex-col">
           <div className="flex-1 overflow-y-auto p-6">
-            {activeTab === "general-info" && <GeneralInfoTab />}
+            {activeTab === "general-info" && (
+              <GeneralInfoTab
+                hotelId={internalHotelId}
+                initialHotel={hotel}
+                onSaved={(saved) => {
+                  setHotel(saved);
+                  setInternalHotelId(saved.id);
+                }}
+                onDirtyChange={setIsDirty}
+              />
+            )}
             {activeTab === "rooms-seasons" && <RoomsSeasonsTab />}
           </div>
         </div>
+
+        <Dialog open={showDiscardDialog} onOpenChange={(open) => !open && setShowDiscardDialog(false)}>
+          <DialogContent className="max-w-sm" onInteractOutside={(e) => e.preventDefault()}>
+            <DialogTitle>Unsaved changes</DialogTitle>
+            <DialogDescription>You have unsaved changes. Discard them?</DialogDescription>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" onClick={() => setShowDiscardDialog(false)}>
+                Keep editing
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setShowDiscardDialog(false);
+                  onClose();
+                }}
+              >
+                Discard
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

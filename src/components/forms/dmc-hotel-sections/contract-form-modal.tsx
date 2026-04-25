@@ -1,0 +1,322 @@
+"use client";
+
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Autocomplete } from "@/components/ui/autocomplete";
+import { DatePicker } from "@/components/ui/date-picker";
+import { createContract, updateContract } from "@/data-access/dmc-contracts";
+import { listMarkets } from "@/data-access/dmc-markets";
+import { DmcContract } from "@/types/dmc-contracts";
+import { toast } from "sonner";
+
+const ContractFormSchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    market_id: z.string().optional(),
+    stay_valid_from: z.date().optional(),
+    stay_valid_till: z.date().optional(),
+    booking_valid_from: z.date().optional(),
+    booking_valid_till: z.date().optional(),
+    rate_basis: z.string().optional(),
+    status: z.enum(["draft", "active"]),
+  })
+  .refine(
+    (d) =>
+      !d.stay_valid_from ||
+      !d.stay_valid_till ||
+      d.stay_valid_till >= d.stay_valid_from,
+    {
+      message: "Stay till must be on or after stay from",
+      path: ["stay_valid_till"],
+    }
+  )
+  .refine(
+    (d) =>
+      !d.booking_valid_from ||
+      !d.booking_valid_till ||
+      d.booking_valid_till >= d.booking_valid_from,
+    {
+      message: "Booking till must be on or after booking from",
+      path: ["booking_valid_till"],
+    }
+  );
+
+export type ContractFormValues = z.infer<typeof ContractFormSchema>;
+
+interface ContractFormModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  hotelId: string;
+  initialData?: DmcContract | null;
+}
+
+export default function ContractFormModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  hotelId,
+  initialData,
+}: ContractFormModalProps) {
+  const [isSaving, setIsSaving] = useState(false);
+
+  const form = useForm<ContractFormValues>({
+    resolver: zodResolver(ContractFormSchema),
+    mode: "onBlur",
+    defaultValues: {
+      name: initialData?.name || "",
+      market_id: initialData?.market_id || "",
+      stay_valid_from: initialData?.stay_valid_from
+        ? new Date(initialData.stay_valid_from)
+        : undefined,
+      stay_valid_till: initialData?.stay_valid_till
+        ? new Date(initialData.stay_valid_till)
+        : undefined,
+      booking_valid_from: initialData?.booking_valid_from
+        ? new Date(initialData.booking_valid_from)
+        : undefined,
+      booking_valid_till: initialData?.booking_valid_till
+        ? new Date(initialData.booking_valid_till)
+        : undefined,
+      rate_basis: initialData?.rate_basis || "",
+      status: initialData?.status === "draft" ? "draft" : "active",
+    },
+  });
+
+  const { data: marketsResult } = useQuery({
+    queryKey: ["markets"],
+    queryFn: listMarkets,
+    enabled: isOpen,
+  });
+
+  const marketOptions = (marketsResult?.data || []).map((m) => ({
+    value: m.id,
+    label: m.name,
+  }));
+
+  const onSubmit = async (data: ContractFormValues) => {
+    setIsSaving(true);
+    try {
+      const payload = {
+        name: data.name,
+        market_id: data.market_id || undefined,
+        stay_valid_from: data.stay_valid_from
+          ? data.stay_valid_from.toISOString().split("T")[0]
+          : undefined,
+        stay_valid_till: data.stay_valid_till
+          ? data.stay_valid_till.toISOString().split("T")[0]
+          : undefined,
+        booking_valid_from: data.booking_valid_from
+          ? data.booking_valid_from.toISOString().split("T")[0]
+          : undefined,
+        booking_valid_till: data.booking_valid_till
+          ? data.booking_valid_till.toISOString().split("T")[0]
+          : undefined,
+        rate_basis: data.rate_basis || undefined,
+        status: data.status,
+      };
+
+      const result = initialData
+        ? await updateContract(initialData.id, payload)
+        : await createContract(hotelId, payload);
+
+      if (result.error) {
+        toast.error(result.error);
+        setIsSaving(false);
+        return;
+      }
+
+      toast.success(initialData ? "Contract updated" : "Contract created");
+      onSuccess();
+    } catch (err) {
+      toast.error("An error occurred");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{initialData ? "Edit Contract" : "Add Contract"}</DialogTitle>
+          <DialogDescription>
+            {initialData
+              ? "Update the contract details below"
+              : "Create a new contract for this hotel"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Contract Name *</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Q1 2024 Contract" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="market_id"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Market</FormLabel>
+                  <Autocomplete
+                    mode="client"
+                    options={marketOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Select market (optional)"
+                  />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="stay_valid_from"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Stay Valid From</FormLabel>
+                    <DatePicker
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Select date"
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="stay_valid_till"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Stay Valid Till</FormLabel>
+                    <DatePicker
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Select date"
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="booking_valid_from"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Booking Valid From</FormLabel>
+                    <DatePicker
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Select date"
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="booking_valid_till"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Booking Valid Till</FormLabel>
+                    <DatePicker
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Select date"
+                    />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="rate_basis"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Rate Basis</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g. Per night" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status *</FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="active">Active</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving…" : initialData ? "Update" : "Create"}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}

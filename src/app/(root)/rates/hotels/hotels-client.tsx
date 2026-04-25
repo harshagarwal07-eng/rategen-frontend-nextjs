@@ -231,7 +231,7 @@ export default function HotelsClient() {
         </Select>
 
         <div className="ml-auto">
-          <Button size="sm" onClick={() => console.log("open create hotel overlay")}>
+          <Button size="sm" onClick={() => { setOverlayHotelId(null); setOverlayOpen(true); }}>
             <Plus className="h-4 w-4" />
             Add New
           </Button>
@@ -395,6 +395,7 @@ export default function HotelsClient() {
         onClose={() => {
           setOverlayOpen(false);
           setOverlayHotelId(null);
+          qc.invalidateQueries({ queryKey: ["dmc-hotels"] });
         }}
       />
     </div>

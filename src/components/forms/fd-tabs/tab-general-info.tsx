@@ -570,38 +570,39 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
         <AccordionItem value="age" className="rounded-lg border-2 border-muted bg-accent/30 overflow-hidden">
           <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/40 transition-colors">Age Policies</AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-[120px_1fr_1fr] gap-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <span>Band Type</span>
+                <span>Age From</span>
+                <span>Age To</span>
+              </div>
               {ageFields.map((band, idx) => (
                 <div key={band.id} className="grid grid-cols-[120px_1fr_1fr] gap-3 items-center">
                   <div className="text-sm font-medium">{band.band_name}</div>
-                  <div>
-                    <Label className="text-xs">Age From</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={form.watch(`age_policies.${idx}.age_from`)}
-                      onChange={(e) =>
-                        updateAgeBand(idx, {
-                          ...form.getValues(`age_policies.${idx}`),
-                          age_from: Number(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Age To</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={form.watch(`age_policies.${idx}.age_to`)}
-                      onChange={(e) =>
-                        updateAgeBand(idx, {
-                          ...form.getValues(`age_policies.${idx}`),
-                          age_to: Number(e.target.value),
-                        })
-                      }
-                    />
-                  </div>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="h-8"
+                    value={form.watch(`age_policies.${idx}.age_from`)}
+                    onChange={(e) =>
+                      updateAgeBand(idx, {
+                        ...form.getValues(`age_policies.${idx}`),
+                        age_from: Number(e.target.value),
+                      })
+                    }
+                  />
+                  <Input
+                    type="number"
+                    min={0}
+                    className="h-8"
+                    value={form.watch(`age_policies.${idx}.age_to`)}
+                    onChange={(e) =>
+                      updateAgeBand(idx, {
+                        ...form.getValues(`age_policies.${idx}`),
+                        age_to: Number(e.target.value),
+                      })
+                    }
+                  />
                 </div>
               ))}
               {form.formState.errors.age_policies && (
