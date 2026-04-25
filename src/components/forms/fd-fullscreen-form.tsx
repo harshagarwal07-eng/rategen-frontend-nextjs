@@ -32,6 +32,7 @@ import { FDItineraryTab } from "./fd-tabs/tab-itinerary";
 import { FDInclusionsExclusionsTab } from "./fd-tabs/tab-inclusions-exclusions";
 import { FDAddonsTab } from "./fd-tabs/tab-addons";
 import { FDDepartureDatesTab } from "./fd-tabs/tab-departure-dates";
+import { FDDocumentsRemarksTab } from "./fd-tabs/tab-documents-remarks";
 import { FDTabPlaceholder } from "./fd-tabs/tab-placeholder";
 
 export type FDTabHandle = {
@@ -78,6 +79,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   const incExcRef = useRef<FDTabHandle>(null);
   const addonsRef = useRef<FDTabHandle>(null);
   const departuresRef = useRef<FDTabHandle>(null);
+  const docsRemarksRef = useRef<FDTabHandle>(null);
   const prevDurationRef = useRef<number | null>(null);
 
   const effectiveId = packageId ?? createdId;
@@ -215,6 +217,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
       case "inc-exc": return incExcRef;
       case "addons": return addonsRef;
       case "departures": return departuresRef;
+      case "docs-remarks": return docsRemarksRef;
       default: return null;
     }
   };
@@ -281,7 +284,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
     ? [packageName, tourCode, countriesLine, citiesLine].filter(Boolean).join(" · ")
     : fallbackTitle;
   const anyDirty = dirtyTabs.size > 0;
-  const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures"].includes(activeTab);
+  const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures", "docs-remarks"].includes(activeTab);
 
   return (
     <>
@@ -480,7 +483,24 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                 </TabsContent>
                 <TabsContent value="flights-visa"><FDTabPlaceholder title="Flights & Visa" /></TabsContent>
                 <TabsContent value="policies"><FDTabPlaceholder title="Policies" /></TabsContent>
-                <TabsContent value="docs-remarks"><FDTabPlaceholder title="Documents & Remarks" /></TabsContent>
+                <TabsContent value="docs-remarks">
+                  <FDDocumentsRemarksTab
+                    key={tabResetKeys["docs-remarks"] ?? 0}
+                    ref={docsRemarksRef}
+                    mode={mode}
+                    packageId={effectiveId}
+                    onDirtyChange={trackDirty("docs-remarks")}
+                    onSaved={() => {
+                      if (effectiveId) {
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "for-docs"] });
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId] });
+                      }
+                      markTabSaved("docs-remarks");
+                      onSaved?.();
+                    }}
+                    onAdvance={handleAdvance}
+                  />
+                </TabsContent>
               </Tabs>
             </div>
           </div>
