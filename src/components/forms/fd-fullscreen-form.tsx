@@ -215,7 +215,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
           </div>
 
           <div className="flex-1 overflow-y-auto p-6">
-            <div className="mx-auto max-w-5xl">
+            <div className="mx-auto max-w-full">
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as FDTabId)} className="w-full">
                 <TabsContent value="general">
                   <FDGeneralInfoTab
