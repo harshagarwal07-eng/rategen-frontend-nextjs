@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, createRef } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  forwardRef,
+  useImperativeHandle,
+  createRef,
+} from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,6 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -23,28 +32,31 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { AlertModal } from "@/components/ui/alert-modal";
-import { Plus, Trash2, Copy } from "lucide-react";
+import { Plus, Trash2, Copy, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
   createTransferPackage,
   updateTransferPackage,
   deleteTransferPackage,
+  replacePackageStops,
+  replaceOperationalHours,
 } from "@/data-access/transfers-api";
 import {
   TransferPackageDetail,
   TransferPackageCreateInput,
   TransferModeOfTransport,
 } from "@/types/transfers";
-import StopsSection from "./sections/stops-section";
-import OperationalHoursSection from "./sections/operational-hours-section";
+import StopsSection, {
+  StopsState,
+  deriveStopsState,
+  buildStopsPayload,
+} from "./sections/stops-section";
+import OperationalHoursSection, {
+  HourRow,
+  defaultOpHours,
+} from "./sections/operational-hours-section";
 import CancellationPolicySection from "./sections/cancellation-policy-section";
 
 // ── Types ──────────────────────────────────────────────────────
@@ -63,7 +75,6 @@ type SaveResult =
 
 const PackageFormSchema = z.object({
   name: z.string().min(1, "Package name is required"),
-  service_type: z.string().min(1, "Service type is required"),
   service_mode: z.enum(["private", "sic"]),
   trip_type: z.enum(["one_way", "round_trip"]),
   duration_days: z.coerce.number().min(0),
@@ -84,21 +95,13 @@ type PackageFormValues = z.infer<typeof PackageFormSchema>;
 
 // ── Helpers ────────────────────────────────────────────────────
 
-function getServiceTypeOptions(
-  modeOfTransport: TransferModeOfTransport | string | null
-): { value: string; label: string }[] {
-  if (modeOfTransport === "vehicle_p2p") {
-    return [{ value: "p2p", label: "Point to Point" }];
-  }
-  if (modeOfTransport === "vehicle_disposal") {
-    return [
-      { value: "disposal_half_day", label: "Half-day Disposal" },
-      { value: "disposal_full_day", label: "Full-day Disposal" },
-      { value: "disposal_multi_day", label: "Multi-day Disposal" },
-    ];
-  }
-  return [];
-}
+const STATUS_BADGE: Record<string, string> = {
+  active: "bg-green-100 text-green-800",
+  inactive: "bg-red-100 text-red-800",
+  draft: "bg-muted text-muted-foreground",
+  published: "bg-blue-100 text-blue-800",
+  archived: "bg-gray-100 text-gray-600",
+};
 
 function formatDuration(days: number, hours: number, minutes: number): string {
   const parts = [];
@@ -116,14 +119,74 @@ function getDuplicateName(originalName: string, existingNames: string[]): string
   return `${originalName} (Copy ${i})`;
 }
 
+// ── Two-state segmented toggle ─────────────────────────────────
+
+interface SegmentedToggleProps<T extends string> {
+  value: T;
+  onChange: (v: T) => void;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  className?: string;
+}
+
+function SegmentedToggle<T extends string>({
+  value,
+  onChange,
+  options,
+  className,
+}: SegmentedToggleProps<T>) {
+  return (
+    <div
+      className={cn(
+        "inline-flex rounded-md border bg-muted/40 p-0.5 h-9 w-fit",
+        className
+      )}
+    >
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={cn(
+              "px-3 text-xs font-medium rounded-sm transition-colors",
+              active
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const SERVICE_MODE_OPTIONS = [
+  { value: "private" as const, label: "PVT" },
+  { value: "sic" as const, label: "SIC" },
+];
+
+const TRIP_TYPE_OPTIONS = [
+  { value: "one_way" as const, label: "One Way" },
+  { value: "round_trip" as const, label: "Round Trip" },
+];
+
 // ── PackageCard ────────────────────────────────────────────────
 
 interface PackageCardProps {
   transferId: string;
   pkg: PackageStateEntry;
   modeOfTransport: TransferModeOfTransport | string | null;
+  isOpen: boolean;
+  onToggle: () => void;
   onDeleted: () => void;
-  onDuplicate: (liveValues: PackageFormValues) => void;
+  onDuplicate: (
+    liveValues: PackageFormValues,
+    stops: StopsState,
+    hours: HourRow[]
+  ) => void;
   onDirtyChange: (localId: string, isDirty: boolean) => void;
 }
 
@@ -133,6 +196,8 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
       transferId,
       pkg,
       modeOfTransport,
+      isOpen,
+      onToggle,
       onDeleted,
       onDuplicate,
       onDirtyChange,
@@ -141,12 +206,20 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
   ) => {
     const [saving, setSaving] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState(false);
+    const [stops, setStops] = useState<StopsState>(() =>
+      deriveStopsState(pkg.transfer_package_stops)
+    );
+    const [hours, setHours] = useState<HourRow[]>(() =>
+      defaultOpHours(pkg.transfer_operational_hours)
+    );
+    const [stopsDirty, setStopsDirty] = useState(false);
+    const [hoursDirty, setHoursDirty] = useState(false);
+
     const form = useForm<PackageFormValues>({
       resolver: zodResolver(PackageFormSchema),
       mode: "onBlur",
       defaultValues: {
         name: pkg.name,
-        service_type: pkg.service_type || "",
         service_mode: pkg.service_mode || "private",
         trip_type: pkg.trip_type || "one_way",
         duration_days: pkg.duration_days || 0,
@@ -164,7 +237,11 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
       },
     });
 
-    const { isDirty } = form.formState;
+    const isDisposal = modeOfTransport === "vehicle_disposal";
+
+    const { isDirty: formDirty } = form.formState;
+    const isDirty = formDirty || stopsDirty || hoursDirty;
+
     const onDirtyChangeRef = useRef(onDirtyChange);
     onDirtyChangeRef.current = onDirtyChange;
     const lastReportedDirty = useRef<boolean | undefined>(undefined);
@@ -176,11 +253,10 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
       }
     }, [isDirty, pkg._localId]);
 
-    const serviceTypeOptions = getServiceTypeOptions(modeOfTransport);
-
-    const isDisposal =
-      pkg.service_type &&
-      pkg.service_type.startsWith("disposal_");
+    const isPending = pkg.id.startsWith("pending");
+    const hasDuration =
+      pkg.duration_days > 0 || pkg.duration_hours > 0 || pkg.duration_minutes > 0;
+    const statusClass = STATUS_BADGE[pkg.status] ?? STATUS_BADGE.draft;
 
     useImperativeHandle(ref, () => ({
       save: async (): Promise<SaveResult> => {
@@ -194,7 +270,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
         try {
           const payload: TransferPackageCreateInput = {
             name: values.name.trim(),
-            service_type: values.service_type,
             service_mode: values.service_mode,
             trip_type: values.trip_type,
             duration_days: values.duration_days,
@@ -212,30 +287,48 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
             direction_id: null,
           };
 
-          if (pkg.id && !pkg.id.startsWith("pending")) {
+          let savedPkg: TransferPackageDetail;
+          if (pkg.id && !isPending) {
             const res = await updateTransferPackage(pkg.id, payload);
             if (res.error) throw new Error(res.error);
-            const updated: PackageStateEntry = {
-              ...res.data!,
-              _localId: pkg._localId,
-            };
-            form.reset(values);
-            return { success: true, name: values.name, updatedPkg: updated };
+            savedPkg = res.data!;
           } else {
             const res = await createTransferPackage(transferId, payload);
             if (res.error) throw new Error(res.error);
-            const created: PackageStateEntry = {
-              ...res.data!,
-              _localId: res.data!.id,
-            };
-            form.reset(values);
-            return { success: true, name: values.name, updatedPkg: created };
+            savedPkg = res.data!;
           }
+
+          // Save stops + hours when applicable (P2P only).
+          if (!isDisposal) {
+            const stopsRes = await replacePackageStops(
+              savedPkg.id,
+              buildStopsPayload(stops)
+            );
+            if (stopsRes.error) throw new Error(stopsRes.error);
+
+            const hoursRes = await replaceOperationalHours(
+              savedPkg.id,
+              hours.map((h) => ({
+                day_of_week: h.day_of_week,
+                is_active: h.is_active,
+                start_time: h.is_active ? h.start_time : null,
+                end_time: h.is_active ? h.end_time : null,
+              }))
+            );
+            if (hoursRes.error) throw new Error(hoursRes.error);
+          }
+
+          const updated: PackageStateEntry = {
+            ...savedPkg,
+            _localId: isPending ? savedPkg.id : pkg._localId,
+          };
+          form.reset(values);
+          setStopsDirty(false);
+          setHoursDirty(false);
+          return { success: true, name: values.name, updatedPkg: updated };
         } catch (error) {
           const msg =
-            error instanceof Error
-              ? error.message
-              : "Failed to save package";
+            error instanceof Error ? error.message : "Failed to save package";
           return { success: false, name: pkg.name, error: msg };
         } finally {
           setSaving(false);
@@ -244,7 +337,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
     }));
 
     const onDelete = async () => {
-      if (!pkg.id || pkg.id.startsWith("pending")) {
+      if (isPending) {
         onDeleted();
         return;
       }
@@ -265,118 +358,130 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
 
     return (
       <>
-        <AccordionItem value={pkg._localId} className="border rounded-lg">
-          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
-            <div className="flex items-center gap-3 text-left flex-1">
-              <div>
-                <div className="font-medium">{pkg.name}</div>
-                <div className="text-xs text-muted-foreground">
-                  {pkg.service_mode === "sic" && (
-                    <span className="inline-block mr-2 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
-                      SIC
-                    </span>
-                  )}
-                  {pkg.service_mode === "private" && (
-                    <span className="inline-block mr-2 px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
-                      Private
-                    </span>
-                  )}
-                  {pkg.service_type && (
-                    <span className="inline-block mr-2">
-                      {pkg.service_type}
-                    </span>
-                  )}
-                  {formatDuration(
-                    pkg.duration_days,
-                    pkg.duration_hours,
-                    pkg.duration_minutes
-                  )}
-                </div>
-              </div>
-            </div>
-          </AccordionTrigger>
+        <div className="rounded-lg border-2 border-muted bg-accent/30 overflow-hidden">
+          {/* ── Header ── */}
+          <div className="flex items-center gap-2 px-4 py-3 hover:bg-accent/40 transition-colors">
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted shrink-0"
+              onClick={onToggle}
+            >
+              <ChevronDown
+                className={cn(
+                  "h-4 w-4 transition-transform duration-200",
+                  isOpen && "rotate-180"
+                )}
+              />
+            </button>
 
-          <AccordionContent className="px-4 py-3 border-t">
-            <Form {...form}>
-              <form className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Name *</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+            <button
+              type="button"
+              className="flex flex-1 items-center gap-2 min-w-0 text-left"
+              onClick={onToggle}
+            >
+              {(isDirty || isPending) && (
+                <span
+                  className="w-2 h-2 rounded-full bg-yellow-500 shrink-0"
+                  aria-label="Unsaved changes"
+                />
+              )}
+              <span
+                className={cn(
+                  "text-sm font-semibold truncate",
+                  !pkg.name && "text-muted-foreground italic"
+                )}
+              >
+                {pkg.name || "Unnamed Package"}
+              </span>
+
+              {isPending && (
+                <span className="shrink-0 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                  Unsaved
+                </span>
+              )}
+              {!isDisposal && pkg.service_mode && (
+                <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  {pkg.service_mode === "sic" ? "SIC" : "Private"}
+                </span>
+              )}
+              {hasDuration && (
+                <>
+                  <span className="text-muted-foreground/50 shrink-0">·</span>
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    {formatDuration(
+                      pkg.duration_days,
+                      pkg.duration_hours,
+                      pkg.duration_minutes
                     )}
-                  />
+                  </span>
+                </>
+              )}
+            </button>
 
-                  <FormField
-                    control={form.control}
-                    name="status"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Status</FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="draft">Draft</SelectItem>
-                            <SelectItem value="active">Active</SelectItem>
-                            <SelectItem value="inactive">Inactive</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide",
+                statusClass
+              )}
+            >
+              {pkg.status}
+            </span>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="service_type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Service Type *</FormLabel>
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {serviceTypeOptions.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+            {pkg.is_preferred && (
+              <span className="shrink-0 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                Preferred
+              </span>
+            )}
 
-                  {!isDisposal && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              title="Duplicate"
+              onClick={() => onDuplicate(form.getValues(), stops, hours)}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+              title="Delete"
+              onClick={() => setDeleteConfirm(true)}
+              disabled={saving}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {/* ── Expanded body ── */}
+          {isOpen && (
+            <div className="px-4 pb-4 pt-3 border-t flex flex-col gap-4">
+              <Form {...form}>
+                <form className="flex flex-col gap-4">
+                  {/* Row 1 — Name | Status | Preferred */}
+                  <div className="grid grid-cols-[1fr_180px_140px] gap-3 items-end">
                     <FormField
                       control={form.control}
-                      name="service_mode"
+                      name="name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Service Mode</FormLabel>
+                          <FormLabel>Name *</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Status</FormLabel>
                           <Select
                             value={field.value}
                             onValueChange={field.onChange}
@@ -387,273 +492,302 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="private">Private</SelectItem>
-                              <SelectItem value="sic">SIC</SelectItem>
+                              <SelectItem value="draft">Draft</SelectItem>
+                              <SelectItem value="active">Active</SelectItem>
+                              <SelectItem value="inactive">Inactive</SelectItem>
                             </SelectContent>
                           </Select>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  )}
-
-                  {!isDisposal && (
                     <FormField
                       control={form.control}
-                      name="trip_type"
+                      name="is_preferred"
                       render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Trip Type</FormLabel>
-                          <Select
-                            value={field.value}
-                            onValueChange={field.onChange}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="one_way">One Way</SelectItem>
-                              <SelectItem value="round_trip">Round Trip</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
+                        <FormItem className="flex items-center justify-between border rounded-md px-3 h-10">
+                          <FormLabel className="mt-0 text-xs">
+                            Preferred
+                          </FormLabel>
+                          <FormControl>
+                            <Switch
+                              checked={field.value ?? false}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
                         </FormItem>
                       )}
                     />
-                  )}
-                </div>
+                  </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="duration_days"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Duration Days</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                  {/* Row 2 — Service Mode toggle | Trip Type toggle | Duration */}
+                  <div
+                    className={cn(
+                      "grid gap-4 items-start",
+                      isDisposal
+                        ? "grid-cols-1"
+                        : "grid-cols-1 md:grid-cols-[auto_auto_1fr]"
                     )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="duration_hours"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Hours</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
+                  >
+                    {!isDisposal && (
+                      <FormField
+                        control={form.control}
+                        name="service_mode"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Service Mode</FormLabel>
+                            <SegmentedToggle
+                              value={field.value}
+                              onChange={field.onChange}
+                              options={SERVICE_MODE_OPTIONS}
+                            />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="duration_minutes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Minutes</FormLabel>
-                        <FormControl>
-                          <Input type="number" min={0} {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
 
-                {!isDisposal && (
-                  <>
+                    {!isDisposal && (
+                      <FormField
+                        control={form.control}
+                        name="trip_type"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Trip Type</FormLabel>
+                            <SegmentedToggle
+                              value={field.value}
+                              onChange={field.onChange}
+                              options={TRIP_TYPE_OPTIONS}
+                            />
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
+                    <div className="grid gap-2">
+                      <Label>Duration</Label>
+                      <div className="flex items-center gap-2 h-9">
+                        <FormField
+                          control={form.control}
+                          name="duration_days"
+                          render={({ field }) => (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min={0}
+                                className="h-9 w-16 text-sm"
+                                {...field}
+                              />
+                              <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                                d
+                              </span>
+                            </div>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="duration_hours"
+                          render={({ field }) => (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min={0}
+                                className="h-9 w-16 text-sm"
+                                {...field}
+                              />
+                              <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                                h
+                              </span>
+                            </div>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="duration_minutes"
+                          render={({ field }) => (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min={0}
+                                className="h-9 w-16 text-sm"
+                                {...field}
+                              />
+                              <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                                m
+                              </span>
+                            </div>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 3 — Description (full width, moved up) */}
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            rows={2}
+                            {...field}
+                            value={field.value ?? ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Row 4 — Stops (P2P only) */}
+                  {!isDisposal && (
                     <StopsSection
-                      packageId={pkg.id}
                       initialStops={pkg.transfer_package_stops}
-                    />
-                  </>
-                )}
-
-                {!isDisposal && (
-                  <>
-                    <OperationalHoursSection
-                      packageId={pkg.id}
-                      initialHours={pkg.transfer_operational_hours}
-                    />
-                  </>
-                )}
-
-                <CancellationPolicySection
-                  packageId={pkg.id}
-                  initialPolicy={pkg.transfer_cancellation_policies?.[0] || null}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="meeting_point"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Meeting Point</FormLabel>
-                        <FormControl>
-                          <Input {...field} value={field.value ?? ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="pickup_point"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Pickup Point</FormLabel>
-                        <FormControl>
-                          <Input {...field} value={field.value ?? ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="dropoff_point"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Dropoff Point</FormLabel>
-                      <FormControl>
-                        <Input {...field} value={field.value ?? ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="inclusions"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Inclusions</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            rows={3}
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="exclusions"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Exclusions</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            rows={3}
-                            {...field}
-                            value={field.value ?? ""}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Description</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          rows={3}
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          rows={3}
-                          {...field}
-                          value={field.value ?? ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="is_preferred"
-                  render={({ field }) => (
-                    <FormItem className="flex items-center justify-between">
-                      <FormLabel className="mt-0">Preferred</FormLabel>
-                      <FormControl>
-                        <Switch
-                          checked={field.value ?? false}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <div className="flex items-center justify-between pt-4 border-t">
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const values = form.getValues();
-                        onDuplicate(values);
+                      value={stops}
+                      onChange={(next) => {
+                        setStops(next);
+                        setStopsDirty(true);
                       }}
-                    >
-                      <Copy className="h-4 w-4 mr-1" />
-                      Duplicate
-                    </Button>
+                    />
+                  )}
+
+                  {/* Row 5 — Meeting | Pickup | Dropoff */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="meeting_point"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Meeting Point</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              className="h-9"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="pickup_point"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Pickup Point</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              className="h-9"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="dropoff_point"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Dropoff Point</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              value={field.value ?? ""}
+                              className="h-9"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => setDeleteConfirm(true)}
-                      disabled={saving}
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Delete
-                    </Button>
+
+                  {/* Row 6 — Inclusions | Exclusions */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="inclusions"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Inclusions</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              rows={3}
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="exclusions"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Exclusions</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              rows={3}
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                </div>
-              </form>
-            </Form>
-          </AccordionContent>
-        </AccordionItem>
+
+                  {/* Operational Hours (P2P only) */}
+                  {!isDisposal && (
+                    <OperationalHoursSection
+                      value={hours}
+                      onChange={(next) => {
+                        setHours(next);
+                        setHoursDirty(true);
+                      }}
+                    />
+                  )}
+
+                  <CancellationPolicySection
+                    packageId={pkg.id}
+                    initialPolicy={pkg.transfer_cancellation_policies?.[0] || null}
+                  />
+
+                  {/* Notes (half width) */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="notes"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Notes</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              rows={3}
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </form>
+              </Form>
+            </div>
+          )}
+        </div>
 
         <AlertModal
           isOpen={deleteConfirm}
@@ -735,10 +869,12 @@ export default function Tab2Packages({
         if (res.ok) {
           const data = await res.json();
           setPackages(
-            (Array.isArray(data) ? data : []).map((p: TransferPackageDetail) => ({
-              ...p,
-              _localId: p.id,
-            }))
+            (Array.isArray(data) ? data : []).map(
+              (p: TransferPackageDetail) => ({
+                ...p,
+                _localId: p.id,
+              })
+            )
           );
         }
       } catch (e) {
@@ -753,13 +889,18 @@ export default function Tab2Packages({
 
   const getOrCreateRef = (localId: string) => {
     if (!cardRefs.current.has(localId)) {
-      cardRefs.current.set(
-        localId,
-        createRef<PackageCardHandle>()
-      );
+      cardRefs.current.set(localId, createRef<PackageCardHandle>());
     }
     return cardRefs.current.get(localId)!;
   };
+
+  const toggleCard = useCallback((localId: string) => {
+    setOpenCards((prev) =>
+      prev.includes(localId)
+        ? prev.filter((id) => id !== localId)
+        : [...prev, localId]
+    );
+  }, []);
 
   const handleAddPackage = () => {
     const localId = `pending-${Date.now()}`;
@@ -793,11 +934,52 @@ export default function Tab2Packages({
     setOpenCards((prev) => [...prev, localId]);
   };
 
-  const handleDuplicate = (index: number, liveValues: PackageFormValues) => {
+  const handleDuplicate = (
+    index: number,
+    liveValues: PackageFormValues,
+    sourceStops: StopsState,
+    sourceHours: HourRow[]
+  ) => {
     const existingNames = packages.map((p) => p.name);
     const newName = getDuplicateName(liveValues.name, existingNames);
     const localId = `pending-${Date.now()}`;
     const sourcePkg = packages[index];
+
+    // Re-encode the source stops back into the on-disk shape so the new card
+    // hydrates identically when it mounts.
+    let stopOrder = 1;
+    const dupStopRows: PackageStateEntry["transfer_package_stops"] = [];
+    for (const id of sourceStops.origin) {
+      dupStopRows.push({
+        stop_order: stopOrder++,
+        stop_type: "origin",
+        transfer_package_stop_locations: [
+          { geo_id: id, dmc_custom_location_id: null, master_catalog_id: null },
+        ],
+      });
+    }
+    for (const row of sourceStops.via) {
+      const notes = row.notes.trim() || null;
+      for (const id of row.geo_ids) {
+        dupStopRows.push({
+          stop_order: stopOrder++,
+          stop_type: "via",
+          notes,
+          transfer_package_stop_locations: [
+            { geo_id: id, dmc_custom_location_id: null, master_catalog_id: null },
+          ],
+        });
+      }
+    }
+    for (const id of sourceStops.destination) {
+      dupStopRows.push({
+        stop_order: stopOrder++,
+        stop_type: "destination",
+        transfer_package_stop_locations: [
+          { geo_id: id, dmc_custom_location_id: null, master_catalog_id: null },
+        ],
+      });
+    }
 
     const newPkg: PackageStateEntry = {
       _localId: localId,
@@ -806,7 +988,7 @@ export default function Tab2Packages({
       name: newName,
       description: liveValues.description ?? null,
       notes: liveValues.notes ?? null,
-      service_type: liveValues.service_type,
+      service_type: "",
       service_mode: liveValues.service_mode,
       trip_type: liveValues.trip_type,
       direction_id: null,
@@ -823,8 +1005,13 @@ export default function Tab2Packages({
       status: "draft",
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      transfer_package_stops: sourcePkg.transfer_package_stops,
-      transfer_operational_hours: sourcePkg.transfer_operational_hours,
+      transfer_package_stops: dupStopRows,
+      transfer_operational_hours: sourceHours.map((h) => ({
+        day_of_week: h.day_of_week,
+        is_active: h.is_active,
+        start_time: h.start_time,
+        end_time: h.end_time,
+      })),
       transfer_cancellation_policies: sourcePkg.transfer_cancellation_policies,
     };
     getOrCreateRef(localId);
@@ -868,16 +1055,19 @@ export default function Tab2Packages({
     });
   };
 
-  const handleDirtyChange = useCallback((localId: string, isDirty: boolean) => {
-    setDirtySet((prev) => {
-      const alreadyPresent = prev.has(localId);
-      if (isDirty === alreadyPresent) return prev;
-      const next = new Set(prev);
-      if (isDirty) next.add(localId);
-      else next.delete(localId);
-      return next;
-    });
-  }, []);
+  const handleDirtyChange = useCallback(
+    (localId: string, isDirty: boolean) => {
+      setDirtySet((prev) => {
+        const alreadyPresent = prev.has(localId);
+        if (isDirty === alreadyPresent) return prev;
+        const next = new Set(prev);
+        if (isDirty) next.add(localId);
+        else next.delete(localId);
+        return next;
+      });
+    },
+    []
+  );
 
   const onSubmit = async () => {
     setIsLoading?.(true);
@@ -900,9 +1090,7 @@ export default function Tab2Packages({
     }
 
     if (failures.length === 0) {
-      toast.success(
-        `Saved ${saved} package${saved !== 1 ? "s" : ""}.`
-      );
+      toast.success(`Saved ${saved} package${saved !== 1 ? "s" : ""}.`);
       setIsLoading?.(false);
       onNext({});
     } else {
@@ -936,7 +1124,7 @@ export default function Tab2Packages({
         <p className="text-sm text-muted-foreground">
           {packages.length} package{packages.length !== 1 ? "s" : ""}
         </p>
-        <Button variant="outline" size="sm" onClick={handleAddPackage}>
+        <Button type="button" variant="outline" size="sm" onClick={handleAddPackage}>
           <Plus className="h-4 w-4 mr-1" />
           Add Package
         </Button>
@@ -947,12 +1135,7 @@ export default function Tab2Packages({
           <p className="text-sm">No packages yet. Add your first package above.</p>
         </div>
       ) : (
-        <Accordion
-          type="multiple"
-          value={openCards}
-          onValueChange={setOpenCards}
-          className="space-y-2"
-        >
+        <div className="space-y-2">
           {packages.map((pkg, index) => {
             const cardRef = getOrCreateRef(pkg._localId);
             return (
@@ -962,15 +1145,17 @@ export default function Tab2Packages({
                 transferId={transferId || ""}
                 pkg={pkg}
                 modeOfTransport={modeOfTransport}
+                isOpen={openCards.includes(pkg._localId)}
+                onToggle={() => toggleCard(pkg._localId)}
                 onDeleted={() => handleDeleted(pkg._localId)}
-                onDuplicate={(liveValues) =>
-                  handleDuplicate(index, liveValues)
+                onDuplicate={(liveValues, srcStops, srcHours) =>
+                  handleDuplicate(index, liveValues, srcStops, srcHours)
                 }
                 onDirtyChange={handleDirtyChange}
               />
             );
           })}
-        </Accordion>
+        </div>
       )}
     </div>
   );

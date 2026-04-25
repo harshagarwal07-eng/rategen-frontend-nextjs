@@ -248,7 +248,7 @@ export default function TransferFullscreenForm({
               <div className="flex justify-center">
                 <div className="flex bg-muted rounded-lg p-1">
                   {FORM_STEPS.map((step, index) => {
-                    const stepDirty = index === 0 ? tab1Dirty : false;
+                    const stepDirty = index === 0 ? tab1Dirty : index === 1 ? tab2Dirty : false;
                     const stepLocked = index > 0 && !formData.id;
                     return (
                       <button
@@ -339,7 +339,7 @@ export default function TransferFullscreenForm({
                       Unsaved changes
                     </span>
                   )}
-                  {currentStep === 0 && (
+                  {(currentStep === 0 || currentStep === 1) && (
                     <Button onClick={handleSaveClick} className="min-w-32" disabled={isLoading}>
                       {isLoading ? (
                         <>

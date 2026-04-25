@@ -218,3 +218,90 @@ export type ValidVehicle = {
   max_passengers?: number | null;
   max_luggage?: number | null;
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tab 2 — Packages, Stops, Hours, Cancellation
+// ─────────────────────────────────────────────────────────────────────────
+
+export type PackageStopLocation = {
+  kind: 'geo' | 'dmc_custom' | 'master_catalog';
+  id: string;
+};
+
+// Raw row shape returned by GET /api/transfers/:id/packages — Supabase returns
+// the underlying `transfer_package_stop_locations` columns un-normalised.
+export type PackageStopLocationRow = {
+  id?: string;
+  stop_id?: string;
+  geo_id: string | null;
+  dmc_custom_location_id: string | null;
+  master_catalog_id: string | null;
+};
+
+export type PackageStop = {
+  id?: string;
+  stop_order: number;
+  stop_type: 'origin' | 'via' | 'destination';
+  notes?: string | null;
+  // GET response returns `transfer_package_stop_locations`. The save payload
+  // uses `locations` ({kind,id}). Both are accepted here so the same type can
+  // be used for inbound and outbound.
+  transfer_package_stop_locations?: PackageStopLocationRow[];
+  locations?: PackageStopLocation[];
+};
+
+export type OperationalHour = {
+  day_of_week: number; // ISO 8601: 1=Mon, 7=Sun
+  is_active: boolean;
+  start_time: string | null; // HH:MM or null
+  end_time: string | null; // HH:MM or null
+};
+
+export type CancellationRule = {
+  id?: string;
+  days_from: number;
+  days_to: number;
+  anchor: string;
+  charge_type: string;
+  charge_value: number;
+  is_no_show: boolean;
+};
+
+export type CancellationPolicy = {
+  id?: string;
+  package_id: string;
+  is_non_refundable: boolean;
+};
+
+export type TransferPackageDetail = {
+  id: string;
+  transfer_id: string;
+  name: string;
+  description: string | null;
+  notes: string | null;
+  service_type?: string | null;
+  service_mode: 'private' | 'sic';
+  trip_type: 'one_way' | 'round_trip';
+  direction_id: string | null;
+  duration_days: number;
+  duration_hours: number;
+  duration_minutes: number;
+  meeting_point: string | null;
+  pickup_point: string | null;
+  dropoff_point: string | null;
+  inclusions: string | null;
+  exclusions: string | null;
+  is_preferred: boolean;
+  sort_order?: number | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  transfer_package_stops?: PackageStop[];
+  transfer_operational_hours?: OperationalHour[];
+  transfer_cancellation_policies?: Array<CancellationPolicy & { transfer_cancellation_rules?: CancellationRule[] }>;
+};
+
+export type TransferPackageCreateInput = Omit<
+  TransferPackageDetail,
+  'id' | 'transfer_id' | 'created_at' | 'updated_at' | 'transfer_package_stops' | 'transfer_operational_hours' | 'transfer_cancellation_policies'
+>;

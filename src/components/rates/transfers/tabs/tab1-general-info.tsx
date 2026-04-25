@@ -22,14 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Autocomplete } from "@/components/ui/autocomplete";
 import { AlertTriangle } from "lucide-react";
 import {
   TransferCountryOption,
   TransferCurrencyOption,
   TransferListRow,
 } from "@/types/transfers";
-
-const NONE = "__none__";
+import { useMemo } from "react";
 
 const GeneralInfoSchema = z.object({
   id: z.string().optional(),
@@ -96,6 +96,19 @@ export default function TransferGeneralInfoForm({
 
   const watchName = form.watch("name");
   const watchCountryId = form.watch("country_id");
+
+  const countryOptions = useMemo(
+    () => countries.map((c) => ({ value: c.id, label: c.country_name })),
+    [countries]
+  );
+  const currencyOptions = useMemo(
+    () =>
+      currencies.map((c) => ({
+        value: c.id,
+        label: `${c.symbol ? `${c.symbol} ` : ""}${c.code} — ${c.name}`,
+      })),
+    [currencies]
+  );
 
   const { isDirty } = form.formState;
   const onDirtyChangeRef = useRef(onDirtyChange);
@@ -223,22 +236,12 @@ export default function TransferGeneralInfoForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Country</FormLabel>
-                  <Select
-                    value={field.value || NONE}
-                    onValueChange={(v) => field.onChange(v === NONE ? "" : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select country..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>— Not set —</SelectItem>
-                      {countries.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.country_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Autocomplete
+                    options={countryOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Search country..."
+                  />
                   <FormMessage />
                 </FormItem>
               )}
@@ -250,23 +253,12 @@ export default function TransferGeneralInfoForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Currency</FormLabel>
-                  <Select
-                    value={field.value || NONE}
-                    onValueChange={(v) => field.onChange(v === NONE ? "" : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select currency..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>— Not set —</SelectItem>
-                      {currencies.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.symbol ? `${c.symbol} ` : ""}
-                          {c.code} — {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Autocomplete
+                    options={currencyOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Search currency..."
+                  />
                   <FormMessage />
                 </FormItem>
               )}

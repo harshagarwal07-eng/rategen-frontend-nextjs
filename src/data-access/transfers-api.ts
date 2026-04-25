@@ -12,6 +12,8 @@ import {
   TransferDetail,
   TransferCountryOption,
   TransferCurrencyOption,
+  TransferPackageDetail,
+  TransferPackageCreateInput,
 } from "@/types/transfers";
 
 type Result<T> = { data: T | null; error: string | null };
@@ -91,4 +93,101 @@ export async function listTransferCountries(): Promise<Result<TransferCountryOpt
 export async function listTransferCurrencies(): Promise<Result<TransferCurrencyOption[]>> {
   const raw = await http.get<TransferCurrencyOption[]>("/api/fixed-departures/meta/currencies");
   return unwrap<TransferCurrencyOption[]>(raw);
+}
+
+// ── Tab 2 — Packages ───────────────────────────────────────────────────
+
+export async function createTransferPackage(
+  transferId: string,
+  input: Omit<
+    TransferPackageDetail,
+    'id' | 'transfer_id' | 'created_at' | 'updated_at' | 'transfer_package_stops' | 'transfer_operational_hours' | 'transfer_cancellation_policies'
+  >,
+): Promise<Result<TransferPackageDetail>> {
+  const raw = await http.post<TransferPackageDetail>(
+    `/api/transfers/${transferId}/packages`,
+    input,
+  );
+  return unwrap<TransferPackageDetail>(raw);
+}
+
+export async function updateTransferPackage(
+  packageId: string,
+  input: Partial<TransferPackageCreateInput>,
+): Promise<Result<TransferPackageDetail>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.patch<TransferPackageDetail>(
+      `/api/transfers/packages/${packageId}`,
+      input,
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function deleteTransferPackage(
+  packageId: string,
+): Promise<Result<{ deleted: boolean }>> {
+  const raw = await http.delete<{ deleted: boolean }>(`/api/transfers/packages/${packageId}`);
+  return unwrap<{ deleted: boolean }>(raw);
+}
+
+export async function replacePackageStops(
+  packageId: string,
+  stops: Array<{
+    stop_order: number;
+    stop_type: string;
+    notes?: string | null;
+    locations: Array<{ kind: 'geo' | 'dmc_custom' | 'master_catalog'; id: string }>;
+  }>,
+): Promise<Result<unknown>> {
+  const raw = await http.put(`/api/transfers/packages/${packageId}/stops`, stops);
+  return unwrap<unknown>(raw);
+}
+
+export async function replaceOperationalHours(
+  packageId: string,
+  hours: Array<{
+    day_of_week: number;
+    is_active: boolean;
+    start_time: string | null;
+    end_time: string | null;
+  }>,
+): Promise<Result<unknown>> {
+  const raw = await http.put(
+    `/api/transfers/packages/${packageId}/operational-hours`,
+    hours,
+  );
+  return unwrap<unknown>(raw);
+}
+
+export async function upsertCancellationPolicy(
+  packageId: string,
+  dto: { is_non_refundable: boolean },
+): Promise<Result<unknown>> {
+  const raw = await http.put(
+    `/api/transfers/packages/${packageId}/cancellation-policy`,
+    dto,
+  );
+  return unwrap<unknown>(raw);
+}
+
+export async function replaceCancellationRules(
+  packageId: string,
+  rules: Array<{
+    days_from: number;
+    days_to: number;
+    anchor: string;
+    charge_type: string;
+    charge_value: number;
+    is_no_show: boolean;
+  }>,
+): Promise<Result<unknown>> {
+  const raw = await http.put(
+    `/api/transfers/packages/${packageId}/cancellation-rules`,
+    rules,
+  );
+  return unwrap<unknown>(raw);
 }
