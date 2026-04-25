@@ -52,6 +52,20 @@ export interface FDPackageDetail {
   [key: string]: unknown;
 }
 
+export interface FDItineraryDay {
+  id?: string;
+  package_id?: string;
+  day_number: number;
+  title: string;
+  description: string | null;
+  includes: string | null;
+  meals_included: string[] | string | null;
+  overnight_city: string | null;
+  overnight_city_id: string | null;
+  accommodation_note: string | null;
+  image_url: string | null;
+}
+
 export interface FDAgePolicy {
   id?: string;
   package_id?: string;

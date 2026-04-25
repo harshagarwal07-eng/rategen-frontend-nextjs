@@ -10,6 +10,7 @@ import type {
   FDPackageListRow,
   FDPackageDetail,
   FDAgePolicy,
+  FDItineraryDay,
 } from "@/types/fixed-departures";
 
 const fdApi = axios.create({
@@ -108,5 +109,13 @@ export async function fdReplacePackageCities(packageId: string, cityIds: string[
 
 export async function fdReplaceAgePolicies(packageId: string, bands: Omit<FDAgePolicy, "id" | "package_id">[]): Promise<FDAgePolicy[]> {
   const { data } = await fdApi.put<FDAgePolicy[]>(`${BASE}/packages/${packageId}/age-policies`, bands);
+  return data;
+}
+
+export async function fdReplaceItinerary(
+  packageId: string,
+  days: Array<Omit<FDItineraryDay, "id" | "package_id" | "overnight_city">>,
+): Promise<FDItineraryDay[]> {
+  const { data } = await fdApi.put<FDItineraryDay[]>(`${BASE}/packages/${packageId}/itinerary`, days);
   return data;
 }

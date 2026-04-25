@@ -50,3 +50,26 @@ export const FDGeneralInfoSchema = z
   );
 
 export type IFDGeneralInfo = z.infer<typeof FDGeneralInfoSchema>;
+
+export const FDItineraryDaySchema = z.object({
+  day_number: z.coerce.number().int().min(1),
+  title: z.string().min(1, "Title is required"),
+  description: z.string().nullable().optional().default(""),
+  includes: z.string().nullable().optional().default(""),
+  meals_included: z.array(z.string()).default([]),
+  overnight_city_id: z.string().uuid().nullable().optional(),
+  accommodation_note: z.string().nullable().optional().default(""),
+  image_url: z
+    .string()
+    .url("Must be a valid URL")
+    .or(z.literal(""))
+    .nullable()
+    .optional(),
+});
+
+export const FDItinerarySchema = z.object({
+  days: z.array(FDItineraryDaySchema),
+});
+
+export type IFDItineraryDay = z.infer<typeof FDItineraryDaySchema>;
+export type IFDItinerary = z.infer<typeof FDItinerarySchema>;

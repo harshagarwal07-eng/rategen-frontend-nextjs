@@ -6,7 +6,9 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { fdGetPackage } from "@/data-access/fixed-departures";
 import { FDGeneralInfoTab } from "./fd-tabs/tab-general-info";
+import { FDItineraryTab } from "./fd-tabs/tab-itinerary";
 import { FDTabPlaceholder } from "./fd-tabs/tab-placeholder";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface FDFullscreenFormProps {
   open: boolean;
@@ -29,6 +31,7 @@ const TABS = [
 export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDFullscreenFormProps) {
   const [activeTab, setActiveTab] = useState<string>("general");
   const [createdId, setCreatedId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const effectiveId = packageId ?? createdId;
   const mode: "create" | "edit" = packageId ? "edit" : "create";
@@ -92,12 +95,28 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                   initialData={pkg ?? null}
                   onSaved={(newId) => {
                     if (mode === "create" && newId) setCreatedId(newId);
+                    const idForInvalidate = newId ?? effectiveId;
+                    if (idForInvalidate) {
+                      queryClient.invalidateQueries({ queryKey: ["fd-package", idForInvalidate, "for-itinerary"] });
+                    }
                     onSaved?.();
                   }}
                   onAdvance={handleAdvance}
                 />
               </TabsContent>
-              <TabsContent value="itinerary"><FDTabPlaceholder title="Itinerary" /></TabsContent>
+              <TabsContent value="itinerary">
+                <FDItineraryTab
+                  mode={mode}
+                  packageId={effectiveId}
+                  onSaved={() => {
+                    if (effectiveId) {
+                      queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "for-itinerary"] });
+                    }
+                    onSaved?.();
+                  }}
+                  onAdvance={handleAdvance}
+                />
+              </TabsContent>
               <TabsContent value="inc-exc"><FDTabPlaceholder title="Inclusions & Exclusions" /></TabsContent>
               <TabsContent value="addons"><FDTabPlaceholder title="Add-ons" /></TabsContent>
               <TabsContent value="departures"><FDTabPlaceholder title="Departure Dates" /></TabsContent>
