@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import TransferGeneralInfoForm, {
   TransferGeneralInfoValues,
 } from "@/components/rates/transfers/tabs/tab1-general-info";
+import Tab2Packages from "@/components/rates/transfers/tabs/tab2-packages";
 import {
   createTransfer,
   updateTransfer,
@@ -61,11 +62,12 @@ export default function TransferFullscreenForm({
   const [isLoading, setIsLoading] = useState(false);
   const [contextInfo, setContextInfo] = useState({ name: "", countryName: "" });
   const [tab1Dirty, setTab1Dirty] = useState(false);
+  const [tab2Dirty, setTab2Dirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [hasPackages, setHasPackages] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const anyDirty = tab1Dirty;
+  const anyDirty = tab1Dirty || tab2Dirty;
 
   useEffect(() => {
     if (!isOpen) {
@@ -73,11 +75,13 @@ export default function TransferFullscreenForm({
       setFormData({});
       setContextInfo({ name: "", countryName: "" });
       setTab1Dirty(false);
+      setTab2Dirty(false);
       setHasPackages(false);
       return;
     }
     setCurrentStep(0);
     setTab1Dirty(false);
+    setTab2Dirty(false);
     const seed: FormState = (initialData as FormState) ?? {};
     setFormData(seed);
     setContextInfo({
@@ -165,6 +169,7 @@ export default function TransferFullscreenForm({
         toast.success(formData.id ? "Saved." : "Transfer created.");
         qc.invalidateQueries({ queryKey: ["transfers"] });
         onSuccess?.();
+        setCurrentStep(1);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to save transfer");
       } finally {
@@ -307,7 +312,19 @@ export default function TransferFullscreenForm({
                     onDirtyChange={setTab1Dirty}
                   />
                 )}
-                {currentStep === 1 && <PlaceholderTab title="Packages" />}
+                {currentStep === 1 && (
+                  <Tab2Packages
+                    initialData={formData.id ? formData : null}
+                    modeOfTransport={formData.mode_of_transport as string | null}
+                    onNext={async () => {
+                      setCurrentStep(2);
+                      qc.invalidateQueries({ queryKey: ["transfers"] });
+                    }}
+                    setIsLoading={setIsLoading}
+                    formRef={formRef as React.RefObject<HTMLFormElement>}
+                    onDirtyChange={setTab2Dirty}
+                  />
+                )}
                 {currentStep === 2 && <PlaceholderTab title="Seasons & Rates" />}
                 {currentStep === 3 && <PlaceholderTab title="Add-ons" />}
               </div>
@@ -332,7 +349,7 @@ export default function TransferFullscreenForm({
                       ) : (
                         <>
                           <Save className="mr-2 h-4 w-4" />
-                          {formData.id ? "Save" : "Save & Continue"}
+                          Save & Continue
                         </>
                       )}
                     </Button>
