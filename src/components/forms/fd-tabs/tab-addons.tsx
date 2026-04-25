@@ -472,7 +472,12 @@ export const FDAddonsTab = forwardRef<FDTabHandle, Props>(function FDAddonsTab({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Add-ons</h2>
+        <p className="text-muted-foreground">Optional extras travelers can purchase</p>
+      </div>
+
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
           {drafts.length === 0

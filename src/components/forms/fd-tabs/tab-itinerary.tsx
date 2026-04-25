@@ -384,7 +384,12 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
   }
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Itinerary</h2>
+        <p className="text-muted-foreground">Build the day-by-day plan for this package</p>
+      </div>
+
       {/* Manage meal options */}
       <div className="rounded-md border bg-muted/30">
         <button

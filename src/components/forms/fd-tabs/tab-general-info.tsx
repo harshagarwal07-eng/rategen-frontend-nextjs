@@ -323,6 +323,11 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">General Information</h2>
+        <p className="text-muted-foreground">Enter the basic details about this fixed departure</p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
           <Label>Package Name <span className="text-destructive">*</span></Label>

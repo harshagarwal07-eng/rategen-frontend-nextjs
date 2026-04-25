@@ -180,6 +180,11 @@ export const FDInclusionsExclusionsTab = forwardRef<FDTabHandle, Props>(function
       }}
       className="flex flex-col gap-6"
     >
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Inclusions &amp; Exclusions</h2>
+        <p className="text-muted-foreground">What is and isn&apos;t included in this package</p>
+      </div>
+
       {/* Column headers — visible on md+ */}
       <div className="hidden md:grid md:grid-cols-[160px_1fr_1fr] md:gap-4 md:items-center">
         <div />
