@@ -575,7 +575,7 @@ function DayHeader({
   };
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 hover:bg-accent/40 transition-colors">
+    <div className="flex items-center gap-2 px-4 py-3 hover:bg-accent/40 transition-colors">
       <button
         type="button"
         onClick={onToggle}

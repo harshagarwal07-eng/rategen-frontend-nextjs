@@ -541,8 +541,8 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
 
       <Accordion type="single" collapsible defaultValue="age">
         <AccordionItem value="age" className="rounded-lg border-2 border-muted bg-accent/30 overflow-hidden">
-          <AccordionTrigger className="px-4">Age Policies</AccordionTrigger>
-          <AccordionContent className="px-4">
+          <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/40 transition-colors">Age Policies</AccordionTrigger>
+          <AccordionContent className="px-4 pb-4">
             <div className="flex flex-col gap-3">
               {ageFields.map((band, idx) => (
                 <div key={band.id} className="grid grid-cols-[120px_1fr_1fr] gap-3 items-center">
