@@ -1,7 +1,7 @@
 "use client";
 
 import { Input } from "@/components/ui/input";
-import type { FDDeparturePricing } from "@/types/fixed-departures";
+import type { FDAgePolicy, FDDeparturePricing } from "@/types/fixed-departures";
 
 export type LandPricingState = Pick<
   FDDeparturePricing,
@@ -17,37 +17,62 @@ export const EMPTY_LAND_PRICING: LandPricingState = {
   rate_infant: null,
 };
 
-const LAND_RATE_FIELDS: { key: keyof LandPricingState; label: string }[] = [
-  { key: "rate_single", label: "Single" },
-  { key: "rate_double", label: "Double (per person)" },
-  { key: "rate_triple", label: "Triple (per person)" },
-  { key: "rate_child_no_bed", label: "Child (No Bed)" },
-  { key: "rate_child_extra_bed", label: "Child (Extra Bed)" },
-  { key: "rate_infant", label: "Infant" },
+type BandKey = "infant" | "child" | "adult";
+
+// Each pricing field is gated by which package age band it belongs to. If the
+// band was deleted at the package level (Tab 1), the field disappears here.
+const LAND_RATE_FIELDS: {
+  key: keyof LandPricingState;
+  label: string;
+  band: BandKey;
+}[] = [
+  { key: "rate_single", label: "Single", band: "adult" },
+  { key: "rate_double", label: "Double per person", band: "adult" },
+  { key: "rate_triple", label: "Triple per person", band: "adult" },
+  { key: "rate_child_no_bed", label: "Child No Bed", band: "child" },
+  { key: "rate_child_extra_bed", label: "Child Extra Bed", band: "child" },
+  { key: "rate_infant", label: "Infant", band: "infant" },
 ];
+
+function findBand(bands: FDAgePolicy[] | undefined, key: BandKey): FDAgePolicy | undefined {
+  return (bands ?? []).find((b) => b.band_name?.toLowerCase() === key);
+}
+
+function bandSuffix(band: FDAgePolicy | undefined, label: string, key: BandKey): string {
+  if (!band) return label;
+  // For Adult-band fields like "Single / Double / Triple", the brief explicitly
+  // wants "(Adult X-Y)". For child/infant, just the range.
+  if (key === "adult") return `${label} (Adult ${band.age_from}-${band.age_to})`;
+  return `${label} (${band.age_from}-${band.age_to})`;
+}
 
 interface Props {
   value: LandPricingState;
   onChange: (patch: Partial<LandPricingState>) => void;
   currency: string | null;
+  packageBands?: FDAgePolicy[];
 }
 
-export function DeparturePricingSection({ value, onChange, currency }: Props) {
+export function DeparturePricingSection({ value, onChange, currency, packageBands }: Props) {
+  const visibleFields = LAND_RATE_FIELDS.filter((f) => !!findBand(packageBands, f.band));
   return (
     <div className="rounded-md border bg-muted/20 p-3 flex flex-col gap-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Land Pricing
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        {LAND_RATE_FIELDS.map((f) => (
-          <RateInput
-            key={f.key}
-            label={f.label}
-            currency={currency}
-            value={value[f.key]}
-            onChange={(v) => onChange({ [f.key]: v } as Partial<LandPricingState>)}
-          />
-        ))}
+        {visibleFields.map((f) => {
+          const band = findBand(packageBands, f.band);
+          return (
+            <RateInput
+              key={f.key}
+              label={bandSuffix(band, f.label, f.band)}
+              currency={currency}
+              value={value[f.key]}
+              onChange={(v) => onChange({ [f.key]: v } as Partial<LandPricingState>)}
+            />
+          );
+        })}
       </div>
     </div>
   );
@@ -84,16 +109,3 @@ function RateInput({
   );
 }
 
-export function minLandRate(p: LandPricingState | null | undefined): number | null {
-  if (!p) return null;
-  const values = [
-    p.rate_single,
-    p.rate_double,
-    p.rate_triple,
-    p.rate_child_no_bed,
-    p.rate_child_extra_bed,
-    p.rate_infant,
-  ].filter((v): v is number => typeof v === "number" && !Number.isNaN(v));
-  if (values.length === 0) return null;
-  return Math.min(...values);
-}

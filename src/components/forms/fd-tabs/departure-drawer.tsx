@@ -33,7 +33,7 @@ import {
   emptyDepartureFormState,
 } from "./departure-state";
 import { saveDeparture } from "./save-departure";
-import type { FDAddon, FDDeparture } from "@/types/fixed-departures";
+import type { FDAddon, FDAgePolicy, FDDeparture } from "@/types/fixed-departures";
 
 type DrawerMode =
   | { kind: "create"; initialDate?: string }
@@ -46,6 +46,7 @@ interface Props {
   packageDuration: number;
   currency: string | null;
   addons: FDAddon[];
+  packageBands?: FDAgePolicy[];
   mode: DrawerMode | null;
   onSaved: (saved: FDDeparture) => void;
 }
@@ -57,6 +58,7 @@ export function DepartureDrawer({
   packageDuration,
   currency,
   addons,
+  packageBands,
   mode,
   onSaved,
 }: Props) {
@@ -167,6 +169,7 @@ export function DepartureDrawer({
                 errors={errors}
                 currency={currency}
                 addons={addons}
+                packageBands={packageBands}
               />
             ) : (
               <div className="text-sm text-muted-foreground">Loading…</div>

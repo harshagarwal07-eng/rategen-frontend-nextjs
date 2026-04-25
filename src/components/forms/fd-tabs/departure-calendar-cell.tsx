@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FDDeparture } from "@/types/fixed-departures";
+import { formatStatusLabel } from "./departure-form";
 
 const PILL_CLASS: Record<string, string> = {
   planned: "bg-muted text-muted-foreground border-muted-foreground/20",
@@ -17,7 +18,7 @@ function pillClass(status: string | null | undefined): string {
 }
 
 function seatsLabel(d: FDDeparture): string {
-  if (d.availability_status === "sold_out") return "Sold out";
+  if (d.availability_status === "sold_out") return formatStatusLabel("sold_out");
   const total = d.total_seats ?? 0;
   const sold = d.seats_sold ?? 0;
   const hold = d.seats_on_hold ?? 0;
@@ -89,7 +90,7 @@ export function DepartureCalendarCell({
               "rounded border px-1.5 py-0.5 text-[10px] text-left truncate",
               pillClass(d.departure_status),
             )}
-            title={`${d.departure_status ?? "planned"} · ${seatsLabel(d)}`}
+            title={`${formatStatusLabel(d.departure_status ?? "planned")} · ${seatsLabel(d)}`}
           >
             {seatsLabel(d)}
           </button>
@@ -121,7 +122,7 @@ export function DepartureCalendarCell({
                       pillClass(d.departure_status),
                     )}
                   >
-                    <span className="capitalize">{d.departure_status ?? "planned"}</span>
+                    <span>{formatStatusLabel(d.departure_status ?? "planned")}</span>
                     <span className="text-muted-foreground"> · {seatsLabel(d)}</span>
                   </button>
                 ))}

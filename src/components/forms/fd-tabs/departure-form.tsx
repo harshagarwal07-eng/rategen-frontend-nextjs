@@ -25,6 +25,7 @@ import {
   FD_DEPARTURE_STATUSES,
   FD_AVAILABILITY_STATUSES,
   type FDAddon,
+  type FDAgePolicy,
 } from "@/types/fixed-departures";
 
 export interface DepartureFormState {
@@ -63,6 +64,12 @@ export function computeCutoffDate(departureDate: string, offsetDays = DEFAULT_CU
   } catch {
     return "";
   }
+}
+
+export function formatStatusLabel(s: string | null | undefined): string {
+  if (!s) return "";
+  const spaced = s.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 export function formatDateDisplay(d: string | null | undefined): string {
@@ -108,9 +115,10 @@ interface Props {
   errors?: DepartureFormErrors;
   currency: string | null;
   addons: FDAddon[];
+  packageBands?: FDAgePolicy[];
 }
 
-export function DepartureForm({ value, onChange, errors, currency, addons }: Props) {
+export function DepartureForm({ value, onChange, errors, currency, addons, packageBands }: Props) {
   const handleDepartureDateChange = (newDate: string) => {
     const newReturn = computeReturnDate(newDate, value.duration);
     const patch: Partial<DepartureFormState> = {
@@ -209,7 +217,7 @@ export function DepartureForm({ value, onChange, errors, currency, addons }: Pro
               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
                 {FD_DEPARTURE_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                  <SelectItem key={s} value={s}>{formatStatusLabel(s)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -223,7 +231,7 @@ export function DepartureForm({ value, onChange, errors, currency, addons }: Pro
               <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
               <SelectContent>
                 {FD_AVAILABILITY_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s} className="capitalize">{s.replace("_", " ")}</SelectItem>
+                  <SelectItem key={s} value={s}>{formatStatusLabel(s)}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -302,6 +310,7 @@ export function DepartureForm({ value, onChange, errors, currency, addons }: Pro
         value={value.pricing}
         onChange={(patch) => onChange({ pricing: { ...value.pricing, ...patch } })}
         currency={currency}
+        packageBands={packageBands}
       />
 
       {/* Section 3: Addon Pricing — only if package has add-ons */}

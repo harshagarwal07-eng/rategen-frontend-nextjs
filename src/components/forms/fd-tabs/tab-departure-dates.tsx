@@ -38,6 +38,7 @@ import {
 } from "@/data-access/fixed-departures";
 import type {
   FDAddon,
+  FDAgePolicy,
   FDDeparture,
   FDPackageDetail,
 } from "@/types/fixed-departures";
@@ -146,6 +147,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
 
   const currency = (pkg?.currency as string | null) ?? null;
   const packageDuration = (pkg?.duration_nights as number | null) ?? DEFAULT_DURATION;
+  const packageBands = (pkg?.fd_age_policies ?? []) as FDAgePolicy[];
 
   // Hydrate drafts on first server response. Re-runs after a parent-driven
   // recalc invalidates the departures query and the tab is re-mounted (or
@@ -367,6 +369,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
           packageId={packageId}
           currency={currency}
           addons={addons}
+          packageBands={packageBands}
           getOrCreateRef={getOrCreateRef}
           updateDraft={updateDraft}
           setDeleteTarget={setDeleteTarget}
@@ -386,6 +389,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
         packageDuration={packageDuration}
         currency={currency}
         addons={addons}
+        packageBands={packageBands}
         mode={drawerState}
         onSaved={() => { void handleDrawerSaved(); }}
       />
@@ -520,6 +524,7 @@ interface TableViewProps {
   packageId: string;
   currency: string | null;
   addons: FDAddon[];
+  packageBands: FDAgePolicy[];
   getOrCreateRef: (id: string) => React.RefObject<DepartureRowHandle | null>;
   updateDraft: (localId: string, patch: Partial<DepartureFormState>) => void;
   setDeleteTarget: (d: DraftDeparture | null) => void;
@@ -533,6 +538,7 @@ function TableView({
   packageId,
   currency,
   addons,
+  packageBands,
   getOrCreateRef,
   updateDraft,
   setDeleteTarget,
@@ -558,7 +564,7 @@ function TableView({
           <span>Status</span>
           <span>Availability</span>
           <span>Seats</span>
-          <span>Price From</span>
+          <span>Double Rate</span>
         </div>
         <span />
       </div>
@@ -574,6 +580,7 @@ function TableView({
             isPast={false}
             currency={currency}
             addons={addons}
+            packageBands={packageBands}
             onChange={(patch) => updateDraft(draft._localId, patch)}
             onDeleteRequest={() => setDeleteTarget(draft)}
           />
@@ -601,6 +608,7 @@ function TableView({
                     isPast
                     currency={currency}
                     addons={addons}
+                    packageBands={packageBands}
                     onChange={(patch) => updateDraft(draft._localId, patch)}
                     onDeleteRequest={() => setDeleteTarget(draft)}
                   />

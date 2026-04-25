@@ -14,12 +14,12 @@ import {
   type DepartureFormState,
   DepartureForm,
   formatDateDisplay,
+  formatStatusLabel,
   validateDepartureForm,
   type DepartureFormErrors,
 } from "./departure-form";
-import { minLandRate } from "./departure-pricing-section";
 import { saveDeparture, type DepartureSaveResult } from "./save-departure";
-import type { FDAddon } from "@/types/fixed-departures";
+import type { FDAddon, FDAgePolicy } from "@/types/fixed-departures";
 
 export interface DraftDeparture {
   _localId: string;
@@ -58,7 +58,7 @@ function statusBadgeClass(status: string | null | undefined): string {
   return cls;
 }
 
-function formatPriceFrom(value: number | null, currency: string | null): string {
+function formatRate(value: number | null, currency: string | null): string {
   if (value == null) return "—";
   const formatted = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
   return currency ? `${currency} ${formatted}` : formatted;
@@ -71,12 +71,13 @@ interface Props {
   isPast: boolean;
   currency: string | null;
   addons: FDAddon[];
+  packageBands?: FDAgePolicy[];
   onChange: (patch: Partial<DepartureFormState>) => void;
   onDeleteRequest: () => void;
 }
 
 export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function DepartureRow(
-  { packageId, draft, defaultOpen, isPast, currency, addons, onChange, onDeleteRequest },
+  { packageId, draft, defaultOpen, isPast, currency, addons, packageBands, onChange, onDeleteRequest },
   ref,
 ) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -106,7 +107,7 @@ export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function Depar
     },
   }));
 
-  const priceFrom = minLandRate(draft.state.pricing);
+  const doubleRate = draft.state.pricing.rate_double;
   const seatsLabel = `${draft.state.seats_sold ?? 0} / ${draft.state.total_seats ?? 0}`;
 
   return (
@@ -151,16 +152,16 @@ export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function Depar
             <span className="text-muted-foreground">{formatDateDisplay(draft.state.cutoff_date)}</span>
             <Badge
               variant="outline"
-              className={cn("capitalize", statusBadgeClass(draft.state.departure_status))}
+              className={statusBadgeClass(draft.state.departure_status)}
             >
-              {draft.state.departure_status || "—"}
+              {formatStatusLabel(draft.state.departure_status) || "—"}
             </Badge>
-            <span className="text-xs text-muted-foreground capitalize truncate">
-              {draft.state.availability_status?.replace("_", " ") || "—"}
+            <span className="text-xs text-muted-foreground truncate">
+              {formatStatusLabel(draft.state.availability_status) || "—"}
             </span>
             <span className="text-xs text-muted-foreground tabular-nums">{seatsLabel}</span>
             <span className="text-xs font-medium tabular-nums">
-              {formatPriceFrom(priceFrom, currency)}
+              {formatRate(doubleRate, currency)}
             </span>
           </div>
         </div>
@@ -190,6 +191,7 @@ export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function Depar
             errors={errors}
             currency={currency}
             addons={addons}
+            packageBands={packageBands}
           />
         </div>
       )}
