@@ -21,6 +21,8 @@ import { differenceInCalendarDays, parseISO } from "date-fns";
 import { toast } from "sonner";
 import {
   fdGetPackage,
+  fdGetPackageCities,
+  fdGetPackageCountries,
   fdListDepartures,
   fdUpdateDeparture,
 } from "@/data-access/fixed-departures";
@@ -65,6 +67,10 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   const [pendingTab, setPendingTab] = useState<FDTabId | null>(null);
   const [showTabSwitchDialog, setShowTabSwitchDialog] = useState(false);
   const [tabResetKeys, setTabResetKeys] = useState<Partial<Record<FDTabId, number>>>({});
+  // Highest tab index the user has successfully saved in create mode. Used to
+  // gate forward navigation while still allowing free backward navigation to
+  // any already-saved tab.
+  const [maxSavedTabIdx, setMaxSavedTabIdx] = useState<number>(-1);
   const queryClient = useQueryClient();
 
   const generalRef = useRef<FDTabHandle>(null);
@@ -85,6 +91,9 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
       setTabResetKeys({});
       setPendingTab(null);
       setShowTabSwitchDialog(false);
+      // In edit mode every tab is unlocked; in create mode start with nothing
+      // saved.
+      setMaxSavedTabIdx(packageId ? TABS.length - 1 : -1);
       prevDurationRef.current = null;
     }
   }, [open, packageId]);
@@ -92,6 +101,18 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   const { data: pkg } = useQuery({
     queryKey: ["fd-package", effectiveId],
     queryFn: () => fdGetPackage(effectiveId as string),
+    enabled: !!effectiveId && open,
+  });
+
+  const { data: pkgCountries = [] } = useQuery({
+    queryKey: ["fd-package", effectiveId, "countries"],
+    queryFn: () => fdGetPackageCountries(effectiveId as string),
+    enabled: !!effectiveId && open,
+  });
+
+  const { data: pkgCities = [] } = useQuery({
+    queryKey: ["fd-package", effectiveId, "cities"],
+    queryFn: () => fdGetPackageCities(effectiveId as string),
     enabled: !!effectiveId && open,
   });
 
@@ -153,12 +174,21 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
 
   const isTabDisabled = (tabId: string) => {
     if (mode === "edit") return false;
-    return tabId !== activeTab;
+    if (tabId === activeTab) return false;
+    const idx = TABS.findIndex((t) => t.id === tabId);
+    if (idx < 0) return true;
+    return idx > maxSavedTabIdx;
   };
 
   const handleAdvance = () => {
     const idx = TABS.findIndex((t) => t.id === activeTab);
     if (idx >= 0 && idx < TABS.length - 1) setActiveTab(TABS[idx + 1].id);
+  };
+
+  const markTabSaved = (tabId: FDTabId) => {
+    const idx = TABS.findIndex((t) => t.id === tabId);
+    if (idx < 0) return;
+    setMaxSavedTabIdx((prev) => Math.max(prev, idx));
   };
 
   const tabIdx = useMemo(() => TABS.findIndex((t) => t.id === activeTab), [activeTab]);
@@ -233,7 +263,27 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
     setPendingTab(null);
   };
 
-  const title = mode === "create" ? "Add New Fixed Departure" : pkg?.name || "Edit Fixed Departure";
+  const fullIdentity = useMemo(() => {
+    if (!pkg?.name) return "";
+    const parts: string[] = [pkg.name];
+    if (pkg.tour_code) parts.push(String(pkg.tour_code));
+    if (pkgCountries.length > 0) parts.push(pkgCountries.map((c) => c.country_name).join(", "));
+    if (pkgCities.length > 0) parts.push(pkgCities.map((c) => c.city_name).join(", "));
+    return parts.join(" · ");
+  }, [pkg?.name, pkg?.tour_code, pkgCountries, pkgCities]);
+
+  const TITLE_MAX_CHARS = 80;
+  const truncatedIdentity = useMemo(() => {
+    if (fullIdentity.length <= TITLE_MAX_CHARS) return fullIdentity;
+    return `${fullIdentity.slice(0, TITLE_MAX_CHARS - 1)}…`;
+  }, [fullIdentity]);
+
+  const hasIdentity = fullIdentity.length > 0;
+  const title = hasIdentity
+    ? truncatedIdentity
+    : mode === "create"
+      ? "Add new FD"
+      : "Edit Fixed Departure";
   const anyDirty = dirtyTabs.size > 0;
   const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures"].includes(activeTab);
 
@@ -249,7 +299,12 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
           <DialogTitle className="sr-only">{title}</DialogTitle>
           <div className="sticky top-0 z-10">
             <div className="border-b bg-background px-6 py-3 flex items-center justify-between">
-              <div className="text-base font-semibold">{title}</div>
+              <div
+                className="text-base font-semibold truncate"
+                title={hasIdentity && fullIdentity !== truncatedIdentity ? fullIdentity : undefined}
+              >
+                {title}
+              </div>
               <DialogClose asChild>
                 <button
                   type="button"
@@ -325,6 +380,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                         queryClient.invalidateQueries({ queryKey: ["fd-package", idForInvalidate, "for-itinerary"] });
                         queryClient.invalidateQueries({ queryKey: ["fd-package", idForInvalidate] });
                       }
+                      markTabSaved("general");
                       onSaved?.();
                     }}
                     onAdvance={handleAdvance}
@@ -341,6 +397,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                       if (effectiveId) {
                         queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "for-itinerary"] });
                       }
+                      markTabSaved("itinerary");
                       onSaved?.();
                     }}
                     onAdvance={handleAdvance}
@@ -358,6 +415,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                         queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "for-inc-exc"] });
                         queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId] });
                       }
+                      markTabSaved("inc-exc");
                       onSaved?.();
                     }}
                     onAdvance={handleAdvance}
@@ -374,6 +432,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                       if (effectiveId) {
                         queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "addons"] });
                       }
+                      markTabSaved("addons");
                       onSaved?.();
                     }}
                     onAdvance={handleAdvance}
@@ -390,6 +449,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                       if (effectiveId) {
                         queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "departures"] });
                       }
+                      markTabSaved("departures");
                       onSaved?.();
                     }}
                     onAdvance={handleAdvance}
