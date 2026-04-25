@@ -38,7 +38,7 @@ const ContractFormSchema = z
     stay_valid_till: z.date().optional(),
     booking_valid_from: z.date().optional(),
     booking_valid_till: z.date().optional(),
-    rate_basis: z.string().optional(),
+    rate_type: z.enum(["net", "bar"]),
     status: z.enum(["draft", "active"]),
   })
   .refine(
@@ -99,7 +99,7 @@ export default function ContractFormModal({
       booking_valid_till: initialData?.booking_valid_till
         ? new Date(initialData.booking_valid_till)
         : undefined,
-      rate_basis: initialData?.rate_basis || "",
+      rate_type: (initialData?.rate_type as "net" | "bar") || "net",
       status: initialData?.status === "draft" ? "draft" : "active",
     },
   });
@@ -133,7 +133,7 @@ export default function ContractFormModal({
         booking_valid_till: data.booking_valid_till
           ? data.booking_valid_till.toISOString().split("T")[0]
           : undefined,
-        rate_basis: data.rate_basis || undefined,
+        rate_type: data.rate_type,
         status: data.status,
       };
 
@@ -270,41 +270,66 @@ export default function ContractFormModal({
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="rate_basis"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Rate Basis</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Per night" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status *</FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="rate_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Rate Type *</FormLabel>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
+                      <div className="flex h-10 rounded-md border border-input overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => field.onChange("net")}
+                          className={`flex-1 text-sm font-medium transition-colors ${
+                            field.value === "net"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-background text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          Net Rate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => field.onChange("bar")}
+                          className={`flex-1 text-sm font-medium border-l border-input transition-colors ${
+                            field.value === "bar"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-background text-foreground hover:bg-muted"
+                          }`}
+                        >
+                          BAR Rate
+                        </button>
+                      </div>
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value="draft">Draft</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status *</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="active">Active</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={onClose}>

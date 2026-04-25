@@ -9,7 +9,7 @@ export interface DmcContract {
   booking_valid_from: string | null;
   booking_valid_till: string | null;
   status: "draft" | "active" | "archived";
-  rate_basis: string | null;
+  rate_type: "net" | "bar" | null;
   default_availability: number | null;
   created_at: string;
   market?: { id: string; name: string } | null;

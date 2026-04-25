@@ -20,7 +20,7 @@ export type CreateContractPayload = {
   stay_valid_till?: string;
   booking_valid_from?: string;
   booking_valid_till?: string;
-  rate_basis?: string;
+  rate_type?: "net" | "bar";
   status?: "draft" | "active";
 };
 
@@ -28,11 +28,15 @@ export async function listContracts(
   hotelId: string,
   includeArchived: boolean = false
 ): Promise<Result<DmcContract[]>> {
-  const raw = await http.get<DmcContract[]>(
+  const raw = await http.get<{ data: DmcContract[]; total: number }>(
     `/api/hotels/${hotelId}/contracts`,
     { includeArchived }
   );
-  return unwrap<DmcContract[]>(raw);
+  const unwrapped = unwrap<{ data: DmcContract[]; total: number }>(raw);
+  if (unwrapped.error) {
+    return { data: null, error: unwrapped.error };
+  }
+  return { data: unwrapped.data?.data || [], error: null };
 }
 
 export async function createContract(
