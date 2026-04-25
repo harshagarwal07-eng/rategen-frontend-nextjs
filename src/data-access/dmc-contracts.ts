@@ -28,9 +28,14 @@ export async function listContracts(
   hotelId: string,
   includeArchived: boolean = false
 ): Promise<Result<DmcContract[]>> {
+  // Backend's class-validator+transformer treats any non-empty string as
+  // truthy when implicit-converting to boolean, so sending
+  // `?includeArchived=false` would still include archived rows. Only attach
+  // the param when we actually want archived rows.
+  const params = includeArchived ? { includeArchived: true } : {};
   const raw = await http.get<{ data: DmcContract[]; total: number }>(
     `/api/hotels/${hotelId}/contracts`,
-    { includeArchived }
+    params
   );
   const unwrapped = unwrap<{ data: DmcContract[]; total: number }>(raw);
   if (unwrapped.error) {

@@ -16,7 +16,14 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { BorderedCard } from "@/components/ui/bordered-card";
-import { AlertModal } from "@/components/ui/alert-modal";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { listContracts, deleteContract, updateContract } from "@/data-access/dmc-contracts";
 import { DmcContract } from "@/types/dmc-contracts";
 import { toast } from "sonner";
@@ -60,19 +67,38 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
     }
   };
 
-  const handleDelete = async () => {
+  const handleArchive = async () => {
     if (!deleteTarget) return;
+    const archivedId = deleteTarget.id;
     setIsDeleting(true);
     try {
-      const result = await deleteContract(deleteTarget.id);
+      const result = await deleteContract(archivedId);
       if (result.error) {
         toast.error(result.error);
         return;
       }
+      // Optimistically drop the row from the current view (or flip its status
+      // to archived if archived rows are visible) so the user sees the change
+      // before the refetch lands.
+      qc.setQueryData<{ data: DmcContract[]; error: string | null }>(
+        ["dmc-contracts", hotelId, showArchived],
+        (old) => {
+          if (!old?.data) return old;
+          if (showArchived) {
+            return {
+              ...old,
+              data: old.data.map((c) =>
+                c.id === archivedId ? { ...c, status: "archived" as const } : c
+              ),
+            };
+          }
+          return { ...old, data: old.data.filter((c) => c.id !== archivedId) };
+        }
+      );
       await qc.invalidateQueries({ queryKey: ["dmc-contracts", hotelId] });
-      toast.success("Contract deleted");
+      toast.success("Contract archived");
     } catch (err) {
-      toast.error("Failed to delete contract");
+      toast.error("Failed to archive contract");
     } finally {
       setIsDeleting(false);
       setDeleteTarget(null);
@@ -236,14 +262,33 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
         initialData={editContract}
       />
 
-      <AlertModal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-        loading={isDeleting}
-        title="Delete contract?"
-        description="This will permanently remove the contract. This action cannot be undone."
-      />
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Archive this contract?</DialogTitle>
+            <DialogDescription>
+              It will be hidden from the list. You can show archived contracts
+              using the toggle above.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isDeleting}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" disabled={isDeleting} onClick={handleArchive}>
+              {isDeleting ? "Archiving…" : "Archive"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
