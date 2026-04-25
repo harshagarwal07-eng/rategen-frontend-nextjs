@@ -80,3 +80,42 @@ export type AgeBand = (typeof AGE_BANDS)[number];
 
 export const PACKAGE_STATUSES = ["active", "inactive"] as const;
 export type PackageStatus = (typeof PACKAGE_STATUSES)[number];
+
+export const FD_ADDON_TYPES = ["day_tour", "multi_day_tour", "meal", "transfer", "other"] as const;
+export type FDAddonType = (typeof FD_ADDON_TYPES)[number];
+
+export interface FDAddonItineraryDay {
+  id?: string;
+  addon_id?: string;
+  day_number: number;
+  title: string;
+  description: string | null;
+  includes: string | null;
+  meals_included: string[];
+  overnight_city: string | null;
+  overnight_city_id: string | null;
+  accommodation_note: string | null;
+  image_url: string | null;
+}
+
+export interface FDAddon {
+  id: string;
+  package_id: string;
+  name: string;
+  description: string | null;
+  addon_type: FDAddonType;
+  is_mandatory: boolean | null;
+  duration_days: number | null;
+  price_adult: number | null;
+  price_child: number | null;
+  price_infant: number | null;
+  price_unit: string | null;
+  max_capacity: number | null;
+  inclusions: string[];
+  exclusions: string[];
+  transfer_type: string | null;
+  transfer_mode: string | null;
+  tour_includes_transfer: boolean | null;
+  tour_transfer_type: string | null;
+  fd_addon_itinerary_days?: FDAddonItineraryDay[];
+}

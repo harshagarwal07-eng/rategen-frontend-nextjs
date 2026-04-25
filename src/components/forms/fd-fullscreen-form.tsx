@@ -8,6 +8,7 @@ import { fdGetPackage } from "@/data-access/fixed-departures";
 import { FDGeneralInfoTab } from "./fd-tabs/tab-general-info";
 import { FDItineraryTab } from "./fd-tabs/tab-itinerary";
 import { FDInclusionsExclusionsTab } from "./fd-tabs/tab-inclusions-exclusions";
+import { FDAddonsTab } from "./fd-tabs/tab-addons";
 import { FDTabPlaceholder } from "./fd-tabs/tab-placeholder";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -132,7 +133,19 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                   onAdvance={handleAdvance}
                 />
               </TabsContent>
-              <TabsContent value="addons"><FDTabPlaceholder title="Add-ons" /></TabsContent>
+              <TabsContent value="addons">
+                <FDAddonsTab
+                  mode={mode}
+                  packageId={effectiveId}
+                  onSaved={() => {
+                    if (effectiveId) {
+                      queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "addons"] });
+                    }
+                    onSaved?.();
+                  }}
+                  onAdvance={handleAdvance}
+                />
+              </TabsContent>
               <TabsContent value="departures"><FDTabPlaceholder title="Departure Dates" /></TabsContent>
               <TabsContent value="flights-visa"><FDTabPlaceholder title="Flights & Visa" /></TabsContent>
               <TabsContent value="policies"><FDTabPlaceholder title="Policies" /></TabsContent>

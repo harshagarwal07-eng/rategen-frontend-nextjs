@@ -73,3 +73,49 @@ export const FDItinerarySchema = z.object({
 
 export type IFDItineraryDay = z.infer<typeof FDItineraryDaySchema>;
 export type IFDItinerary = z.infer<typeof FDItinerarySchema>;
+
+export const FDAddonTypeSchema = z.enum(["day_tour", "multi_day_tour", "meal", "transfer", "other"]);
+export type FDAddonTypeInput = z.infer<typeof FDAddonTypeSchema>;
+
+export const FDAddonDaySchema = z.object({
+  day_number: z.coerce.number().int().min(1),
+  title: z.string().default(""),
+  description: z.string().nullable().optional().default(""),
+  includes: z.string().nullable().optional().default(""),
+  meals_included: z.array(z.string()).default([]),
+  overnight_city_id: z.string().uuid().nullable().optional(),
+  accommodation_note: z.string().nullable().optional().default(""),
+  image_url: z
+    .string()
+    .url("Must be a valid URL")
+    .or(z.literal(""))
+    .nullable()
+    .optional(),
+});
+export type IFDAddonDay = z.infer<typeof FDAddonDaySchema>;
+
+export const FDAddonFormSchema = z
+  .object({
+    name: z.string().min(1, "Name is required"),
+    description: z.string().nullable().optional().default(""),
+    addon_type: FDAddonTypeSchema,
+    is_mandatory: z.boolean().default(false),
+    duration_days: z.coerce.number().int().min(1).nullable().optional(),
+    price_unit: z.string().nullable().optional(),
+    price_adult: z.coerce.number().min(0).nullable().optional(),
+    price_child: z.coerce.number().min(0).nullable().optional(),
+    price_infant: z.coerce.number().min(0).nullable().optional(),
+    max_capacity: z.coerce.number().int().min(0).nullable().optional(),
+    inclusions: z.array(z.string()).default([]),
+    exclusions: z.array(z.string()).default([]),
+    transfer_type: z.string().nullable().optional().default(""),
+    transfer_mode: z.string().nullable().optional().default(""),
+    tour_includes_transfer: z.boolean().default(false),
+    tour_transfer_type: z.string().nullable().optional().default(""),
+    days: z.array(FDAddonDaySchema).default([]),
+  })
+  .refine(
+    (v) => v.addon_type !== "multi_day_tour" || (v.duration_days != null && v.duration_days >= 1),
+    { message: "duration_days is required for multi-day tours", path: ["duration_days"] },
+  );
+export type IFDAddonForm = z.infer<typeof FDAddonFormSchema>;

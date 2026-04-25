@@ -11,6 +11,8 @@ import type {
   FDPackageDetail,
   FDAgePolicy,
   FDItineraryDay,
+  FDAddon,
+  FDAddonItineraryDay,
 } from "@/types/fixed-departures";
 
 const fdApi = axios.create({
@@ -117,5 +119,33 @@ export async function fdReplaceItinerary(
   days: Array<Omit<FDItineraryDay, "id" | "package_id" | "overnight_city">>,
 ): Promise<FDItineraryDay[]> {
   const { data } = await fdApi.put<FDItineraryDay[]>(`${BASE}/packages/${packageId}/itinerary`, days);
+  return data;
+}
+
+export async function fdListAddons(packageId: string): Promise<FDAddon[]> {
+  const { data } = await fdApi.get<FDAddon[]>(`${BASE}/packages/${packageId}/addons`);
+  return data;
+}
+
+export async function fdCreateAddon(packageId: string, payload: Partial<FDAddon>): Promise<FDAddon> {
+  const { data } = await fdApi.post<FDAddon>(`${BASE}/packages/${packageId}/addons`, payload);
+  return data;
+}
+
+export async function fdUpdateAddon(addonId: string, payload: Partial<FDAddon>): Promise<FDAddon> {
+  const { data } = await fdApi.patch<FDAddon>(`${BASE}/addons/${addonId}`, payload);
+  return data;
+}
+
+export async function fdDeleteAddon(addonId: string): Promise<{ deleted: boolean }> {
+  const { data } = await fdApi.delete<{ deleted: boolean }>(`${BASE}/addons/${addonId}`);
+  return data;
+}
+
+export async function fdReplaceAddonItinerary(
+  addonId: string,
+  days: Array<Omit<FDAddonItineraryDay, "id" | "addon_id" | "overnight_city">>,
+): Promise<FDAddonItineraryDay[]> {
+  const { data } = await fdApi.put<FDAddonItineraryDay[]>(`${BASE}/addons/${addonId}/itinerary`, days);
   return data;
 }
