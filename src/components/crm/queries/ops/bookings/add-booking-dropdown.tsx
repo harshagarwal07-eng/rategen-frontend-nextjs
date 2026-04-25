@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -22,6 +22,7 @@ interface AddBookingDropdownProps {
 export function AddBookingDropdown({ queryId, optionNumber, className }: AddBookingDropdownProps) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
 
   // Fetch available activities
@@ -75,9 +76,25 @@ export function AddBookingDropdown({ queryId, optionNumber, className }: AddBook
     return dateString ? format(parseISO(dateString), "MMM d") : "";
   };
 
+  const filteredActivities = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return activities;
+    return activities.filter((activity) => {
+      const name = getServiceName(activity).toLowerCase();
+      const type = activity.service_type.toLowerCase();
+      return name.includes(q) || type.includes(q);
+    });
+  }, [activities, search]);
+
   return (
     <div className={cn(className)}>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setSearch("");
+        }}
+      >
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className="h-8 w-full text-xs">
             <Plus className="h-3 w-3 mr-1.5" />
@@ -85,8 +102,13 @@ export function AddBookingDropdown({ queryId, optionNumber, className }: AddBook
           </Button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-[400px] p-0">
-          <Command>
-            <CommandInput placeholder="Search activities..." className="h-9" />
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Search activities..."
+              className="h-9"
+              value={search}
+              onValueChange={setSearch}
+            />
             <CommandList>
               <CommandEmpty>
                 {isLoading ? (
@@ -98,10 +120,10 @@ export function AddBookingDropdown({ queryId, optionNumber, className }: AddBook
                 )}
               </CommandEmpty>
               <CommandGroup>
-                {activities.map((activity) => (
+                {filteredActivities.map((activity) => (
                   <CommandItem
                     key={activity.id}
-                    value={`${getServiceName(activity)} ${activity.service_type} day ${activity.day_number} ${getServiceDate(activity)}`}
+                    value={activity.id}
                     onSelect={() => handleSelectActivity(activity)}
                     className="flex items-center gap-2 py-2 cursor-pointer"
                   >
