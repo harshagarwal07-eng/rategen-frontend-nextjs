@@ -24,43 +24,25 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Autocomplete } from "@/components/ui/autocomplete";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DateValidityPicker, type DateRangeValue } from "@/components/ui/date-validity-picker";
 import { createContract, updateContract } from "@/data-access/dmc-contracts";
 import { listMarkets } from "@/data-access/dmc-markets";
 import { DmcContract } from "@/types/dmc-contracts";
 import { toast } from "sonner";
 
-const ContractFormSchema = z
-  .object({
-    name: z.string().min(1, "Name is required"),
-    market_id: z.string().optional(),
-    stay_valid_from: z.date().optional(),
-    stay_valid_till: z.date().optional(),
-    booking_valid_from: z.date().optional(),
-    booking_valid_till: z.date().optional(),
-    rate_type: z.enum(["net", "bar"]),
-    status: z.enum(["draft", "active"]),
-  })
-  .refine(
-    (d) =>
-      !d.stay_valid_from ||
-      !d.stay_valid_till ||
-      d.stay_valid_till >= d.stay_valid_from,
-    {
-      message: "Stay till must be on or after stay from",
-      path: ["stay_valid_till"],
-    }
-  )
-  .refine(
-    (d) =>
-      !d.booking_valid_from ||
-      !d.booking_valid_till ||
-      d.booking_valid_till >= d.booking_valid_from,
-    {
-      message: "Booking till must be on or after booking from",
-      path: ["booking_valid_till"],
-    }
-  );
+const dateRangeSchema = z
+  .object({ from: z.date(), to: z.date() })
+  .refine((d) => d.to >= d.from, { message: "End date must be on or after start date" })
+  .optional();
+
+const ContractFormSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  market_id: z.string().optional(),
+  stay_validity: dateRangeSchema,
+  booking_validity: dateRangeSchema,
+  rate_type: z.enum(["net", "bar"]),
+  status: z.enum(["draft", "active"]),
+});
 
 export type ContractFormValues = z.infer<typeof ContractFormSchema>;
 
@@ -87,18 +69,20 @@ export default function ContractFormModal({
     defaultValues: {
       name: initialData?.name || "",
       market_id: initialData?.market_id || "",
-      stay_valid_from: initialData?.stay_valid_from
-        ? new Date(initialData.stay_valid_from)
-        : undefined,
-      stay_valid_till: initialData?.stay_valid_till
-        ? new Date(initialData.stay_valid_till)
-        : undefined,
-      booking_valid_from: initialData?.booking_valid_from
-        ? new Date(initialData.booking_valid_from)
-        : undefined,
-      booking_valid_till: initialData?.booking_valid_till
-        ? new Date(initialData.booking_valid_till)
-        : undefined,
+      stay_validity:
+        initialData?.stay_valid_from && initialData?.stay_valid_till
+          ? {
+              from: new Date(initialData.stay_valid_from),
+              to: new Date(initialData.stay_valid_till),
+            }
+          : undefined,
+      booking_validity:
+        initialData?.booking_valid_from && initialData?.booking_valid_till
+          ? {
+              from: new Date(initialData.booking_valid_from),
+              to: new Date(initialData.booking_valid_till),
+            }
+          : undefined,
       rate_type: (initialData?.rate_type as "net" | "bar") || "net",
       status: initialData?.status === "draft" ? "draft" : "active",
     },
@@ -118,21 +102,16 @@ export default function ContractFormModal({
   const onSubmit = async (data: ContractFormValues) => {
     setIsSaving(true);
     try {
+      const toDateStr = (d?: Date) =>
+        d ? d.toISOString().split("T")[0] : undefined;
+
       const payload = {
         name: data.name,
         market_id: data.market_id || undefined,
-        stay_valid_from: data.stay_valid_from
-          ? data.stay_valid_from.toISOString().split("T")[0]
-          : undefined,
-        stay_valid_till: data.stay_valid_till
-          ? data.stay_valid_till.toISOString().split("T")[0]
-          : undefined,
-        booking_valid_from: data.booking_valid_from
-          ? data.booking_valid_from.toISOString().split("T")[0]
-          : undefined,
-        booking_valid_till: data.booking_valid_till
-          ? data.booking_valid_till.toISOString().split("T")[0]
-          : undefined,
+        stay_valid_from: toDateStr(data.stay_validity?.from),
+        stay_valid_till: toDateStr(data.stay_validity?.to),
+        booking_valid_from: toDateStr(data.booking_validity?.from),
+        booking_valid_till: toDateStr(data.booking_validity?.to),
         rate_type: data.rate_type,
         status: data.status,
       };
@@ -202,73 +181,41 @@ export default function ContractFormModal({
               )}
             />
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="stay_valid_from"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Stay Valid From</FormLabel>
-                    <DatePicker
-                      value={field.value}
+            <FormField
+              control={form.control}
+              name="stay_validity"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Stay Validity</FormLabel>
+                  <FormControl>
+                    <DateValidityPicker
+                      value={field.value as DateRangeValue}
                       onChange={field.onChange}
-                      placeholder="Select date"
+                      placeholder="Select stay date range"
                     />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <FormField
-                control={form.control}
-                name="stay_valid_till"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Stay Valid Till</FormLabel>
-                    <DatePicker
-                      value={field.value}
+            <FormField
+              control={form.control}
+              name="booking_validity"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Booking Validity</FormLabel>
+                  <FormControl>
+                    <DateValidityPicker
+                      value={field.value as DateRangeValue}
                       onChange={field.onChange}
-                      placeholder="Select date"
+                      placeholder="Select booking date range"
                     />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="booking_valid_from"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Booking Valid From</FormLabel>
-                    <DatePicker
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Select date"
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="booking_valid_till"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Booking Valid Till</FormLabel>
-                    <DatePicker
-                      value={field.value}
-                      onChange={field.onChange}
-                      placeholder="Select date"
-                    />
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
