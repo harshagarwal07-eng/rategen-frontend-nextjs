@@ -49,6 +49,7 @@ interface Props {
   addons: FDAddon[];
   packageBands?: FDAgePolicy[];
   rateSources?: RateSource[];
+  flightGroups?: string[];
   mode: DrawerMode | null;
   onSaved: (saved: FDDeparture) => void;
 }
@@ -62,6 +63,7 @@ export function DepartureDrawer({
   addons,
   packageBands,
   rateSources,
+  flightGroups,
   mode,
   onSaved,
 }: Props) {
@@ -167,6 +169,7 @@ export function DepartureDrawer({
           <div className="flex-1 overflow-y-auto p-4">
             {state ? (
               <DepartureForm
+                flightGroups={flightGroups}
                 value={state}
                 onChange={updateState}
                 errors={errors}

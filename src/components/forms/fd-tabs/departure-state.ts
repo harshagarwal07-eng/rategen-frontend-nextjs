@@ -5,6 +5,7 @@ import {
   type LandPricingState,
 } from "./departure-pricing-section";
 import type { AddonOverrideState } from "./departure-addon-pricing-section";
+import type { FlightPricingRow } from "./departure-flight-pricing-section";
 import {
   computeCutoffDate,
   computeReturnDate,
@@ -25,6 +26,15 @@ export function pricingFromServer(d: FDDeparture): LandPricingState {
     rate_child_extra_bed: land.rate_child_extra_bed,
     rate_infant: land.rate_infant,
   };
+}
+
+export function flightPricingFromServer(d: FDDeparture): FlightPricingRow[] {
+  return (d.fd_flight_pricing ?? []).map((p) => ({
+    flight_group: p.flight_group,
+    price_adult: p.price_adult ?? null,
+    price_child: p.price_child ?? null,
+    price_infant: p.price_infant ?? null,
+  }));
 }
 
 export function addonOverridesFromServer(d: FDDeparture): AddonOverrideState[] {
@@ -71,6 +81,7 @@ export function departureToFormState(d: FDDeparture): DepartureFormState {
     internal_notes: d.internal_notes ?? "",
     pricing: pricingFromServer(d),
     addon_overrides: addonOverridesFromServer(d),
+    flight_pricing: flightPricingFromServer(d),
   };
 }
 
@@ -95,5 +106,6 @@ export function emptyDepartureFormState(
     internal_notes: "",
     pricing: { ...EMPTY_LAND_PRICING },
     addon_overrides: [],
+    flight_pricing: [],
   };
 }

@@ -183,6 +183,7 @@ export interface FDDeparture {
   seats_available?: number;
   fd_departure_pricing?: FDDeparturePricing[];
   fd_addon_departure_pricing?: FDAddonDeparturePricing[];
+  fd_flight_pricing?: FDFlightPricing[];
 }
 
 export type FDValueType = "percentage" | "fixed";

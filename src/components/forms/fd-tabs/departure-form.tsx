@@ -23,6 +23,10 @@ import {
   type AddonOverrideState,
 } from "./departure-addon-pricing-section";
 import {
+  DepartureFlightPricingSection,
+  type FlightPricingRow,
+} from "./departure-flight-pricing-section";
+import {
   FD_DEPARTURE_STATUSES,
   FD_AVAILABILITY_STATUSES,
   type FDAddon,
@@ -45,6 +49,7 @@ export interface DepartureFormState {
   internal_notes: string;
   pricing: LandPricingState;
   addon_overrides: AddonOverrideState[];
+  flight_pricing: FlightPricingRow[];
 }
 
 export const DEFAULT_CUTOFF_OFFSET_DAYS = 15;
@@ -119,6 +124,7 @@ interface Props {
   packageBands?: FDAgePolicy[];
   rateSources?: RateSource[];
   excludeSourceId?: string;
+  flightGroups?: string[];
 }
 
 export function DepartureForm({
@@ -130,6 +136,7 @@ export function DepartureForm({
   packageBands,
   rateSources,
   excludeSourceId,
+  flightGroups = [],
 }: Props) {
   const handleDepartureDateChange = (newDate: string) => {
     const newReturn = computeReturnDate(newDate, value.duration);
@@ -327,7 +334,15 @@ export function DepartureForm({
         excludeSourceId={excludeSourceId}
       />
 
-      {/* Section 3: Addon Pricing — only if package has add-ons */}
+      {/* Section 3: Flight Pricing — per group from Tab 5 */}
+      <DepartureFlightPricingSection
+        flightGroups={flightGroups}
+        value={value.flight_pricing}
+        onChange={(next) => onChange({ flight_pricing: next })}
+        currency={currency}
+      />
+
+      {/* Section 4: Addon Pricing — only if package has add-ons */}
       {addons.length > 0 && (
         <DepartureAddonPricingSection
           addons={addons}

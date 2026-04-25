@@ -3,6 +3,7 @@ import {
   fdUpdateDeparture,
   fdUpsertDeparturePricing,
   fdUpsertAddonDeparturePricing,
+  fdUpsertFlightPricing,
 } from "@/data-access/fixed-departures";
 import type { FDAddon, FDDeparture } from "@/types/fixed-departures";
 import type { DepartureFormState } from "./departure-form";
@@ -75,6 +76,20 @@ export async function saveDeparture({
       }));
     if (addonRows.length > 0) {
       await fdUpsertAddonDeparturePricing(saved.id, addonRows);
+    }
+
+    // Flight pricing: one upsert per group. Groups removed from Tab 5 are
+    // dropped silently — stale rows in fd_flight_pricing remain (no DELETE
+    // endpoint). Empty groups (all-null prices) are still upserted so the
+    // user can clear values.
+    for (const row of state.flight_pricing) {
+      if (!row.flight_group) continue;
+      await fdUpsertFlightPricing(saved.id, {
+        flight_group: row.flight_group,
+        price_adult: row.price_adult,
+        price_child: row.price_child,
+        price_infant: row.price_infant,
+      });
     }
 
     return { success: true, saved };

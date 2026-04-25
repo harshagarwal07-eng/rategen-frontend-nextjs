@@ -77,12 +77,13 @@ interface Props {
   addons: FDAddon[];
   packageBands?: FDAgePolicy[];
   rateSources?: RateSource[];
+  flightGroups?: string[];
   onChange: (patch: Partial<DepartureFormState>) => void;
   onDeleteRequest: () => void;
 }
 
 export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function DepartureRow(
-  { packageId, draft, defaultOpen, isPast, currency, addons, packageBands, rateSources, onChange, onDeleteRequest },
+  { packageId, draft, defaultOpen, isPast, currency, addons, packageBands, rateSources, flightGroups, onChange, onDeleteRequest },
   ref,
 ) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -199,6 +200,7 @@ export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function Depar
             packageBands={packageBands}
             rateSources={rateSources}
             excludeSourceId={draft.id}
+            flightGroups={flightGroups}
           />
         </div>
       )}

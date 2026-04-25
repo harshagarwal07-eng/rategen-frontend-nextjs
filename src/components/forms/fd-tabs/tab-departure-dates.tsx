@@ -36,11 +36,13 @@ import {
   fdGetPackage,
   fdListAddons,
   fdDeleteDeparture,
+  fdGetFlights,
 } from "@/data-access/fixed-departures";
 import type {
   FDAddon,
   FDAgePolicy,
   FDDeparture,
+  FDFlightSegment,
   FDPackageDetail,
 } from "@/types/fixed-departures";
 import type { FDTabHandle } from "@/components/forms/fd-fullscreen-form";
@@ -149,6 +151,27 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
     queryFn: () => fdListDepartures(packageId as string),
     enabled: !!packageId,
   });
+
+  const { data: flightSegments = [] } = useQuery<FDFlightSegment[]>({
+    queryKey: ["fd-package", packageId, "flights"],
+    queryFn: () => fdGetFlights(packageId as string),
+    enabled: !!packageId,
+  });
+
+  // Flight group names from Tab 5, deduped + sorted by first occurrence's
+  // sort_order. Used to render one flight pricing row per group on each
+  // departure.
+  const flightGroups = useMemo<string[]>(() => {
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const seg of [...flightSegments].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))) {
+      const name = seg.flight_group?.trim();
+      if (!name || seen.has(name)) continue;
+      seen.add(name);
+      ordered.push(name);
+    }
+    return ordered;
+  }, [flightSegments]);
 
   const currency = (pkg?.currency as string | null) ?? null;
   const packageDuration = (pkg?.duration_nights as number | null) ?? DEFAULT_DURATION;
@@ -399,6 +422,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
           addons={addons}
           packageBands={packageBands}
           rateSources={rateSources}
+          flightGroups={flightGroups}
           getOrCreateRef={getOrCreateRef}
           updateDraft={updateDraft}
           setDeleteTarget={setDeleteTarget}
@@ -420,6 +444,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
         addons={addons}
         packageBands={packageBands}
         rateSources={rateSources}
+        flightGroups={flightGroups}
         mode={drawerState}
         onSaved={() => { void handleDrawerSaved(); }}
       />
@@ -558,6 +583,7 @@ interface TableViewProps {
   addons: FDAddon[];
   packageBands: FDAgePolicy[];
   rateSources: RateSource[];
+  flightGroups: string[];
   getOrCreateRef: (id: string) => React.RefObject<DepartureRowHandle | null>;
   updateDraft: (localId: string, patch: Partial<DepartureFormState>) => void;
   setDeleteTarget: (d: DraftDeparture | null) => void;
@@ -573,6 +599,7 @@ function TableView({
   addons,
   packageBands,
   rateSources,
+  flightGroups,
   getOrCreateRef,
   updateDraft,
   setDeleteTarget,
@@ -616,6 +643,7 @@ function TableView({
             addons={addons}
             packageBands={packageBands}
             rateSources={rateSources}
+            flightGroups={flightGroups}
             onChange={(patch) => updateDraft(draft._localId, patch)}
             onDeleteRequest={() => setDeleteTarget(draft)}
           />
