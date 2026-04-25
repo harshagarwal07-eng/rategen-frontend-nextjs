@@ -54,6 +54,9 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   const [dirtyTabs, setDirtyTabs] = useState<Set<FDTabId>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [pendingTab, setPendingTab] = useState<FDTabId | null>(null);
+  const [showTabSwitchDialog, setShowTabSwitchDialog] = useState(false);
+  const [tabResetKeys, setTabResetKeys] = useState<Partial<Record<FDTabId, number>>>({});
   const queryClient = useQueryClient();
 
   const generalRef = useRef<FDTabHandle>(null);
@@ -69,6 +72,9 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
       setActiveTab("general");
       setCreatedId(null);
       setDirtyTabs(new Set());
+      setTabResetKeys({});
+      setPendingTab(null);
+      setShowTabSwitchDialog(false);
     }
   }, [open, packageId]);
 
@@ -140,6 +146,25 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
     onOpenChange(false);
   };
 
+  const handleTabClick = (tabId: FDTabId) => {
+    if (tabId === activeTab) return;
+    if (dirtyTabs.has(activeTab)) {
+      setPendingTab(tabId);
+      setShowTabSwitchDialog(true);
+      return;
+    }
+    setActiveTab(tabId);
+  };
+
+  const confirmTabSwitch = () => {
+    setShowTabSwitchDialog(false);
+    if (!pendingTab) return;
+    setTabResetKeys((prev) => ({ ...prev, [activeTab]: (prev[activeTab] ?? 0) + 1 }));
+    trackDirty(activeTab)(false);
+    setActiveTab(pendingTab);
+    setPendingTab(null);
+  };
+
   const title = mode === "create" ? "Add New Fixed Departure" : pkg?.name || "Edit Fixed Departure";
   const anyDirty = dirtyTabs.size > 0;
   const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons"].includes(activeTab);
@@ -180,7 +205,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                         key={t.id}
                         type="button"
                         disabled={disabled}
-                        onClick={() => !disabled && setActiveTab(t.id)}
+                        onClick={() => !disabled && handleTabClick(t.id)}
                         className={cn(
                           "flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200",
                           isActive
@@ -219,6 +244,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as FDTabId)} className="w-full">
                 <TabsContent value="general">
                   <FDGeneralInfoTab
+                    key={tabResetKeys.general ?? 0}
                     ref={generalRef}
                     mode={mode}
                     packageId={effectiveId}
@@ -237,6 +263,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                 </TabsContent>
                 <TabsContent value="itinerary">
                   <FDItineraryTab
+                    key={tabResetKeys.itinerary ?? 0}
                     ref={itineraryRef}
                     mode={mode}
                     packageId={effectiveId}
@@ -252,6 +279,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                 </TabsContent>
                 <TabsContent value="inc-exc">
                   <FDInclusionsExclusionsTab
+                    key={tabResetKeys["inc-exc"] ?? 0}
                     ref={incExcRef}
                     mode={mode}
                     packageId={effectiveId}
@@ -268,6 +296,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                 </TabsContent>
                 <TabsContent value="addons">
                   <FDAddonsTab
+                    key={tabResetKeys.addons ?? 0}
                     ref={addonsRef}
                     mode={mode}
                     packageId={effectiveId}
@@ -340,6 +369,24 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
           <AlertDialogFooter>
             <AlertDialogCancel>Keep editing</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDiscard}>Discard</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showTabSwitchDialog}
+        onOpenChange={(o) => { if (!o) { setShowTabSwitchDialog(false); setPendingTab(null); } }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsaved changes</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved changes on {TABS.find((t) => t.id === activeTab)?.label ?? activeTab}. Discard them?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmTabSwitch}>Discard</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
