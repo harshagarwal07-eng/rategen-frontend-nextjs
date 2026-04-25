@@ -120,14 +120,29 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
 
   const { fields: ageFields, update: updateAgeBand } = useFieldArray({ control: form.control, name: "age_policies" });
 
+  // Derive stable ID arrays from query data. When the query is loading, existingPkg* is EMPTY_ROWS
+  // (a stable module-level reference), so these memos don't recompute every render. When the
+  // query resolves, existingPkg* gets a new reference → memos recompute → scalar keys change →
+  // the reset effect fires exactly once per data transition. No infinite loops.
+  const existingCountryIds = useMemo(
+    () => existingPkgCountries.map((c) => c.id),
+    [existingPkgCountries],
+  );
+  const existingCityIds = useMemo(
+    () => existingPkgCities.map((c) => c.id),
+    [existingPkgCities],
+  );
+  const countryIdsKey = existingCountryIds.join(",");
+  const cityIdsKey = existingCityIds.join(",");
+
   useEffect(() => {
     if (!initialData) return;
     form.reset({
       id: initialData.id,
       name: (initialData.name as string) ?? "",
       tour_code: (initialData.tour_code as string | null) ?? "",
-      country_ids: existingPkgCountries.map((c) => c.id),
-      city_ids: existingPkgCities.map((c) => c.id),
+      country_ids: existingCountryIds,
+      city_ids: existingCityIds,
       departure_city_id: (initialData.departure_city_id as string | null) ?? null,
       duration_nights: (initialData.duration_nights as number | null) ?? 7,
       max_group_size: (initialData.max_group_size as number | null) ?? null,
@@ -150,7 +165,11 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
               .sort((a, b) => a.band_order - b.band_order)
           : DEFAULT_AGE_BANDS,
     });
-  }, [initialData, existingPkgCountries, existingPkgCities, form]);
+    // countryIdsKey/cityIdsKey are scalar proxies for existingCountryIds/existingCityIds — using
+    // them as deps means the effect fires when IDs actually change, not on every array reference
+    // rotation caused by inline `= []` defaults.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialData, countryIdsKey, cityIdsKey]);
 
   const selectedCountries = form.watch("country_ids") ?? [];
   const selectedCities = form.watch("city_ids") ?? [];
@@ -166,10 +185,14 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
     [existingPkgCities],
   );
 
-  // Clear cities when countries cleared — guard prevents redundant setValue calls that would
-  // trigger form.watch re-renders even when values haven't actually changed
+  // Only clear cities/departure when the user explicitly removes all countries (length goes
+  // from >0 to 0). Ignores transitions that happen during form.reset() hydration where
+  // country_ids starts as [] and was never non-empty.
+  const prevCountriesLenRef = useRef(0);
   useEffect(() => {
-    if (selectedCountries.length === 0) {
+    const prev = prevCountriesLenRef.current;
+    prevCountriesLenRef.current = selectedCountries.length;
+    if (selectedCountries.length === 0 && prev > 0) {
       if (selectedCities.length > 0) form.setValue("city_ids", []);
       if (form.getValues("departure_city_id") != null) form.setValue("departure_city_id", null);
     }

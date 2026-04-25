@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ChevronLeft, ChevronRight, Loader2, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Save, X } from "lucide-react";
 import { fdGetPackage } from "@/data-access/fixed-departures";
 import { FDGeneralInfoTab } from "./fd-tabs/tab-general-info";
 import { FDItineraryTab } from "./fd-tabs/tab-itinerary";
@@ -151,11 +151,22 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
           className="max-w-full sm:max-w-full h-full p-0 gap-0 flex flex-col"
           onInteractOutside={(e) => e.preventDefault()}
           onEscapeKeyDown={(e) => e.preventDefault()}
+          showCloseButton={false}
         >
           <DialogTitle className="sr-only">{title}</DialogTitle>
           <div className="sticky top-0 z-10">
-            <div className="border-b bg-background px-6 py-3">
+            <div className="border-b bg-background px-6 py-3 flex items-center justify-between">
               <div className="text-base font-semibold">{title}</div>
+              <DialogClose asChild>
+                <button
+                  type="button"
+                  onClick={requestClose}
+                  className="rounded-sm opacity-70 hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </DialogClose>
             </div>
 
             <div className="border-b bg-muted px-4 py-1">
