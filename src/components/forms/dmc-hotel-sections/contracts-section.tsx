@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, ArchiveRestore } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -48,6 +48,32 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
     queryFn: () => listContracts(hotelId, showArchived),
     select: (result) => result.data || [],
   });
+
+  const handleRestore = async (contract: DmcContract) => {
+    try {
+      const result = await updateContract(contract.id, { status: "active" });
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      qc.setQueryData<{ data: DmcContract[]; error: string | null }>(
+        ["dmc-contracts", hotelId, showArchived],
+        (old) => {
+          if (!old?.data) return old;
+          return {
+            ...old,
+            data: old.data.map((c) =>
+              c.id === contract.id ? { ...c, status: "active" as const } : c
+            ),
+          };
+        }
+      );
+      await qc.invalidateQueries({ queryKey: ["dmc-contracts", hotelId] });
+      toast.success("Contract restored");
+    } catch (err) {
+      toast.error("Failed to restore contract");
+    }
+  };
 
   const handleInlineSave = async () => {
     if (!inlineEditId || inlineEditName.trim() === "") return;
@@ -177,10 +203,12 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
                   </TableCell>
                 </TableRow>
               ) : (
-                contracts.map((contract) => (
+                contracts.map((contract) => {
+                  const isArchived = contract.status === "archived";
+                  return (
                   <TableRow key={contract.id}>
                     <TableCell>
-                      {inlineEditId === contract.id ? (
+                      {!isArchived && inlineEditId === contract.id ? (
                         <Input
                           autoFocus
                           value={inlineEditName}
@@ -192,6 +220,8 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
                           }}
                           className="h-8"
                         />
+                      ) : isArchived ? (
+                        <span className="text-muted-foreground">{contract.name}</span>
                       ) : (
                         <button
                           className="text-left hover:underline"
@@ -223,27 +253,40 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <button
-                          className="p-1 hover:bg-muted rounded"
-                          onClick={() => {
-                            setEditContract(contract);
-                            setModalOpen(true);
-                          }}
-                          title="Edit contract"
-                        >
-                          <Pencil className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                        <button
-                          className="p-1 hover:bg-destructive/10 rounded"
-                          onClick={() => setDeleteTarget(contract)}
-                          title="Delete contract"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </button>
+                        {isArchived ? (
+                          <button
+                            className="p-1 hover:bg-muted rounded"
+                            onClick={() => handleRestore(contract)}
+                            title="Restore contract"
+                          >
+                            <ArchiveRestore className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              className="p-1 hover:bg-muted rounded"
+                              onClick={() => {
+                                setEditContract(contract);
+                                setModalOpen(true);
+                              }}
+                              title="Edit contract"
+                            >
+                              <Pencil className="h-4 w-4 text-muted-foreground" />
+                            </button>
+                            <button
+                              className="p-1 hover:bg-destructive/10 rounded"
+                              onClick={() => setDeleteTarget(contract)}
+                              title="Archive contract"
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
