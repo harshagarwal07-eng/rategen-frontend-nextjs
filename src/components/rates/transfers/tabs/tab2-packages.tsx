@@ -238,6 +238,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
     });
 
     const isDisposal = modeOfTransport === "vehicle_disposal";
+    const liveTitle = form.watch("name");
 
     const { isDirty: formDirty } = form.formState;
     const isDirty = formDirty || stopsDirty || hoursDirty;
@@ -262,7 +263,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
       save: async (): Promise<SaveResult> => {
         const valid = await form.trigger();
         if (!valid) {
-          return { success: false, name: pkg.name, error: "Validation failed" };
+          return { success: false, name: form.getValues("name") || pkg.name, error: "Validation failed" };
         }
 
         const values = form.getValues();
@@ -329,7 +330,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
         } catch (error) {
           const msg =
             error instanceof Error ? error.message : "Failed to save package";
-          return { success: false, name: pkg.name, error: msg };
+          return { success: false, name: values.name || pkg.name, error: msg };
         } finally {
           setSaving(false);
         }
@@ -388,10 +389,10 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
               <span
                 className={cn(
                   "text-sm font-semibold truncate",
-                  !pkg.name && "text-muted-foreground italic"
+                  !liveTitle && "text-muted-foreground italic"
                 )}
               >
-                {pkg.name || "Unnamed Package"}
+                {liveTitle || "Unnamed Package"}
               </span>
 
               {isPending && (
