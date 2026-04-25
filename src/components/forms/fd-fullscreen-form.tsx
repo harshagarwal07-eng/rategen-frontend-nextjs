@@ -50,8 +50,8 @@ const TABS = [
   { id: "itinerary", label: "Itinerary" },
   { id: "inc-exc", label: "Inclusions & Exclusions" },
   { id: "addons", label: "Add-ons" },
-  { id: "departures", label: "Departure Dates" },
   { id: "flights-visa", label: "Flights & Visa" },
+  { id: "departures", label: "Departure Dates" },
   { id: "policies", label: "Policies" },
   { id: "docs-remarks", label: "Documents & Remarks" },
 ] as const;
