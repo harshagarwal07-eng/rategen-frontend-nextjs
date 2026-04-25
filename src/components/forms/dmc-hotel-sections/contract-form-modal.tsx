@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ import { DateValidityPicker, type DateRangeValue } from "@/components/ui/date-va
 import { createContract, updateContract } from "@/data-access/dmc-contracts";
 import { listMarkets } from "@/data-access/dmc-markets";
 import { DmcContract } from "@/types/dmc-contracts";
+import MarketCreateModal from "@/components/forms/dmc-hotel-sections/market-create-modal";
 import { toast } from "sonner";
 
 const dateRangeSchema = z
@@ -62,6 +64,8 @@ export default function ContractFormModal({
   initialData,
 }: ContractFormModalProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [showMarketModal, setShowMarketModal] = useState(false);
+  const qc = useQueryClient();
 
   const form = useForm<ContractFormValues>({
     resolver: zodResolver(ContractFormSchema),
@@ -98,6 +102,12 @@ export default function ContractFormModal({
     value: m.id,
     label: m.name,
   }));
+
+  const handleMarketCreated = async (market: { id: string; name: string }) => {
+    await qc.invalidateQueries({ queryKey: ["markets"] });
+    form.setValue("market_id", market.id);
+    setShowMarketModal(false);
+  };
 
   const onSubmit = async (data: ContractFormValues) => {
     setIsSaving(true);
@@ -136,119 +146,28 @@ export default function ContractFormModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{initialData ? "Edit Contract" : "Add Contract"}</DialogTitle>
-          <DialogDescription>
-            {initialData
-              ? "Update the contract details below"
-              : "Create a new contract for this hotel"}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{initialData ? "Edit Contract" : "Add Contract"}</DialogTitle>
+            <DialogDescription>
+              {initialData
+                ? "Update the contract details below"
+                : "Create a new contract for this hotel"}
+            </DialogDescription>
+          </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contract Name *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Q1 2024 Contract" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="market_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Market</FormLabel>
-                  <Autocomplete
-                    mode="client"
-                    options={marketOptions}
-                    value={field.value}
-                    onChange={field.onChange}
-                    placeholder="Select market (optional)"
-                  />
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="stay_validity"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Stay Validity</FormLabel>
-                  <FormControl>
-                    <DateValidityPicker
-                      value={field.value as DateRangeValue}
-                      onChange={field.onChange}
-                      placeholder="Select stay date range"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="booking_validity"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Booking Validity</FormLabel>
-                  <FormControl>
-                    <DateValidityPicker
-                      value={field.value as DateRangeValue}
-                      onChange={field.onChange}
-                      placeholder="Select booking date range"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
-                name="rate_type"
+                name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Rate Type *</FormLabel>
+                    <FormLabel>Contract Name *</FormLabel>
                     <FormControl>
-                      <div className="flex h-10 rounded-md border border-input overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() => field.onChange("net")}
-                          className={`flex-1 text-sm font-medium transition-colors ${
-                            field.value === "net"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-background text-foreground hover:bg-muted"
-                          }`}
-                        >
-                          Net Rate
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => field.onChange("bar")}
-                          className={`flex-1 text-sm font-medium border-l border-input transition-colors ${
-                            field.value === "bar"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-background text-foreground hover:bg-muted"
-                          }`}
-                        >
-                          BAR Rate
-                        </button>
-                      </div>
+                      <Input placeholder="e.g. Q1 2024 Contract" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -257,38 +176,147 @@ export default function ContractFormModal({
 
               <FormField
                 control={form.control}
-                name="status"
+                name="market_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Status *</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="draft">Draft</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Market</FormLabel>
+                      <button
+                        type="button"
+                        onClick={() => setShowMarketModal(true)}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Plus className="size-3" />
+                        New Market
+                      </button>
+                    </div>
+                    <Autocomplete
+                      mode="client"
+                      options={marketOptions}
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="Select market (optional)"
+                    />
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button type="button" variant="outline" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Saving…" : initialData ? "Update" : "Create"}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+              <FormField
+                control={form.control}
+                name="stay_validity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Stay Validity</FormLabel>
+                    <FormControl>
+                      <DateValidityPicker
+                        value={field.value as DateRangeValue}
+                        onChange={field.onChange}
+                        placeholder="Select stay date range"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="booking_validity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Booking Validity</FormLabel>
+                    <FormControl>
+                      <DateValidityPicker
+                        value={field.value as DateRangeValue}
+                        onChange={field.onChange}
+                        placeholder="Select booking date range"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="rate_type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Rate Type *</FormLabel>
+                      <FormControl>
+                        <div className="flex h-10 rounded-md border border-input overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => field.onChange("net")}
+                            className={`flex-1 text-sm font-medium transition-colors ${
+                              field.value === "net"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-foreground hover:bg-muted"
+                            }`}
+                          >
+                            Net Rate
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => field.onChange("bar")}
+                            className={`flex-1 text-sm font-medium border-l border-input transition-colors ${
+                              field.value === "bar"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-foreground hover:bg-muted"
+                            }`}
+                          >
+                            BAR Rate
+                          </button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status *</FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSaving}>
+                  {isSaving ? "Saving…" : initialData ? "Update" : "Create"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      <MarketCreateModal
+        isOpen={showMarketModal}
+        onClose={() => setShowMarketModal(false)}
+        onCreated={handleMarketCreated}
+      />
+    </>
   );
 }
