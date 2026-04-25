@@ -75,7 +75,7 @@ export interface FDAgePolicy {
   band_order: number;
 }
 
-export const AGE_BANDS = ["Infant", "Child", "Teen", "Adult"] as const;
+export const AGE_BANDS = ["Infant", "Child", "Adult"] as const;
 export type AgeBand = (typeof AGE_BANDS)[number];
 
 export const PACKAGE_STATUSES = ["active", "inactive"] as const;

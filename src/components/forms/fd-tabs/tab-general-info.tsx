@@ -44,10 +44,9 @@ import type { FDPackageDetail, FDCity } from "@/types/fixed-departures";
 import type { IOption } from "@/types/common";
 
 const DEFAULT_AGE_BANDS = [
-  { band_name: "Infant", age_from: 0, age_to: 2, band_order: 1 },
-  { band_name: "Child", age_from: 2, age_to: 12, band_order: 2 },
-  { band_name: "Teen", age_from: 12, age_to: 18, band_order: 3 },
-  { band_name: "Adult", age_from: 18, age_to: 99, band_order: 4 },
+  { band_name: "Infant", age_from: 0, age_to: 1, band_order: 1 },
+  { band_name: "Child", age_from: 2, age_to: 11, band_order: 2 },
+  { band_name: "Adult", age_from: 12, age_to: 99, band_order: 3 },
 ];
 
 const FALLBACK_CURRENCIES = ["USD", "EUR", "GBP", "INR", "AED", "AUD", "CAD", "SGD"];
