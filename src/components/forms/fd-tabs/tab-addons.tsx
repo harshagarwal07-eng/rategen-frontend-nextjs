@@ -105,11 +105,25 @@ function getEffectiveBandRange(
   return getPackageBandRange(packageBands, key);
 }
 
+// A band is considered "removed" only when the addon uses a custom age policy
+// AND both edges are explicitly null. With the package policy in effect, all
+// three bands are present.
+function isBandRemoved(draft: Partial<FDAddon>, key: BandKey): boolean {
+  if (!draft.use_custom_age_policy) return false;
+  const f = draft[`custom_${key}_age_from` as keyof FDAddon] as number | null | undefined;
+  const t = draft[`custom_${key}_age_to` as keyof FDAddon] as number | null | undefined;
+  return f === null && t === null;
+}
+
+function activeBands(draft: Partial<FDAddon>): BandKey[] {
+  return BAND_KEYS.filter((k) => !isBandRemoved(draft, k));
+}
+
 function bandsSummary(
   draft: Partial<FDAddon>,
   packageBands: FDAgePolicy[] | undefined,
 ): string {
-  return BAND_KEYS
+  return activeBands(draft)
     .map((k) => {
       const { from, to } = getEffectiveBandRange(draft, packageBands, k);
       return `${BAND_LABELS[k]} ${from}-${to}`;
@@ -174,16 +188,21 @@ const PRICE_UNIT_OPTIONS: Record<Exclude<FDAddonType, "multi_day_tour">, { value
   ],
 };
 
-function isAgeBased(type: FDAddonType, priceUnit: string | null | undefined): boolean {
+export function isAgeBased(type: FDAddonType, priceUnit: string | null | undefined): boolean {
   if (type === "multi_day_tour" || type === "meal") return true;
   if (priceUnit == null) return true;
   if (type === "transfer") return priceUnit === "per_pax" || priceUnit === "per_ticket";
-  if (type === "day_tour") return priceUnit === "per_pax";
+  if (type === "day_tour") return priceUnit === "per_pax" || priceUnit === "per_ticket";
   if (type === "other") return priceUnit === "per_pax";
   return true;
 }
 
-function singleRateLabel(type: FDAddonType, priceUnit: string | null | undefined): string {
+export function defaultPriceUnitForType(type: FDAddonType): string | null {
+  if (type === "multi_day_tour") return null;
+  return PRICE_UNIT_OPTIONS[type]?.[0]?.value ?? null;
+}
+
+export function singleRateLabel(type: FDAddonType, priceUnit: string | null | undefined): string {
   if (type === "other" && priceUnit === "per_day") return "Per Day Rate";
   return "Total Rate";
 }
@@ -258,7 +277,11 @@ function mealsSummary(meals: string[]): string {
 }
 
 function addonToDraft(a: FDAddon): DraftAddon {
-  return { ...a, _localId: a.id, _isNew: false };
+  // Coerce null price_unit to the first valid option for the type — "None" was
+  // removed as a valid choice so legacy rows hydrate to a sensible default.
+  const needsCoerce = a.addon_type !== "multi_day_tour" && a.price_unit == null;
+  const price_unit = needsCoerce ? defaultPriceUnitForType(a.addon_type) : a.price_unit;
+  return { ...a, price_unit, _localId: a.id, _isNew: false };
 }
 
 function emptyDraft(type: FDAddonType): DraftAddon {
@@ -273,7 +296,7 @@ function emptyDraft(type: FDAddonType): DraftAddon {
     price_adult: null,
     price_child: null,
     price_infant: null,
-    price_unit: null,
+    price_unit: defaultPriceUnitForType(type),
     max_capacity: null,
     inclusions: [],
     exclusions: [],
@@ -756,12 +779,23 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
     for (const k of BAND_KEYS) {
       const fromKey = `custom_${k}_age_from` as const;
       const toKey = `custom_${k}_age_to` as const;
-      base[fromKey] = useCustomAge
-        ? (draft[fromKey] as number | null | undefined) ?? getPackageBandRange(packageBands, k).from
-        : null;
-      base[toKey] = useCustomAge
-        ? (draft[toKey] as number | null | undefined) ?? getPackageBandRange(packageBands, k).to
-        : null;
+      if (!useCustomAge) {
+        base[fromKey] = null;
+        base[toKey] = null;
+        continue;
+      }
+      // Removed bands persist as both-null. Bands with one edge null inherit
+      // from the package band; we store the inherited value to avoid ambiguity
+      // between "removed" and "edited".
+      const removed = isBandRemoved(draft, k);
+      if (removed) {
+        base[fromKey] = null;
+        base[toKey] = null;
+      } else {
+        const pb = getPackageBandRange(packageBands, k);
+        base[fromKey] = (draft[fromKey] as number | null | undefined) ?? pb.from;
+        base[toKey] = (draft[toKey] as number | null | undefined) ?? pb.to;
+      }
     }
 
     return base;
@@ -790,7 +824,8 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
         return { success: false, name, error: "Duration (days) is required" };
       }
       if (d.use_custom_age_policy) {
-        const ranges = BAND_KEYS.map((k) => ({
+        const present = activeBands(d);
+        const ranges = present.map((k) => ({
           key: k,
           ...getEffectiveBandRange(d, bands, k),
         }));
@@ -810,12 +845,19 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
         }
       }
 
-      // Pricing validation
+      // Pricing validation — only rates for present bands count.
       if (t !== "multi_day_tour") {
         const ageBased = isAgeBased(t, d.price_unit);
         if (ageBased) {
-          if (d.price_adult == null && d.price_child == null && d.price_infant == null) {
-            return { success: false, name, error: "At least one rate (Adult, Child, or Infant) is required" };
+          const rateForBand: Record<BandKey, number | null | undefined> = {
+            adult: d.price_adult,
+            child: d.price_child,
+            infant: d.price_infant,
+          };
+          const presentRates = activeBands(d).map((k) => rateForBand[k]);
+          if (presentRates.every((r) => r == null)) {
+            const labels = activeBands(d).map((k) => BAND_LABELS[k]).join(", ");
+            return { success: false, name, error: `At least one rate (${labels}) is required` };
           }
         } else {
           if (d.price_adult == null) {
@@ -1019,19 +1061,17 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
               <div className="flex flex-col gap-1.5">
                 <Label>Price Unit</Label>
                 <Select
-                  value={draft.price_unit ?? "_none"}
+                  value={draft.price_unit ?? defaultPriceUnitForType(type) ?? ""}
                   onValueChange={(v) => {
-                    const newUnit = v === "_none" ? null : v;
-                    const willBeAgeBased = isAgeBased(type, newUnit);
+                    const willBeAgeBased = isAgeBased(type, v);
                     onChange({
-                      price_unit: newUnit,
+                      price_unit: v,
                       ...(!willBeAgeBased ? { price_child: null, price_infant: null } : {}),
                     });
                   }}
                 >
                   <SelectTrigger><SelectValue placeholder="Select price unit..." /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_none">None</SelectItem>
                     {priceUnitList.map((u) => (
                       <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>
                     ))}
@@ -1040,45 +1080,51 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
               </div>
             )}
 
-            {/* Age-based: Adult / Child / Infant + Max Capacity */}
+            {/* Age-based: only show fields for bands present on this addon. */}
             {isAgeBased(type, draft.price_unit) ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label>
-                    Adult ({getEffectiveBandRange(draft, packageBands, "adult").from}-
-                    {getEffectiveBandRange(draft, packageBands, "adult").to})
-                  </Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={draft.price_adult ?? ""}
-                    onChange={(e) => onChange({ price_adult: e.target.value === "" ? null : Number(e.target.value) })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>
-                    Child ({getEffectiveBandRange(draft, packageBands, "child").from}-
-                    {getEffectiveBandRange(draft, packageBands, "child").to})
-                  </Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={draft.price_child ?? ""}
-                    onChange={(e) => onChange({ price_child: e.target.value === "" ? null : Number(e.target.value) })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>
-                    Infant ({getEffectiveBandRange(draft, packageBands, "infant").from}-
-                    {getEffectiveBandRange(draft, packageBands, "infant").to})
-                  </Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={draft.price_infant ?? ""}
-                    onChange={(e) => onChange({ price_infant: e.target.value === "" ? null : Number(e.target.value) })}
-                  />
-                </div>
+                {!isBandRemoved(draft, "adult") && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label>
+                      Adult ({getEffectiveBandRange(draft, packageBands, "adult").from}-
+                      {getEffectiveBandRange(draft, packageBands, "adult").to})
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={draft.price_adult ?? ""}
+                      onChange={(e) => onChange({ price_adult: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                  </div>
+                )}
+                {!isBandRemoved(draft, "child") && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label>
+                      Child ({getEffectiveBandRange(draft, packageBands, "child").from}-
+                      {getEffectiveBandRange(draft, packageBands, "child").to})
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={draft.price_child ?? ""}
+                      onChange={(e) => onChange({ price_child: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                  </div>
+                )}
+                {!isBandRemoved(draft, "infant") && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label>
+                      Infant ({getEffectiveBandRange(draft, packageBands, "infant").from}-
+                      {getEffectiveBandRange(draft, packageBands, "infant").to})
+                    </Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={draft.price_infant ?? ""}
+                      onChange={(e) => onChange({ price_infant: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                  </div>
+                )}
                 <div className="flex flex-col gap-1.5">
                   <Label>Max Capacity</Label>
                   <Input
@@ -1120,12 +1166,11 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
               <div className="flex flex-col gap-1.5">
                 <Label>Price Unit</Label>
                 <Select
-                  value={draft.price_unit ?? "_none"}
-                  onValueChange={(v) => onChange({ price_unit: v === "_none" ? null : v })}
+                  value={draft.price_unit ?? defaultPriceUnitForType(type) ?? ""}
+                  onValueChange={(v) => onChange({ price_unit: v })}
                 >
                   <SelectTrigger><SelectValue placeholder="Select price unit..." /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="_none">None</SelectItem>
                     {priceUnitList.map((u) => (
                       <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>
                     ))}
@@ -1282,27 +1327,48 @@ interface AddonAgeBandsSectionProps {
 function AddonAgeBandsSection({ draft, packageBands, onChange }: AddonAgeBandsSectionProps) {
   const useCustom = !!draft.use_custom_age_policy;
   const [editorOpen, setEditorOpen] = useState(useCustom);
+  const present = activeBands(draft);
+  const canRemoveMore = present.length > 1;
 
   useEffect(() => {
     if (useCustom) setEditorOpen(true);
   }, [useCustom]);
 
+  const seedAllFromPackage = (): Partial<DraftAddon> => {
+    const patch: Partial<DraftAddon> = { use_custom_age_policy: true };
+    for (const k of BAND_KEYS) {
+      const pb = getPackageBandRange(packageBands, k);
+      patch[`custom_${k}_age_from` as const] = pb.from;
+      patch[`custom_${k}_age_to` as const] = pb.to;
+    }
+    return patch;
+  };
+
   const handleEdge = (key: BandKey, edge: "from" | "to", val: string) => {
     const num = val === "" ? null : Number(val);
     if (!useCustom) {
-      // First edit: seed all six fields from package bands so the override is fully specified.
-      const patch: Partial<DraftAddon> = { use_custom_age_policy: true };
-      for (const k of BAND_KEYS) {
-        const pb = getPackageBandRange(packageBands, k);
-        const f = `custom_${k}_age_from` as const;
-        const t = `custom_${k}_age_to` as const;
-        patch[f] = k === key && edge === "from" ? num : pb.from;
-        patch[t] = k === key && edge === "to" ? num : pb.to;
-      }
+      // First edit: seed all six fields from package bands so the override is
+      // fully specified, then apply the new edge value.
+      const patch = seedAllFromPackage();
+      patch[`custom_${key}_age_${edge}` as const] = num;
       onChange(patch);
       return;
     }
     onChange({ [`custom_${key}_age_${edge}`]: num } as Partial<DraftAddon>);
+  };
+
+  const handleRemove = (key: BandKey) => {
+    if (!canRemoveMore) return;
+    // Removing a band means: this addon uses a custom policy where the band
+    // simply doesn't exist. Both edges go null; pricing for that band is
+    // cleared.
+    const basePatch: Partial<DraftAddon> = useCustom ? {} : seedAllFromPackage();
+    basePatch[`custom_${key}_age_from` as const] = null;
+    basePatch[`custom_${key}_age_to` as const] = null;
+    if (key === "infant") basePatch.price_infant = null;
+    if (key === "child") basePatch.price_child = null;
+    if (key === "adult") basePatch.price_adult = null;
+    onChange({ ...basePatch, use_custom_age_policy: true });
   };
 
   const handleReset = () => {
@@ -1350,15 +1416,17 @@ function AddonAgeBandsSection({ draft, packageBands, onChange }: AddonAgeBandsSe
 
       {editorOpen && (
         <div className="flex flex-col gap-2">
-          <div className="grid grid-cols-[80px_1fr_1fr] gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="grid grid-cols-[80px_1fr_1fr_32px] gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <span>Band</span>
             <span>Age From</span>
             <span>Age To</span>
+            <span />
           </div>
-          {BAND_KEYS.map((k) => {
+          {present.map((k) => {
             const range = getEffectiveBandRange(draft, packageBands, k);
+            const lastOne = present.length === 1;
             return (
-              <div key={k} className="grid grid-cols-[80px_1fr_1fr] gap-2 items-center">
+              <div key={k} className="grid grid-cols-[80px_1fr_1fr_32px] gap-2 items-center">
                 <div className="text-sm font-medium">{BAND_LABELS[k]}</div>
                 <Input
                   type="number"
@@ -1374,6 +1442,17 @@ function AddonAgeBandsSection({ draft, packageBands, onChange }: AddonAgeBandsSe
                   value={range.to}
                   onChange={(e) => handleEdge(k, "to", e.target.value)}
                 />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                  onClick={() => handleRemove(k)}
+                  disabled={lastOne}
+                  title={lastOne ? "At least one band must remain" : `Remove ${BAND_LABELS[k]} band`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
             );
           })}
