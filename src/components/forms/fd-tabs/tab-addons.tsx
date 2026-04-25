@@ -174,6 +174,20 @@ const PRICE_UNIT_OPTIONS: Record<Exclude<FDAddonType, "multi_day_tour">, { value
   ],
 };
 
+function isAgeBased(type: FDAddonType, priceUnit: string | null | undefined): boolean {
+  if (type === "multi_day_tour" || type === "meal") return true;
+  if (priceUnit == null) return true;
+  if (type === "transfer") return priceUnit === "per_pax" || priceUnit === "per_ticket";
+  if (type === "day_tour") return priceUnit === "per_pax";
+  if (type === "other") return priceUnit === "per_pax";
+  return true;
+}
+
+function singleRateLabel(type: FDAddonType, priceUnit: string | null | undefined): string {
+  if (type === "other" && priceUnit === "per_day") return "Per Day Rate";
+  return "Total Rate";
+}
+
 interface Props {
   mode: "create" | "edit";
   packageId: string | null;
@@ -705,6 +719,12 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
       price_infant: draft.price_infant ?? null,
     };
 
+    // Single-rate mode: null out child/infant regardless of draft state
+    if (type !== "multi_day_tour" && type !== "meal" && !isAgeBased(type, draft.price_unit)) {
+      base.price_child = null;
+      base.price_infant = null;
+    }
+
     if (type === "multi_day_tour") {
       base.duration_days = draft.duration_days ?? 1;
       base.price_unit = null;
@@ -786,6 +806,20 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
               name,
               error: `Age bands overlap: ${BAND_LABELS[ranges[i].key]} starts before ${BAND_LABELS[ranges[i - 1].key]} ends`,
             };
+          }
+        }
+      }
+
+      // Pricing validation
+      if (t !== "multi_day_tour") {
+        const ageBased = isAgeBased(t, d.price_unit);
+        if (ageBased) {
+          if (d.price_adult == null && d.price_child == null && d.price_infant == null) {
+            return { success: false, name, error: "At least one rate (Adult, Child, or Infant) is required" };
+          }
+        } else {
+          if (d.price_adult == null) {
+            return { success: false, name, error: `${singleRateLabel(t, d.price_unit)} is required` };
           }
         }
       }
@@ -979,71 +1013,110 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
           {/* Pricing */}
           <div className="rounded-md border bg-muted/20 p-3 flex flex-col gap-3">
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pricing</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+            {/* Price unit BEFORE inputs for day_tour / transfer / other */}
+            {(type === "day_tour" || type === "transfer" || type === "other") && (
               <div className="flex flex-col gap-1.5">
-                <Label>
-                  Adult ({getEffectiveBandRange(draft, packageBands, "adult").from}-
-                  {getEffectiveBandRange(draft, packageBands, "adult").to})
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={draft.price_adult ?? ""}
-                  onChange={(e) =>
+                <Label>Price Unit</Label>
+                <Select
+                  value={draft.price_unit ?? "_none"}
+                  onValueChange={(v) => {
+                    const newUnit = v === "_none" ? null : v;
+                    const willBeAgeBased = isAgeBased(type, newUnit);
                     onChange({
-                      price_adult: e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
-                />
+                      price_unit: newUnit,
+                      ...(!willBeAgeBased ? { price_child: null, price_infant: null } : {}),
+                    });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select price unit..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">None</SelectItem>
+                    {priceUnitList.map((u) => (
+                      <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>
-                  Child ({getEffectiveBandRange(draft, packageBands, "child").from}-
-                  {getEffectiveBandRange(draft, packageBands, "child").to})
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={draft.price_child ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      price_child: e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
-                />
+            )}
+
+            {/* Age-based: Adult / Child / Infant + Max Capacity */}
+            {isAgeBased(type, draft.price_unit) ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label>
+                    Adult ({getEffectiveBandRange(draft, packageBands, "adult").from}-
+                    {getEffectiveBandRange(draft, packageBands, "adult").to})
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.price_adult ?? ""}
+                    onChange={(e) => onChange({ price_adult: e.target.value === "" ? null : Number(e.target.value) })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>
+                    Child ({getEffectiveBandRange(draft, packageBands, "child").from}-
+                    {getEffectiveBandRange(draft, packageBands, "child").to})
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.price_child ?? ""}
+                    onChange={(e) => onChange({ price_child: e.target.value === "" ? null : Number(e.target.value) })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>
+                    Infant ({getEffectiveBandRange(draft, packageBands, "infant").from}-
+                    {getEffectiveBandRange(draft, packageBands, "infant").to})
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.price_infant ?? ""}
+                    onChange={(e) => onChange({ price_infant: e.target.value === "" ? null : Number(e.target.value) })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Max Capacity</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="No limit"
+                    value={draft.max_capacity ?? ""}
+                    onChange={(e) => onChange({ max_capacity: e.target.value === "" ? null : Number(e.target.value) })}
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>
-                  Infant ({getEffectiveBandRange(draft, packageBands, "infant").from}-
-                  {getEffectiveBandRange(draft, packageBands, "infant").to})
-                </Label>
-                <Input
-                  type="number"
-                  min={0}
-                  value={draft.price_infant ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      price_infant: e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
-                />
+            ) : (
+              /* Single-rate: one rate field + Max Capacity */
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label>{singleRateLabel(type, draft.price_unit)}</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.price_adult ?? ""}
+                    onChange={(e) => onChange({ price_adult: e.target.value === "" ? null : Number(e.target.value) })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>Max Capacity</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="No limit"
+                    value={draft.max_capacity ?? ""}
+                    onChange={(e) => onChange({ max_capacity: e.target.value === "" ? null : Number(e.target.value) })}
+                  />
+                </div>
               </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Max Capacity</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  placeholder="No limit"
-                  value={draft.max_capacity ?? ""}
-                  onChange={(e) =>
-                    onChange({
-                      max_capacity: e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-            </div>
-            {type !== "multi_day_tour" && (
+            )}
+
+            {/* Price unit AFTER inputs for meal (unchanged position) */}
+            {type === "meal" && (
               <div className="flex flex-col gap-1.5">
                 <Label>Price Unit</Label>
                 <Select
