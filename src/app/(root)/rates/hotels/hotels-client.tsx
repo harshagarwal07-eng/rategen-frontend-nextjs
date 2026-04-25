@@ -36,6 +36,7 @@ import { listHotels, deleteHotel, ListHotelsParams } from "@/data-access/dmc-hot
 import { DmcHotel } from "@/types/hotels";
 import { CURRENCY_OPTIONS_LABEL } from "@/constants/data";
 import { HOTEL_COLUMNS, HotelSortKey } from "./columns";
+import { HotelOverlay } from "./hotel-overlay";
 
 const PAGE_SIZE = 25;
 
@@ -53,6 +54,13 @@ export default function HotelsClient() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [deleteTarget, setDeleteTarget] = useState<DmcHotel | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [overlayHotelId, setOverlayHotelId] = useState<string | null>(null);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+
+  const openOverlay = (id: string) => {
+    setOverlayHotelId(id);
+    setOverlayOpen(true);
+  };
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -268,7 +276,7 @@ export default function HotelsClient() {
                 <TableRow
                   key={hotel.id}
                   className="cursor-pointer hover:bg-muted/40"
-                  onClick={() => console.log("open overlay", hotel.id)}
+                  onClick={() => openOverlay(hotel.id)}
                 >
                   <TableCell className="font-medium">{hotel.name}</TableCell>
                   <TableCell>{hotel.country_name || "—"}</TableCell>
@@ -299,7 +307,7 @@ export default function HotelsClient() {
                       <Button
                         variant="ghost"
                         className="h-8 w-8 p-0"
-                        onClick={() => console.log("open overlay", hotel.id)}
+                        onClick={() => openOverlay(hotel.id)}
                       >
                         <span className="sr-only">View</span>
                         <Eye className="h-4 w-4" />
@@ -314,12 +322,12 @@ export default function HotelsClient() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem
-                            onClick={() => console.log("open overlay", hotel.id)}
+                            onClick={() => openOverlay(hotel.id)}
                           >
                             View
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => console.log("open overlay", hotel.id)}
+                            onClick={() => openOverlay(hotel.id)}
                           >
                             Edit
                           </DropdownMenuItem>
@@ -379,6 +387,15 @@ export default function HotelsClient() {
             ? `This will permanently delete "${deleteTarget.name}" and all its contracts. This cannot be undone.`
             : ""
         }
+      />
+
+      <HotelOverlay
+        hotelId={overlayHotelId}
+        isOpen={overlayOpen}
+        onClose={() => {
+          setOverlayOpen(false);
+          setOverlayHotelId(null);
+        }}
       />
     </div>
   );

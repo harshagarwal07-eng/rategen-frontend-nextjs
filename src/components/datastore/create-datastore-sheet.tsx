@@ -3,7 +3,6 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import DatastoreForm from "@/components/datastore/datastore-form";
-import HotelFullscreenForm from "@/components/forms/hotel-fullscreen-form";
 import TourFullscreenForm from "@/components/forms/tour-fullscreen-form";
 import TransferFullscreenForm from "@/components/forms/transfer-fullscreen-form";
 import ComboFullscreenForm from "@/components/forms/combo-fullscreen-form";
@@ -48,7 +47,6 @@ export default function CreateDatastoreSheet() {
   }, [pathname]);
 
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [hotelFormOpen, setHotelFormOpen] = useState(false);
   const [tourFormOpen, setTourFormOpen] = useState(false);
   const [transferFormOpen, setTransferFormOpen] = useState(false);
   const [comboFormOpen, setComboFormOpen] = useState(false);
@@ -59,7 +57,6 @@ export default function CreateDatastoreSheet() {
 
   const handleFormSuccess = () => {
     setSheetOpen(false);
-    setHotelFormOpen(false);
     setTourFormOpen(false);
     setTransferFormOpen(false);
     setComboFormOpen(false);
@@ -71,9 +68,7 @@ export default function CreateDatastoreSheet() {
   };
 
   const handleAddClick = () => {
-    if (activeTab === DocumentType.HOTELS) {
-      setHotelFormOpen(true);
-    } else if (activeTab === DocumentType.TOURS) {
+    if (activeTab === DocumentType.TOURS) {
       setTourChoiceDialogOpen(true);
     } else if (activeTab === DocumentType.TRANSFERS) {
       setTransferFormOpen(true);
@@ -141,14 +136,6 @@ export default function CreateDatastoreSheet() {
         <Plus />
         Add New
       </Button>
-
-      {/* Hotel Full-screen Form */}
-      <HotelFullscreenForm
-        isOpen={hotelFormOpen}
-        onClose={() => setHotelFormOpen(false)}
-        onSuccess={handleFormSuccess}
-        syncedColumns={[]} // No synced columns for creation
-      />
 
       {/* AI Tour Creation Choice Dialog */}
       <AITourCreationDialog

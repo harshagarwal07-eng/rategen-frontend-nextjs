@@ -25,7 +25,6 @@ import {
 } from "@/data-access/datastore";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import HotelsDatastore from "./hotels/hotels-datastore";
 import CarOnDisposalsDataStore from "./car-on-disposal/car-on-disposal-datastore";
 
 type Props = {
@@ -125,9 +124,6 @@ export default function DatastoreSelector({
           </DialogDescription>
         </DialogHeader>
 
-        <Show when={documentType === "hotels"}>
-          <HotelsDatastore setSelectedIds={setSelectedIds} />
-        </Show>
         <Show when={documentType === "tours"}>
           <ToursDatastore setSelectedIds={setSelectedIds} />
         </Show>
