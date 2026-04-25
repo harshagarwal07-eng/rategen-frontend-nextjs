@@ -624,64 +624,64 @@ function OperationalHoursSection({ form }: { form: ReturnType<typeof useForm<Pac
     if (!startTime && !endTime) {
       return `Guide available 24x7 on ${day}`;
     }
-    return "Standard working hours";
+    return `Standard working hours on ${day}`;
   };
 
   return (
     <div className="space-y-2">
       <h4 className="text-sm font-semibold">Operational Hours</h4>
-      <div className="space-y-3">
+      <div className="rounded-md border overflow-x-auto">
+        <div className="grid grid-cols-[140px_80px_120px_120px_1fr] gap-2 border-b bg-muted/50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground min-w-[600px]">
+          <span>Day</span>
+          <span>Active</span>
+          <span>Start</span>
+          <span>End</span>
+          <span></span>
+        </div>
         {DAYS.map((d, index) => {
           const row = hours[index];
           const active = row?.is_active ?? false;
           const contextLabel = getContextLabel(d.label, active, row?.start_time ?? null, row?.end_time ?? null);
           return (
-            <div key={d.key} className="border rounded-md p-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">{d.label}</span>
-                <FormField
-                  control={form.control}
-                  name={`operational_hours.${index}.is_active`}
-                  render={({ field }) => (
-                    <Switch checked={field.value} onCheckedChange={field.onChange} />
-                  )}
-                />
-              </div>
-              {active && (
-                <div className="grid grid-cols-2 gap-2 mb-2">
-                  <FormField
-                    control={form.control}
-                    name={`operational_hours.${index}.start_time`}
-                    render={({ field }) => (
-                      <div>
-                        <label className="text-xs text-muted-foreground block mb-1">Start</label>
-                        <Input
-                          type="time"
-                          className="h-8 text-xs"
-                          value={field.value ?? ""}
-                          onChange={(e) => field.onChange(e.target.value || null)}
-                        />
-                      </div>
-                    )}
+            <div
+              key={d.key}
+              className="grid grid-cols-[140px_80px_120px_120px_1fr] items-center gap-2 px-3 py-1.5 border-b last:border-b-0 min-w-[600px]"
+            >
+              <span className="text-sm">{d.label}</span>
+              <FormField
+                control={form.control}
+                name={`operational_hours.${index}.is_active`}
+                render={({ field }) => (
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                )}
+              />
+              <FormField
+                control={form.control}
+                name={`operational_hours.${index}.start_time`}
+                render={({ field }) => (
+                  <Input
+                    type="time"
+                    className="h-8 text-xs"
+                    disabled={!active}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value || null)}
                   />
-                  <FormField
-                    control={form.control}
-                    name={`operational_hours.${index}.end_time`}
-                    render={({ field }) => (
-                      <div>
-                        <label className="text-xs text-muted-foreground block mb-1">End</label>
-                        <Input
-                          type="time"
-                          className="h-8 text-xs"
-                          value={field.value ?? ""}
-                          onChange={(e) => field.onChange(e.target.value || null)}
-                        />
-                      </div>
-                    )}
+                )}
+              />
+              <FormField
+                control={form.control}
+                name={`operational_hours.${index}.end_time`}
+                render={({ field }) => (
+                  <Input
+                    type="time"
+                    className="h-8 text-xs"
+                    disabled={!active}
+                    value={field.value ?? ""}
+                    onChange={(e) => field.onChange(e.target.value || null)}
                   />
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">{contextLabel}</p>
+                )}
+              />
+              <span className="text-xs text-muted-foreground pl-2">{contextLabel}</span>
             </div>
           );
         })}
