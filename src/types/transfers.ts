@@ -141,6 +141,74 @@ export type Transfer = {
   is_unsaved?: boolean;
 };
 
+// ─────────────────────────────────────────────────────────────────────────
+// New module (NestJS-backed). Coexists with the legacy Supabase-direct
+// `Transfer` shape above; do not merge — they map to different tables.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type TransferModeOfTransport = "vehicle_p2p" | "vehicle_disposal";
+
+export type TransferStatus =
+  | "draft"
+  | "active"
+  | "inactive"
+  | "published"
+  | "archived";
+
+export interface TransferListRow {
+  id: string;
+  name: string;
+  status: TransferStatus | string;
+  country_id: string | null;
+  currency_id: string | null;
+  mode_of_transport: TransferModeOfTransport | string | null;
+  markup_pct: number | null;
+  is_preferred: boolean;
+  created_at: string;
+}
+
+export interface TransferCreateInput {
+  name: string;
+  mode_of_transport: TransferModeOfTransport;
+  country_id: string | null;
+  currency_id: string | null;
+  description: string | null;
+  status: TransferStatus;
+  is_preferred?: boolean;
+}
+
+export type TransferUpdateInput = Partial<TransferCreateInput>;
+
+export interface TransferCreated {
+  id: string;
+  [key: string]: unknown;
+}
+
+// Shape returned by GET /api/transfers/:id — the row plus nested arrays.
+// Tab 1 only consumes the top-level columns; nested children typed loosely
+// until Tabs 2/3/4 are built.
+export interface TransferDetail extends TransferListRow {
+  description?: string | null;
+  transfer_images?: unknown[];
+  transfer_addons?: unknown[];
+  transfer_packages?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface TransferCountryOption {
+  id: string;
+  country_code: string;
+  country_name: string;
+  is_active?: boolean;
+}
+
+export interface TransferCurrencyOption {
+  id: string;
+  code: string;
+  name: string;
+  symbol: string | null;
+}
+
 export type VehicleType = NonNullable<Season["per_vehicle_rate"]>[number] & { id: string };
 
 // Valid vehicle type for vehicle rate grid
