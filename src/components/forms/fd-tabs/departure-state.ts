@@ -31,22 +31,18 @@ export function addonOverridesFromServer(d: FDDeparture): AddonOverrideState[] {
   const rows = d.fd_addon_departure_pricing ?? [];
   return rows.map((r) => {
     const hasAnyRate = [
-      r.rate_single,
-      r.rate_double,
-      r.rate_triple,
-      r.rate_child_no_bed,
-      r.rate_child_extra_bed,
-      r.rate_infant,
+      r.override_price_adult,
+      r.override_price_child,
+      r.override_price_infant,
+      r.override_price_total,
     ].some((v) => v != null);
     return {
       addon_id: r.addon_id,
       enabled: hasAnyRate,
-      rate_single: r.rate_single,
-      rate_double: r.rate_double,
-      rate_triple: r.rate_triple,
-      rate_child_no_bed: r.rate_child_no_bed,
-      rate_child_extra_bed: r.rate_child_extra_bed,
-      rate_infant: r.rate_infant,
+      override_price_adult: r.override_price_adult,
+      override_price_child: r.override_price_child,
+      override_price_infant: r.override_price_infant,
+      override_price_total: r.override_price_total,
     };
   });
 }

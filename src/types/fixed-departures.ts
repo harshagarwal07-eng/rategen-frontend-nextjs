@@ -149,12 +149,20 @@ export interface FDAddonDeparturePricing {
   id?: string;
   departure_date_id?: string;
   addon_id: string;
+  // Legacy occupancy columns kept for backward compat — addon overrides write
+  // to override_price_* now.
   rate_single: number | null;
   rate_double: number | null;
   rate_triple: number | null;
   rate_child_no_bed: number | null;
   rate_child_extra_bed: number | null;
   rate_infant: number | null;
+  // Per-pax / single-rate override columns matching the addon's own pricing
+  // shape from Tab 4.
+  override_price_adult: number | null;
+  override_price_child: number | null;
+  override_price_infant: number | null;
+  override_price_total: number | null;
 }
 
 export interface FDDeparture {

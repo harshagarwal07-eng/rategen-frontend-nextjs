@@ -54,16 +54,24 @@ export async function saveDeparture({
       ...state.pricing,
     });
 
+    // Toggle-OFF rows still get sent with all-null overrides since the backend
+    // has no DELETE endpoint for addon pricing. Legacy occupancy columns are
+    // always nulled — those columns were never populated and the new shape
+    // lives on override_price_*.
     const addonRows = state.addon_overrides
       .filter((o) => addons.some((a) => a.id === o.addon_id))
       .map((o) => ({
         addon_id: o.addon_id,
-        rate_single: o.enabled ? o.rate_single : null,
-        rate_double: o.enabled ? o.rate_double : null,
-        rate_triple: o.enabled ? o.rate_triple : null,
-        rate_child_no_bed: o.enabled ? o.rate_child_no_bed : null,
-        rate_child_extra_bed: o.enabled ? o.rate_child_extra_bed : null,
-        rate_infant: o.enabled ? o.rate_infant : null,
+        rate_single: null,
+        rate_double: null,
+        rate_triple: null,
+        rate_child_no_bed: null,
+        rate_child_extra_bed: null,
+        rate_infant: null,
+        override_price_adult: o.enabled ? o.override_price_adult : null,
+        override_price_child: o.enabled ? o.override_price_child : null,
+        override_price_infant: o.enabled ? o.override_price_infant : null,
+        override_price_total: o.enabled ? o.override_price_total : null,
       }));
     if (addonRows.length > 0) {
       await fdUpsertAddonDeparturePricing(saved.id, addonRows);
