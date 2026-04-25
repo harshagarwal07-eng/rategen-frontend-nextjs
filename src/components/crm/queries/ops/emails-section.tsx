@@ -132,7 +132,7 @@ function TopUtilityBar({ aliases, activeAlias, onSelectAlias, labels, activeLabe
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-60 p-0 z-[300]" align="start">
-          <Command>
+          <Command shouldFilter={true}>
             <CommandInput placeholder="Search aliases…" className="h-8 text-xs" />
             <CommandList>
               <CommandEmpty className="text-xs py-4">No aliases found.</CommandEmpty>
@@ -201,7 +201,7 @@ function TopUtilityBar({ aliases, activeAlias, onSelectAlias, labels, activeLabe
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-48 p-0 z-[300]" align="start">
-            <Command>
+            <Command shouldFilter={true}>
               <CommandInput placeholder="Search labels…" className="h-8 text-xs" />
               <CommandList>
                 <CommandEmpty className="text-xs py-4">No labels found.</CommandEmpty>

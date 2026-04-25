@@ -240,7 +240,7 @@ function StaticFilterPopover({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[180px] p-0" align="start">
-        <Command>
+        <Command shouldFilter={true}>
           <CommandInput placeholder={title} className="h-9" />
           <CommandList className="max-h-full">
             <CommandEmpty>No results found.</CommandEmpty>

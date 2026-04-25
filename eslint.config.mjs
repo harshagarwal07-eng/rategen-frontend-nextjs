@@ -1,19 +1,25 @@
-import { FlatCompat } from "@eslint/eslintrc";
-import { dirname } from "path";
-import { fileURLToPath } from "url";
+import { createRequire } from "module";
+import cmdkExplicitFilter from "./eslint-rules/cmdk-explicit-filter.mjs";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// eslint-config-next ships native flat config arrays — no FlatCompat needed.
+const require = createRequire(import.meta.url);
+const nextCoreWebVitals = require("eslint-config-next/core-web-vitals");
+const nextTypescript = require("eslint-config-next/typescript");
 
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+const localPlugin = {
+  rules: {
+    "cmdk-explicit-filter": cmdkExplicitFilter,
+  },
+};
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextCoreWebVitals,
+  ...nextTypescript,
   {
+    plugins: { local: localPlugin },
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
+      "local/cmdk-explicit-filter": "error",
     },
   },
   {

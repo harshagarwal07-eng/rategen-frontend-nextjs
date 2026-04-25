@@ -83,7 +83,7 @@ function FromAddressField({ aliases, selectedAddress, onSelect, missingAliasScop
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-72 p-0 z-300" align="end" side="bottom">
-              <Command>
+              <Command shouldFilter={true}>
                 <CommandInput placeholder="Search addresses…" className="h-8 text-xs" />
                 <CommandList>
                   <CommandEmpty className="text-xs py-4">No addresses found.</CommandEmpty>

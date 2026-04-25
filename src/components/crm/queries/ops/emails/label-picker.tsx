@@ -187,7 +187,7 @@ export function LabelPicker({
               ))}
             </div>
           ) : (
-            <Command className="rounded-lg border">
+            <Command className="rounded-lg border" shouldFilter={true}>
               <CommandInput
                 placeholder="Search labels by name…"
                 className="h-9 text-sm"

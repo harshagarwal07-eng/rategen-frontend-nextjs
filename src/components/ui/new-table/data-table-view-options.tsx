@@ -35,7 +35,7 @@ export function DataTableViewOptions<TData>({ table }: DataTableViewOptionsProps
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-44 p-0">
-        <Command>
+        <Command shouldFilter={true}>
           <CommandInput placeholder="Search columns..." />
           <CommandList>
             <CommandEmpty>No columns found.</CommandEmpty>
