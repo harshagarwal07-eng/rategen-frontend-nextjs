@@ -22,6 +22,7 @@ interface MultiSelectSearchProps {
   disabled?: boolean;
   minChars?: number;
   debounceMs?: number;
+  initialLabelMap?: Record<string, string>;
 }
 
 export function MultiSelectSearch({
@@ -32,13 +33,30 @@ export function MultiSelectSearch({
   disabled = false,
   minChars = 0,
   debounceMs = 300,
+  initialLabelMap,
 }: MultiSelectSearchProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<MultiSelectOption[]>([]);
   const [loading, setLoading] = useState(false);
   // Accumulate labels across search changes so chips remain labeled even after search clears
-  const [labelMap, setLabelMap] = useState<Record<string, string>>({});
+  const [labelMap, setLabelMap] = useState<Record<string, string>>(initialLabelMap ?? {});
+
+  // Merge new entries from initialLabelMap when it changes (e.g. async hydration in edit mode)
+  useEffect(() => {
+    if (!initialLabelMap) return;
+    setLabelMap((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [k, v] of Object.entries(initialLabelMap)) {
+        if (next[k] !== v) {
+          next[k] = v;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [initialLabelMap]);
 
   const debouncedSearch = useDebounce(search, debounceMs);
 

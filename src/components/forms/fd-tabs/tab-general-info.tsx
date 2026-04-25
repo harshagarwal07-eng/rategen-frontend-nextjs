@@ -154,6 +154,15 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
   const ageRestriction = form.watch("age_restriction");
   const bannerUrl = form.watch("banner_image_url");
 
+  const countryLabelMap = useMemo(
+    () => Object.fromEntries(existingPkgCountries.map((c) => [c.id, c.country_name])),
+    [existingPkgCountries],
+  );
+  const cityLabelMap = useMemo(
+    () => Object.fromEntries(existingPkgCities.map((c) => [c.id, (c as FDCity).city_name])),
+    [existingPkgCities],
+  );
+
   // Clear cities when countries cleared
   useEffect(() => {
     if (selectedCountries.length === 0) {
@@ -339,6 +348,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
                 fetchFn={countriesFetchFn}
                 value={field.value}
                 onChange={field.onChange}
+                initialLabelMap={countryLabelMap}
               />
             )}
           />
@@ -358,6 +368,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
                 value={field.value}
                 onChange={field.onChange}
                 disabled={selectedCountries.length === 0}
+                initialLabelMap={cityLabelMap}
               />
             )}
           />
