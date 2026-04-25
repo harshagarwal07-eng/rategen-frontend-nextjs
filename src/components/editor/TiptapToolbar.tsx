@@ -35,8 +35,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+export type TiptapTool =
+  | "undo"
+  | "redo"
+  | "blockSelect"
+  | "bulletList"
+  | "orderedList"
+  | "bold"
+  | "italic"
+  | "underline"
+  | "strike"
+  | "color"
+  | "link"
+  | "alignLeft"
+  | "alignCenter"
+  | "alignRight"
+  | "alignJustify"
+  | "table"
+  | "divider";
+
 interface TiptapToolbarProps {
   editor: Editor;
+  tools?: TiptapTool[];
+}
+
+function isAllowed(name: TiptapTool, tools?: TiptapTool[]): boolean {
+  if (!tools) return true;
+  return tools.includes(name);
 }
 
 function Divider(): React.ReactElement {
@@ -116,8 +141,16 @@ function FloatingLinkEditor({ editor, onClose }: FloatingLinkEditorProps) {
   );
 }
 
-function TiptapToolbar({ editor }: TiptapToolbarProps) {
+function TiptapToolbar({ editor, tools }: TiptapToolbarProps) {
   const [showLinkEditor, setShowLinkEditor] = useState(false);
+  const show = (name: TiptapTool) => isAllowed(name, tools);
+  const showAlignGroup =
+    show("alignLeft") || show("alignCenter") || show("alignRight") || show("alignJustify");
+  const showInsertGroup = show("table") || show("divider");
+  const showFormatGroup =
+    show("bold") || show("italic") || show("underline") || show("strike") || show("color") || show("link");
+  const showListGroup = show("bulletList") || show("orderedList");
+  const showHistoryGroup = show("undo") || show("redo");
 
   const getCurrentBlockType = () => {
     if (editor.isActive("heading", { level: 1 })) return "Large Heading";
@@ -154,43 +187,47 @@ function TiptapToolbar({ editor }: TiptapToolbarProps) {
 
   return (
     <div className="flex items-center p-2 border-b sticky top-0 z-10 bg-white dark:bg-muted rounded-t-lg">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!editor.can().undo()}
-            onClick={() => editor.chain().focus().undo().run()}
-            className={`h-8 w-8 ${!editor.can().undo() ? "opacity-30" : ""}`}
-            aria-label="Undo"
-            type="button"
-          >
-            <Undo className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Undo</TooltipContent>
-      </Tooltip>
+      {show("undo") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!editor.can().undo()}
+              onClick={() => editor.chain().focus().undo().run()}
+              className={`h-8 w-8 ${!editor.can().undo() ? "opacity-30" : ""}`}
+              aria-label="Undo"
+              type="button"
+            >
+              <Undo className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Undo</TooltipContent>
+        </Tooltip>
+      )}
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            disabled={!editor.can().redo()}
-            onClick={() => editor.chain().focus().redo().run()}
-            className={`h-8 w-8 ${!editor.can().redo() ? "opacity-30" : ""}`}
-            aria-label="Redo"
-            type="button"
-          >
-            <Redo className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Redo</TooltipContent>
-      </Tooltip>
+      {show("redo") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!editor.can().redo()}
+              onClick={() => editor.chain().focus().redo().run()}
+              className={`h-8 w-8 ${!editor.can().redo() ? "opacity-30" : ""}`}
+              aria-label="Redo"
+              type="button"
+            >
+              <Redo className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Redo</TooltipContent>
+        </Tooltip>
+      )}
 
-      <Divider />
+      {showHistoryGroup && show("blockSelect") && <Divider />}
 
-      <Select
+      {show("blockSelect") && <Select
         value={getCurrentBlockType()}
         onValueChange={(value) => {
           switch (value) {
@@ -222,274 +259,290 @@ function TiptapToolbar({ editor }: TiptapToolbarProps) {
           <SelectItem value="Bullet List">Bullet List</SelectItem>
           <SelectItem value="Numbered List">Numbered List</SelectItem>
         </SelectContent>
-      </Select>
+      </Select>}
 
-      <Divider />
+      {show("blockSelect") && showListGroup && <Divider />}
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-8 w-8 ${
-              editor.isActive("bulletList") ? "bg-muted" : ""
-            }`}
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-            aria-label="Bullet List"
-            type="button"
-          >
-            <List className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Bullet List</TooltipContent>
-      </Tooltip>
+      {show("bulletList") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${
+                editor.isActive("bulletList") ? "bg-muted" : ""
+              }`}
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+              aria-label="Bullet List"
+              type="button"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Bullet List</TooltipContent>
+        </Tooltip>
+      )}
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={`h-8 w-8 ${
-              editor.isActive("orderedList") ? "bg-muted" : ""
-            }`}
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-            aria-label="Numbered List"
-            type="button"
-          >
-            <ListOrdered className="h-4 w-4" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Numbered List</TooltipContent>
-      </Tooltip>
+      {show("orderedList") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${
+                editor.isActive("orderedList") ? "bg-muted" : ""
+              }`}
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+              aria-label="Numbered List"
+              type="button"
+            >
+              <ListOrdered className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Numbered List</TooltipContent>
+        </Tooltip>
+      )}
 
-      <Divider />
+      {showListGroup && showFormatGroup && <Divider />}
 
-      {
-        <>
+      {show("bold") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${
+                editor.isActive("bold") ? "bg-muted" : ""
+              }`}
+              onClick={() => editor.chain().focus().toggleBold().run()}
+              aria-label="Format Bold"
+              type="button"
+            >
+              <Bold className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Bold</TooltipContent>
+        </Tooltip>
+      )}
+
+      {show("italic") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${
+                editor.isActive("italic") ? "bg-muted" : ""
+              }`}
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+              aria-label="Format Italics"
+              type="button"
+            >
+              <Italic className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Italic</TooltipContent>
+        </Tooltip>
+      )}
+
+      {show("underline") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${
+                editor.isActive("underline") ? "bg-muted" : ""
+              }`}
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
+              aria-label="Format Underline"
+              type="button"
+            >
+              <Underline className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Underline</TooltipContent>
+        </Tooltip>
+      )}
+
+      {show("strike") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${
+                editor.isActive("strike") ? "bg-muted" : ""
+              }`}
+              onClick={() => editor.chain().focus().toggleStrike().run()}
+              aria-label="Format Strikethrough"
+              type="button"
+            >
+              <Strikethrough className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Strikethrough</TooltipContent>
+        </Tooltip>
+      )}
+
+      {show("color") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => editor.chain().focus().unsetColor().run()}
+              aria-label="Reset Text Color"
+              type="button"
+            >
+              <Palette className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Reset Text Color</TooltipContent>
+        </Tooltip>
+      )}
+
+      {show("link") && (
+        <div className="relative">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
                 className={`h-8 w-8 ${
-                  editor.isActive("bold") ? "bg-muted" : ""
+                  editor.isActive("link") ? "bg-muted" : ""
                 }`}
-                onClick={() => editor.chain().focus().toggleBold().run()}
-                aria-label="Format Bold"
+                onClick={insertLink}
+                aria-label="Insert Link"
                 type="button"
               >
-                <Bold className="h-4 w-4" />
+                <LinkIcon className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Bold</TooltipContent>
+            <TooltipContent>Link</TooltipContent>
           </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-8 w-8 ${
-                  editor.isActive("italic") ? "bg-muted" : ""
-                }`}
-                onClick={() => editor.chain().focus().toggleItalic().run()}
-                aria-label="Format Italics"
-                type="button"
-              >
-                <Italic className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Italic</TooltipContent>
-          </Tooltip>
+          {showLinkEditor && editor.isActive("link") && (
+            <FloatingLinkEditor
+              editor={editor}
+              onClose={() => setShowLinkEditor(false)}
+            />
+          )}
+        </div>
+      )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-8 w-8 ${
-                  editor.isActive("underline") ? "bg-muted" : ""
-                }`}
-                onClick={() => editor.chain().focus().toggleUnderline().run()}
-                aria-label="Format Underline"
-                type="button"
-              >
-                <Underline className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Underline</TooltipContent>
-          </Tooltip>
+      {showFormatGroup && showAlignGroup && <Divider />}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`h-8 w-8 ${
-                  editor.isActive("strike") ? "bg-muted" : ""
-                }`}
-                onClick={() => editor.chain().focus().toggleStrike().run()}
-                aria-label="Format Strikethrough"
-                type="button"
-              >
-                <Strikethrough className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Strikethrough</TooltipContent>
-          </Tooltip>
+      {show("alignLeft") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => editor.chain().focus().setTextAlign("left").run()}
+              aria-label="Left Align"
+              type="button"
+            >
+              <AlignLeft className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Left Align</TooltipContent>
+        </Tooltip>
+      )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => editor.chain().focus().unsetColor().run()}
-                aria-label="Reset Text Color"
-                type="button"
-              >
-                <Palette className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Reset Text Color</TooltipContent>
-          </Tooltip>
+      {show("alignCenter") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => editor.chain().focus().setTextAlign("center").run()}
+              aria-label="Center Align"
+              type="button"
+            >
+              <AlignCenter className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Center Align</TooltipContent>
+        </Tooltip>
+      )}
 
-          <div className="relative">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`h-8 w-8 ${
-                    editor.isActive("link") ? "bg-muted" : ""
-                  }`}
-                  onClick={insertLink}
-                  aria-label="Insert Link"
-                  type="button"
-                >
-                  <LinkIcon className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Link</TooltipContent>
-            </Tooltip>
+      {show("alignRight") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => editor.chain().focus().setTextAlign("right").run()}
+              aria-label="Right Align"
+              type="button"
+            >
+              <AlignRight className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Right Align</TooltipContent>
+        </Tooltip>
+      )}
 
-            {showLinkEditor && editor.isActive("link") && (
-              <FloatingLinkEditor
-                editor={editor}
-                onClose={() => setShowLinkEditor(false)}
-              />
-            )}
-          </div>
+      {show("alignJustify") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => editor.chain().focus().setTextAlign("justify").run()}
+              aria-label="Justify Align"
+              type="button"
+            >
+              <AlignJustify className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Justify Align</TooltipContent>
+        </Tooltip>
+      )}
 
-          <Divider />
+      {showAlignGroup && showInsertGroup && <Divider />}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() =>
-                  editor.chain().focus().setTextAlign("left").run()
-                }
-                aria-label="Left Align"
-                type="button"
-              >
-                <AlignLeft className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Left Align</TooltipContent>
-          </Tooltip>
+      {show("table") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={insertTable}
+              aria-label="Insert Table"
+              type="button"
+            >
+              <Table className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Table</TooltipContent>
+        </Tooltip>
+      )}
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() =>
-                  editor.chain().focus().setTextAlign("center").run()
-                }
-                aria-label="Center Align"
-                type="button"
-              >
-                <AlignCenter className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Center Align</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() =>
-                  editor.chain().focus().setTextAlign("right").run()
-                }
-                aria-label="Right Align"
-                type="button"
-              >
-                <AlignRight className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Right Align</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() =>
-                  editor.chain().focus().setTextAlign("justify").run()
-                }
-                aria-label="Justify Align"
-                type="button"
-              >
-                <AlignJustify className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Justify Align</TooltipContent>
-          </Tooltip>
-
-          <Divider />
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={insertTable}
-                aria-label="Insert Table"
-                type="button"
-              >
-                <Table className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Table</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={insertDivider}
-                aria-label="Insert Divider"
-                type="button"
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Divider</TooltipContent>
-          </Tooltip>
-        </>
-      }
+      {show("divider") && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={insertDivider}
+              aria-label="Insert Divider"
+              type="button"
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Divider</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   );
 }

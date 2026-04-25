@@ -18,20 +18,24 @@ import BulletList from "@tiptap/extension-bullet-list";
 import OrderedList from "@tiptap/extension-ordered-list";
 import ListItem from "@tiptap/extension-list-item";
 import { useEffect, useImperativeHandle, forwardRef } from "react";
-import TiptapToolbar from "./TiptapToolbar";
+import TiptapToolbar, { type TiptapTool } from "./TiptapToolbar";
 import { cn } from "@/lib/utils";
 
 interface TiptapEditorProps {
   onChange?: (content: string) => void;
   initialContent?: string;
   placeholder?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   editorRef?: React.MutableRefObject<any>;
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   noToolbar?: boolean;
+  /** Optional whitelist of toolbar tools. Omit for full toolbar (backward compat). */
+  tools?: TiptapTool[];
   className?: string;
   readOnly?: boolean;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const TiptapEditor = forwardRef<any, TiptapEditorProps>(
   (
     {
@@ -41,6 +45,7 @@ const TiptapEditor = forwardRef<any, TiptapEditorProps>(
       editorRef,
       onKeyDown,
       noToolbar = false,
+      tools,
       className,
       readOnly = false,
     },
@@ -133,8 +138,24 @@ const TiptapEditor = forwardRef<any, TiptapEditorProps>(
           },
         },
       },
-      [initialContent]
+      // Mount once. External content changes are synced via the effect below
+      // so typing doesn't cause the editor to remount and lose focus/cursor.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      []
     );
+
+    // Sync external initialContent changes (e.g. parent setValue from copy/clear)
+    // without remounting the editor. Skip when the editor already matches or
+    // the user is actively typing.
+    useEffect(() => {
+      if (!editor) return;
+      const next = initialContent ?? "";
+      const current = editor.isEmpty ? "" : editor.getHTML();
+      const normalizedNext = next === "<p></p>" ? "" : next;
+      if (current === normalizedNext) return;
+      if (editor.isFocused) return;
+      editor.commands.setContent(next);
+    }, [initialContent, editor]);
 
     // Expose editor instance through ref
     useImperativeHandle(
@@ -173,7 +194,7 @@ const TiptapEditor = forwardRef<any, TiptapEditorProps>(
           className
         )}
       >
-        {!noToolbar && <TiptapToolbar editor={editor} />}
+        {!noToolbar && <TiptapToolbar editor={editor} tools={tools} />}
         <div className="relative">
           <EditorContent editor={editor} onKeyDown={onKeyDown} />
           {!editor.getText() && placeholder && (
