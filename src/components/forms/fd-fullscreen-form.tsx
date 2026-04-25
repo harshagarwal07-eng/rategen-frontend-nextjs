@@ -174,7 +174,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
             </Tabs>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-6 pb-20">
+          <div className="flex-1 overflow-y-auto p-6">
             <div className="mx-auto max-w-5xl">
               <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as FDTabId)} className="w-full">
                 <TabsContent value="general">
@@ -250,7 +250,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
           </div>
 
           {activeTabHasHandle && (
-            <div className="sticky bottom-0 inset-x-0 border-t bg-muted px-4 py-2">
+            <div className="border-t border-border bg-background px-6 py-4">
               <div className="flex items-center justify-between">
                 <div>
                   {tabIdx > 0 && mode === "create" && (
