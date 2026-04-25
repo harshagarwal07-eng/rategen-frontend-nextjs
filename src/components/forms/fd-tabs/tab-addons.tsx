@@ -876,7 +876,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
         <div className="px-4 pb-4 pt-2 border-t flex flex-col gap-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label className="text-xs">Name <span className="text-destructive">*</span></Label>
+              <Label>Name <span className="text-destructive">*</span></Label>
               <Input
                 placeholder="e.g. Eiffel Tower Summit Access"
                 value={draft.name ?? ""}
@@ -885,7 +885,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
             </div>
 
             <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label className="text-xs">Description</Label>
+              <Label>Description</Label>
               <Textarea
                 rows={3}
                 placeholder="Optional details agents see when picking this add-on..."
@@ -908,7 +908,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
             {/* Type-specific primary fields */}
             {type === "multi_day_tour" && (
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">Duration (days) <span className="text-destructive">*</span></Label>
+                <Label>Duration (days) <span className="text-destructive">*</span></Label>
                 <Input
                   type="number"
                   min={1}
@@ -921,7 +921,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
             {type === "transfer" && (
               <>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">Transfer Type</Label>
+                  <Label>Transfer Type</Label>
                   <Input
                     placeholder="e.g. PVT, SIC"
                     value={draft.transfer_type ?? ""}
@@ -929,7 +929,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                   />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label className="text-xs">Transfer Mode</Label>
+                  <Label>Transfer Mode</Label>
                   <Input
                     placeholder="e.g. Sedan, Coach"
                     value={draft.transfer_mode ?? ""}
@@ -955,7 +955,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                 </div>
                 {draft.tour_includes_transfer && (
                   <div className="flex flex-col gap-1.5 md:col-span-2">
-                    <Label className="text-xs">Tour Transfer Type</Label>
+                    <Label>Tour Transfer Type</Label>
                     <Input
                       placeholder="e.g. Seat in Coach, Private"
                       value={draft.tour_transfer_type ?? ""}
@@ -979,7 +979,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pricing</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">
+                <Label>
                   Adult ({getEffectiveBandRange(draft, packageBands, "adult").from}-
                   {getEffectiveBandRange(draft, packageBands, "adult").to})
                 </Label>
@@ -995,7 +995,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">
+                <Label>
                   Child ({getEffectiveBandRange(draft, packageBands, "child").from}-
                   {getEffectiveBandRange(draft, packageBands, "child").to})
                 </Label>
@@ -1011,7 +1011,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">
+                <Label>
                   Infant ({getEffectiveBandRange(draft, packageBands, "infant").from}-
                   {getEffectiveBandRange(draft, packageBands, "infant").to})
                 </Label>
@@ -1027,7 +1027,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">Max Capacity</Label>
+                <Label>Max Capacity</Label>
                 <Input
                   type="number"
                   min={0}
@@ -1043,7 +1043,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
             </div>
             {type !== "multi_day_tour" && (
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">Price Unit</Label>
+                <Label>Price Unit</Label>
                 <Select
                   value={draft.price_unit ?? "_none"}
                   onValueChange={(v) => onChange({ price_unit: v === "_none" ? null : v })}
@@ -1063,7 +1063,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
           {/* Inclusions / Exclusions */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Inclusions</Label>
+              <Label>Inclusions</Label>
               <BulletListInput
                 value={draft.inclusions ?? []}
                 onChange={(v) => onChange({ inclusions: v })}
@@ -1071,7 +1071,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Exclusions</Label>
+              <Label>Exclusions</Label>
               <BulletListInput
                 value={draft.exclusions ?? []}
                 onChange={(v) => onChange({ exclusions: v })}
@@ -1488,7 +1488,7 @@ function AddonDayCard({
       {isOpen && (
         <div className="px-4 pb-4 pt-2 border-t flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Day Title</Label>
+            <Label>Day Title</Label>
             <Input
               placeholder={`Day ${day.day_number}`}
               value={day.title}
@@ -1497,7 +1497,7 @@ function AddonDayCard({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Description</Label>
+            <Label>Description</Label>
             <Textarea
               rows={3}
               placeholder="Describe the day's plan..."
@@ -1507,7 +1507,7 @@ function AddonDayCard({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Includes</Label>
+            <Label>Includes</Label>
             <Textarea
               rows={2}
               placeholder="What's included today..."
@@ -1518,7 +1518,7 @@ function AddonDayCard({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Meals Included</Label>
+              <Label>Meals Included</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
@@ -1575,7 +1575,7 @@ function AddonDayCard({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label className="text-xs">Overnight City</Label>
+              <Label>Overnight City</Label>
               <Autocomplete
                 mode="server"
                 value={day.overnight_city_id ?? undefined}
@@ -1592,7 +1592,7 @@ function AddonDayCard({
             </div>
 
             <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label className="text-xs">Accommodation Note</Label>
+              <Label>Accommodation Note</Label>
               <Input
                 placeholder="e.g. 4-star hotel, Deluxe Room"
                 value={day.accommodation_note}
@@ -1601,7 +1601,7 @@ function AddonDayCard({
             </div>
 
             <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label className="text-xs">Image URL</Label>
+              <Label>Image URL</Label>
               <Input
                 placeholder="https://..."
                 value={day.image_url}

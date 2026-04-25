@@ -725,7 +725,7 @@ function DayBody({
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <Label className="text-xs">Day Title</Label>
+        <Label>Day Title</Label>
         <Input
           placeholder="e.g. Arrival in Paris"
           {...form.register(`days.${idx}.title`)}
@@ -733,7 +733,7 @@ function DayBody({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label className="text-xs">Description</Label>
+        <Label>Description</Label>
         <TiptapEditor
           initialContent={description}
           onChange={(html) =>
@@ -746,7 +746,7 @@ function DayBody({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label className="text-xs">Includes</Label>
+        <Label>Includes</Label>
         <Textarea
           rows={2}
           placeholder="What's included today..."
@@ -756,7 +756,7 @@ function DayBody({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Meals Included</Label>
+          <Label>Meals Included</Label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -809,7 +809,7 @@ function DayBody({
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Overnight City</Label>
+          <Label>Overnight City</Label>
           <Controller
             control={form.control}
             name={`days.${idx}.overnight_city_id`}
@@ -832,7 +832,7 @@ function DayBody({
         </div>
 
         <div className="flex flex-col gap-1.5 md:col-span-2">
-          <Label className="text-xs">Accommodation Note</Label>
+          <Label>Accommodation Note</Label>
           <Input
             placeholder="e.g. 4-star hotel, Deluxe Room"
             {...form.register(`days.${idx}.accommodation_note`)}
@@ -840,7 +840,7 @@ function DayBody({
         </div>
 
         <div className="flex flex-col gap-1.5 md:col-span-2">
-          <Label className="text-xs">Image URL</Label>
+          <Label>Image URL</Label>
           <Input
             placeholder="https://..."
             {...form.register(`days.${idx}.image_url`)}

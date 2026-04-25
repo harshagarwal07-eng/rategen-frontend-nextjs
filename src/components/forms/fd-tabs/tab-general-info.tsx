@@ -328,130 +328,146 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
         <p className="text-muted-foreground">Enter the basic details about this fixed departure</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="flex flex-col gap-1.5">
-          <Label>Package Name <span className="text-destructive">*</span></Label>
-          <Input placeholder="e.g. Maldives Luxury Escape" {...form.register("name")} />
-          {form.formState.errors.name && (
-            <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-          )}
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Tour Code</Label>
-          <Input placeholder="e.g. EUR-LUX-7N" {...form.register("tour_code")} />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Countries</Label>
-          <Controller
-            control={form.control}
-            name="country_ids"
-            render={({ field }) => (
-              <MultiSelectSearch
-                placeholder="Search countries..."
-                fetchFn={countriesFetchFn}
-                value={field.value}
-                onChange={field.onChange}
-                initialLabelMap={countryLabelMap}
-              />
+      <div className="space-y-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block">Identity</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Package Name <span className="text-destructive">*</span></Label>
+            <Input placeholder="e.g. Maldives Luxury Escape" {...form.register("name")} />
+            {form.formState.errors.name && (
+              <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
             )}
-          />
-        </div>
+          </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label>
-            Cities {selectedCountries.length === 0 && <span className="text-xs text-muted-foreground">(select countries first)</span>}
-          </Label>
-          <Controller
-            control={form.control}
-            name="city_ids"
-            render={({ field }) => (
-              <MultiSelectSearch
-                placeholder={selectedCountries.length === 0 ? "Select countries first" : "Search cities..."}
-                fetchFn={citiesFetchFn}
-                value={field.value}
-                onChange={field.onChange}
-                disabled={selectedCountries.length === 0}
-                initialLabelMap={cityLabelMap}
-              />
-            )}
-          />
+          <div className="flex flex-col gap-1.5">
+            <Label>Tour Code</Label>
+            <Input placeholder="e.g. EUR-LUX-7N" {...form.register("tour_code")} />
+          </div>
         </div>
+      </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label>Departure City</Label>
-          <Controller
-            control={form.control}
-            name="departure_city_id"
-            render={({ field }) => (
-              <Autocomplete
-                mode="server"
-                value={field.value ?? undefined}
-                onChange={(v) => field.onChange(v || null)}
-                onSearch={departureCitySearchFn}
-                fetchByValue={departureCityFetchByValue}
-                placeholder={selectedCountries.length === 0 ? "Select countries first" : "Search departure city..."}
-                disabled={selectedCountries.length === 0}
-              />
-            )}
-          />
+      <div className="space-y-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block">Locations</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Countries</Label>
+            <Controller
+              control={form.control}
+              name="country_ids"
+              render={({ field }) => (
+                <MultiSelectSearch
+                  placeholder="Search countries..."
+                  fetchFn={countriesFetchFn}
+                  value={field.value}
+                  onChange={field.onChange}
+                  initialLabelMap={countryLabelMap}
+                />
+              )}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>
+              Cities {selectedCountries.length === 0 && <span className="text-xs text-muted-foreground">(select countries first)</span>}
+            </Label>
+            <Controller
+              control={form.control}
+              name="city_ids"
+              render={({ field }) => (
+                <MultiSelectSearch
+                  placeholder={selectedCountries.length === 0 ? "Select countries first" : "Search cities..."}
+                  fetchFn={citiesFetchFn}
+                  value={field.value}
+                  onChange={field.onChange}
+                  disabled={selectedCountries.length === 0}
+                  initialLabelMap={cityLabelMap}
+                />
+              )}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5 col-span-full">
+            <Label>Departure City</Label>
+            <Controller
+              control={form.control}
+              name="departure_city_id"
+              render={({ field }) => (
+                <Autocomplete
+                  mode="server"
+                  value={field.value ?? undefined}
+                  onChange={(v) => field.onChange(v || null)}
+                  onSearch={departureCitySearchFn}
+                  fetchByValue={departureCityFetchByValue}
+                  placeholder={selectedCountries.length === 0 ? "Select countries first" : "Search departure city..."}
+                  disabled={selectedCountries.length === 0}
+                />
+              )}
+            />
+          </div>
         </div>
+      </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label>Duration (nights)</Label>
-          <Input type="number" min={1} {...form.register("duration_nights", { valueAsNumber: true })} />
+      <div className="space-y-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block">Trip Details</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Duration (nights)</Label>
+            <Input type="number" min={1} {...form.register("duration_nights", { valueAsNumber: true })} />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Max Group Size</Label>
+            <Input
+              type="number"
+              min={0}
+              placeholder="No limit"
+              {...form.register("max_group_size", {
+                setValueAs: (v) => (v === "" || v == null ? null : Number(v)),
+              })}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Currency</Label>
+            <Controller
+              control={form.control}
+              name="currency"
+              render={({ field }) => (
+                <Select value={field.value ?? "_none"} onValueChange={(v) => field.onChange(v === "_none" ? null : v)}>
+                  <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">None</SelectItem>
+                    {currencyCodes.map((code) => (
+                      <SelectItem key={code} value={code}>{code}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Status</Label>
+            <Controller
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
         </div>
+      </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label>Max Group Size</Label>
-          <Input
-            type="number"
-            min={0}
-            placeholder="No limit"
-            {...form.register("max_group_size", {
-              setValueAs: (v) => (v === "" || v == null ? null : Number(v)),
-            })}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Currency</Label>
-          <Controller
-            control={form.control}
-            name="currency"
-            render={({ field }) => (
-              <Select value={field.value ?? "_none"} onValueChange={(v) => field.onChange(v === "_none" ? null : v)}>
-                <SelectTrigger><SelectValue placeholder="Select currency..." /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">None</SelectItem>
-                  {currencyCodes.map((code) => (
-                    <SelectItem key={code} value={code}>{code}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label>Status</Label>
-          <Controller
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5 col-span-full">
+      <div className="space-y-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block">Restrictions</span>
+        <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <Controller
               control={form.control}
@@ -463,7 +479,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
             <Label>Age Restriction</Label>
           </div>
           {ageRestriction && (
-            <div className="grid grid-cols-2 gap-4 pl-10 mt-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-10">
               <div className="flex flex-col gap-1.5">
                 <Label>Min Age</Label>
                 <Input
@@ -490,31 +506,36 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
             </div>
           )}
         </div>
+      </div>
 
-        <div className="flex flex-col gap-1.5 col-span-full">
-          <Label>Banner Image URL</Label>
-          <Input placeholder="https://..." {...form.register("banner_image_url")} />
-          {form.formState.errors.banner_image_url && (
-            <p className="text-xs text-destructive">{form.formState.errors.banner_image_url.message}</p>
-          )}
-          {bannerUrl && /^https?:\/\//i.test(bannerUrl) && (
-            <div className="mt-2 h-32 w-full overflow-hidden rounded-md border bg-muted">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={bannerUrl}
-                alt="Banner preview"
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
-            </div>
-          )}
-        </div>
+      <div className="space-y-3">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block">Media &amp; Description</span>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label>Banner Image URL</Label>
+            <Input placeholder="https://..." {...form.register("banner_image_url")} />
+            {form.formState.errors.banner_image_url && (
+              <p className="text-xs text-destructive">{form.formState.errors.banner_image_url.message}</p>
+            )}
+            {bannerUrl && /^https?:\/\//i.test(bannerUrl) && (
+              <div className="mt-2 h-32 w-full overflow-hidden rounded-md border bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={bannerUrl}
+                  alt="Banner preview"
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                  }}
+                />
+              </div>
+            )}
+          </div>
 
-        <div className="flex flex-col gap-1.5 col-span-full">
-          <Label>Description</Label>
-          <Textarea rows={4} placeholder="Package description..." {...form.register("description")} />
+          <div className="flex flex-col gap-1.5">
+            <Label>Description</Label>
+            <Textarea rows={4} placeholder="Package description..." {...form.register("description")} />
+          </div>
         </div>
       </div>
 
