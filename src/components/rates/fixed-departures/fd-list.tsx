@@ -3,10 +3,17 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, MoreHorizontal, Search } from "lucide-react";
+import {
+  Plus,
+  MoreHorizontal,
+  Search,
+  ChevronUp,
+  ChevronDown,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableHeader,
@@ -29,6 +36,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AlertModal } from "@/components/ui/alert-modal";
+import {
   fdListPackages,
   fdGetCountries,
   fdDeletePackage,
@@ -45,9 +61,15 @@ export function FDList() {
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [cityFilter, setCityFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [nameSort, setNameSort] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FDPackageListRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: packages = [], isLoading } = useQuery({
     queryKey: ["fd-packages"],
@@ -67,18 +89,26 @@ export function FDList() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return (packages as FDPackageListRow[]).filter((p) => {
-      if (q && !p.name.toLowerCase().includes(q)) return false;
-      if (countryFilter !== "all" && !(p.country_names ?? []).includes(countryFilter)) return false;
-      if (cityFilter !== "all" && !(p.city_names ?? []).includes(cityFilter)) return false;
-      if (statusFilter !== "all" && p.status !== statusFilter) return false;
-      return true;
-    });
-  }, [packages, search, countryFilter, cityFilter, statusFilter]);
+    return (packages as FDPackageListRow[])
+      .filter((p) => {
+        if (q && !p.name.toLowerCase().includes(q)) return false;
+        if (countryFilter !== "all" && !(p.country_names ?? []).includes(countryFilter)) return false;
+        if (cityFilter !== "all" && !(p.city_names ?? []).includes(cityFilter)) return false;
+        if (statusFilter !== "all" && p.status !== statusFilter) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const cmp = a.name.localeCompare(b.name);
+        return nameSort === "asc" ? cmp : -cmp;
+      });
+  }, [packages, search, countryFilter, cityFilter, statusFilter, nameSort]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const allPageSelected = pageRows.length > 0 && pageRows.every((r) => selectedIds.has(r.id));
+  const somePageSelected = pageRows.some((r) => selectedIds.has(r.id)) && !allPageSelected;
+  const selectedPackages = (packages as FDPackageListRow[]).filter((p) => selectedIds.has(p.id));
 
   const openCreate = () => {
     setEditingId(null);
@@ -88,82 +118,170 @@ export function FDList() {
     setEditingId(id);
     setOverlayOpen(true);
   };
-  const handleDelete = async (id: string) => {
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await fdDeletePackage(id);
+      await fdDeletePackage(deleteTarget.id);
       toast.success("Package deactivated");
       qc.invalidateQueries({ queryKey: ["fd-packages"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
     }
   };
 
-  if (isLoading) return <DataTableSkeleton columnCount={7} rowCount={10} />;
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) pageRows.forEach((r) => next.add(r.id));
+      else pageRows.forEach((r) => next.delete(r.id));
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    try {
+      const results = await Promise.allSettled(
+        selectedPackages.map((p) => fdDeletePackage(p.id))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      if (failed > 0) throw new Error(`Failed to deactivate ${failed} package(s)`);
+      toast.success(`Deactivated ${selectedPackages.length} package${selectedPackages.length === 1 ? "" : "s"}`);
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ["fd-packages"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Bulk deactivate failed");
+    } finally {
+      setBulkDeleting(false);
+      setShowBulkDeleteDialog(false);
+    }
+  };
+
+  if (isLoading) return <DataTableSkeleton columnCount={8} rowCount={10} />;
 
   return (
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-64">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search packages..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="pl-8 h-9"
-          />
-        </div>
+        {selectedIds.size > 0 ? (
+          <>
+            <span className="text-sm text-muted-foreground">
+              {selectedIds.size} package{selectedIds.size !== 1 ? "s" : ""} selected
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowBulkDeleteDialog(true)}
+              disabled={bulkDeleting}
+            >
+              Deactivate Selected
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedIds(new Set())}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="relative w-64">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search packages..."
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+                className="pl-8 h-9"
+              />
+            </div>
 
-        <Select value={countryFilter} onValueChange={(v) => { setCountryFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[160px] h-9">
-            <SelectValue placeholder="Country" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All countries</SelectItem>
-            {countries.map((c) => (
-              <SelectItem key={c.id} value={c.country_name}>{c.country_name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <Select value={countryFilter} onValueChange={(v) => { setCountryFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue placeholder="Country" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All countries</SelectItem>
+                {countries.map((c) => (
+                  <SelectItem key={c.id} value={c.country_name}>{c.country_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <Select value={cityFilter} onValueChange={(v) => { setCityFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[160px] h-9">
-            <SelectValue placeholder="City" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All cities</SelectItem>
-            {cityOptions.map((c) => (
-              <SelectItem key={c} value={c}>{c}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <Select value={cityFilter} onValueChange={(v) => { setCityFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue placeholder="City" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All cities</SelectItem>
+                {cityOptions.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[140px] h-9">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
+            <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+              <SelectTrigger className="w-[140px] h-9">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
 
-        <div className="ml-auto">
-          <Button onClick={openCreate} size="sm">
-            <Plus className="h-4 w-4" />
-            Add New
-          </Button>
-        </div>
+            <div className="ml-auto">
+              <Button onClick={openCreate} size="sm">
+                <Plus className="h-4 w-4" />
+                New Package
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead>Package Name</TableHead>
+              <TableHead className="w-[50px]">
+                <Checkbox
+                  checked={allPageSelected || (somePageSelected ? "indeterminate" : false)}
+                  onCheckedChange={(v) => toggleSelectAll(!!v)}
+                  aria-label="Select all"
+                />
+              </TableHead>
+              <TableHead
+                className="cursor-pointer select-none"
+                onClick={() => setNameSort((s) => (s === "asc" ? "desc" : "asc"))}
+              >
+                <span className="flex items-center gap-1">
+                  Package Name
+                  {nameSort === "asc" ? (
+                    <ChevronUp className="h-3 w-3" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3" />
+                  )}
+                </span>
+              </TableHead>
               <TableHead>Countries</TableHead>
               <TableHead>Cities</TableHead>
               <TableHead>Duration</TableHead>
@@ -176,7 +294,7 @@ export function FDList() {
           <TableBody>
             {pageRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                   No packages found.
                 </TableCell>
               </TableRow>
@@ -187,6 +305,13 @@ export function FDList() {
                   className="cursor-pointer hover:bg-muted/40"
                   onClick={() => openEdit(pkg.id)}
                 >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.has(pkg.id)}
+                      onCheckedChange={() => toggleSelect(pkg.id)}
+                      aria-label="Select row"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{pkg.name}</TableCell>
                   <TableCell className="max-w-[200px] truncate">
                     {(pkg.country_names ?? []).join(", ") || "—"}
@@ -212,7 +337,7 @@ export function FDList() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => openEdit(pkg.id)}>Edit</DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => handleDelete(pkg.id)}
+                          onClick={() => setDeleteTarget(pkg)}
                           className="text-destructive"
                         >
                           Deactivate
@@ -253,6 +378,49 @@ export function FDList() {
           </Button>
         </div>
       </div>
+
+      <AlertModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        loading={deleting}
+        title="Deactivate package?"
+        description={`"${deleteTarget?.name ?? ""}" will be marked inactive. This is reversible.`}
+      />
+
+      <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm bulk deactivate</DialogTitle>
+            <DialogDescription>
+              Deactivate {selectedPackages.length} package{selectedPackages.length === 1 ? "" : "s"}? This is reversible.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-60 overflow-y-auto">
+            <ul className="space-y-1">
+              {selectedPackages.map((p) => (
+                <li key={p.id} className="text-sm text-muted-foreground">
+                  • {p.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowBulkDeleteDialog(false)}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting
+                ? "Deactivating..."
+                : `Deactivate ${selectedPackages.length} package${selectedPackages.length === 1 ? "" : "s"}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <FDFullscreenForm
         open={overlayOpen}
