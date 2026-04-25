@@ -178,6 +178,9 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
   const { fields, replace } = useFieldArray({ control: form.control, name: "days" });
 
   // Hydrate from server data on first load when totalDays is known.
+  // Uses form.reset (not useFieldArray.replace) so the reconciled days become
+  // the new clean baseline — otherwise every appended row counts as a user
+  // edit and the form spuriously flags dirty on visit.
   useEffect(() => {
     if (!pkg || totalDays === 0 || hydrated) return;
     const existing = Array.isArray(pkg.fd_itinerary_days)
@@ -193,7 +196,7 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
         }))
       : [];
     const reconciled = reconcileDays(existing, totalDays);
-    replace(reconciled);
+    form.reset({ days: reconciled });
     // Initial customMeals = unique non-predefined meals across all days
     const customs = new Set<string>();
     for (const d of reconciled) {
@@ -203,7 +206,7 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
     }
     setCustomMeals(Array.from(customs).sort());
     setHydrated(true);
-  }, [pkg, totalDays, hydrated, replace]);
+  }, [pkg, totalDays, hydrated, form]);
 
   // If duration_nights changes after hydration (e.g. user edited Tab 1 then came back), reconcile.
   useEffect(() => {

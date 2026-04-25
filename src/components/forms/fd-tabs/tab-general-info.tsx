@@ -272,11 +272,10 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
       };
 
       let currentId = packageId;
-      if (mode === "create") {
+      if (!currentId) {
         const created = await fdCreatePackage(packagePayload);
         currentId = created.id;
       } else {
-        if (!currentId) throw new Error("Missing package id for edit");
         await fdUpdatePackage(currentId, packagePayload);
       }
 
