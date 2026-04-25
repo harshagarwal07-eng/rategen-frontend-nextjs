@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -152,26 +153,54 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogTitle className="sr-only">{title}</DialogTitle>
-          <div className="border-b bg-muted px-4 py-3">
-            <div className="flex items-center gap-3 mb-3">
+          <div className="sticky top-0 z-10">
+            <div className="border-b bg-background px-6 py-3">
               <div className="text-base font-semibold">{title}</div>
             </div>
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as FDTabId)} className="w-full">
-              <TabsList className="flex flex-wrap h-auto gap-1">
-                {TABS.map((t, i) => (
-                  <TabsTrigger key={t.id} value={t.id} disabled={isTabDisabled(t.id)}>
-                    <span className="mr-1 text-xs opacity-60">{i + 1}.</span>
-                    {t.label}
-                    {dirtyTabs.has(t.id) && (
-                      <span
-                        className="ml-1.5 w-2 h-2 rounded-full bg-yellow-500 shrink-0"
-                        aria-label="Unsaved changes"
-                      />
-                    )}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+
+            <div className="border-b bg-muted px-4 py-1">
+              <div className="flex justify-center overflow-x-auto">
+                <div className="flex bg-muted rounded-lg p-1 shrink-0">
+                  {TABS.map((t, i) => {
+                    const isActive = activeTab === t.id;
+                    const disabled = isTabDisabled(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => !disabled && setActiveTab(t.id)}
+                        className={cn(
+                          "flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200",
+                          isActive
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground hover:bg-background/50",
+                          disabled && "opacity-40 cursor-not-allowed"
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold",
+                            isActive
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted-foreground/20 text-muted-foreground"
+                          )}
+                        >
+                          {i + 1}
+                        </span>
+                        <span className="whitespace-nowrap">{t.label}</span>
+                        {dirtyTabs.has(t.id) && (
+                          <span
+                            className="w-2 h-2 rounded-full bg-yellow-500 shrink-0"
+                            aria-label="Unsaved changes"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-6">
