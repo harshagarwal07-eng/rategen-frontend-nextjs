@@ -166,6 +166,25 @@ export async function fdCreateDeparture(
   return data;
 }
 
+export interface FDBulkCreatePayload {
+  departures: Array<Partial<FDDeparture>>;
+  pricing: Pick<
+    FDDeparturePricing,
+    "rate_single" | "rate_double" | "rate_triple" | "rate_child_no_bed" | "rate_child_extra_bed" | "rate_infant"
+  > | null;
+}
+
+export async function fdBulkCreateDepartures(
+  packageId: string,
+  payload: FDBulkCreatePayload,
+): Promise<{ created: FDDeparture[] }> {
+  const { data } = await fdApi.post<{ created: FDDeparture[] }>(
+    `${BASE}/packages/${packageId}/departures/bulk`,
+    payload,
+  );
+  return data;
+}
+
 export async function fdUpdateDeparture(
   departureId: string,
   payload: Partial<FDDeparture>,

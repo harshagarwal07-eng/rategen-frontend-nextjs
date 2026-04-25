@@ -39,7 +39,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { fdCreateDeparture, fdUpsertDeparturePricing } from "@/data-access/fixed-departures";
+import { fdBulkCreateDepartures } from "@/data-access/fixed-departures";
 import {
   FD_DEPARTURE_STATUSES,
   FD_AVAILABILITY_STATUSES,
@@ -55,7 +55,6 @@ import {
   DEFAULT_CUTOFF_OFFSET_DAYS,
   computeCutoffDate,
   computeReturnDate,
-  formatDateDisplay,
   formatStatusLabel,
 } from "./departure-form";
 import {
@@ -143,7 +142,6 @@ export function DepartureBulkSheet({
   const [pricing, setPricing] = useState<LandPricingState>({ ...EMPTY_LAND_PRICING });
 
   const [isSaving, setIsSaving] = useState(false);
-  const [progress, setProgress] = useState<{ phase: "create" | "price"; done: number; total: number } | null>(null);
 
   // Reset on each open. Calendar starts blank (no pre-population).
   useEffect(() => {
@@ -163,7 +161,6 @@ export function DepartureBulkSheet({
       setPatternWeekdays([1]);
       setPricing({ ...EMPTY_LAND_PRICING });
       setIsSaving(false);
-      setProgress(null);
     }
   }, [open, packageDuration]);
 
@@ -251,74 +248,35 @@ export function DepartureBulkSheet({
   const handleSave = async () => {
     if (!canSubmit) return;
     setIsSaving(true);
-    setProgress({ phase: "create", done: 0, total: sortedSelected.length });
-    const createdIds: string[] = [];
-    let failedAt: { iso: string; error: string } | null = null;
-    for (const iso of sortedSelected) {
-      try {
-        const dep = await fdCreateDeparture(packageId, {
-          departure_date: iso,
-          return_date: computeReturnDate(iso, duration) || null,
-          cutoff_date: computeCutoffDate(iso, cutoffOffset) || null,
-          total_seats: totalSeats,
-          seats_sold: 0,
-          seats_on_hold: 0,
-          min_pax: 1,
-          max_pax: null,
-          departure_status: departureStatus || null,
-          availability_status: availabilityStatus || null,
-          internal_notes: null,
-        });
-        createdIds.push(dep.id);
-        setProgress({ phase: "create", done: createdIds.length, total: sortedSelected.length });
-      } catch (e) {
-        failedAt = {
-          iso,
-          error: e instanceof Error ? e.message : "Create failed",
-        };
-        break;
-      }
-    }
-
-    // Pricing phase: PUT shared rates to every successfully-created departure.
-    // Tracked separately so partial pricing failures don't roll back successful
-    // departure creations.
-    let pricingFailures = 0;
-    if (hasAnyRate && createdIds.length > 0) {
-      setProgress({ phase: "price", done: 0, total: createdIds.length });
-      let priced = 0;
-      for (const id of createdIds) {
-        try {
-          await fdUpsertDeparturePricing(id, {
-            pricing_type: "land_only",
-            ...pricing,
-          });
-        } catch {
-          pricingFailures++;
-        }
-        priced++;
-        setProgress({ phase: "price", done: priced, total: createdIds.length });
-      }
-    }
-
-    setIsSaving(false);
-    const created = createdIds.length;
-    if (failedAt) {
-      toast.error(
-        `Created ${created} of ${sortedSelected.length} departures. Failed at ${formatDateDisplay(failedAt.iso)}: ${failedAt.error}`,
-      );
+    const departures = sortedSelected.map((iso) => ({
+      departure_date: iso,
+      return_date: computeReturnDate(iso, duration) || null,
+      cutoff_date: computeCutoffDate(iso, cutoffOffset) || null,
+      total_seats: totalSeats,
+      seats_sold: 0,
+      seats_on_hold: 0,
+      min_pax: 1,
+      max_pax: null,
+      departure_status: departureStatus || null,
+      availability_status: availabilityStatus || null,
+      internal_notes: null,
+    }));
+    try {
+      const { created } = await fdBulkCreateDepartures(packageId, {
+        departures,
+        pricing: hasAnyRate ? pricing : null,
+      });
+      toast.success(`Created ${created.length} departure${created.length === 1 ? "" : "s"}.`);
       onCreated();
-      return;
+      onOpenChange(false);
+    } catch (e) {
+      const message =
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+        ?? (e instanceof Error ? e.message : "Bulk create failed");
+      toast.error(message);
+    } finally {
+      setIsSaving(false);
     }
-    if (pricingFailures > 0) {
-      toast.warning(
-        `Created ${created} departure${created === 1 ? "" : "s"} but pricing save failed for ${pricingFailures} of them. Edit individually.`,
-      );
-    } else {
-      toast.success(`Created ${created} departure${created === 1 ? "" : "s"}.`);
-    }
-    onCreated();
-    onOpenChange(false);
   };
 
   return (
@@ -588,11 +546,7 @@ export function DepartureBulkSheet({
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {progress
-                  ? progress.phase === "create"
-                    ? `Creating ${progress.done} / ${progress.total}…`
-                    : `Saving rates ${progress.done} / ${progress.total}…`
-                  : "Creating…"}
+                Creating {selected.size} departure{selected.size === 1 ? "" : "s"}…
               </>
             ) : (
               `Create ${selected.size} departure${selected.size === 1 ? "" : "s"}`
