@@ -110,6 +110,8 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
   const [pastExpanded, setPastExpanded] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DraftDeparture | null>(null);
   const [view, setView] = useState<ViewMode>("table");
+  const [pendingView, setPendingView] = useState<ViewMode | null>(null);
+  const [tableResetKey, setTableResetKey] = useState(0);
   const [drawerState, setDrawerState] = useState<DrawerState | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -266,6 +268,29 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
     onSaved();
   };
 
+  // View toggle with discard guard. Drafts only exist for Table view, so the
+  // only blocked direction is Table → Calendar with dirty drafts. Drawer dirty
+  // is scoped to the drawer itself.
+  const requestViewChange = (next: ViewMode) => {
+    if (next === view) return;
+    if (view === "table" && drafts.some((d) => d._dirty || d._isNew)) {
+      setPendingView(next);
+      return;
+    }
+    setView(next);
+  };
+
+  const confirmViewSwitch = () => {
+    if (!pendingView) return;
+    setDrafts([]);
+    newDraftIdsRef.current.clear();
+    rowRefsMap.current.clear();
+    setHydrated(false);
+    setTableResetKey((k) => k + 1);
+    setView(pendingView);
+    setPendingView(null);
+  };
+
   // Dirty propagation — reflects only Table view drafts. Drawer/Bulk save
   // immediately and don't bubble dirty.
   const dirty = drafts.some((d) => d._dirty || d._isNew);
@@ -324,7 +349,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
         </div>
 
         <div className="flex items-center gap-2">
-          <ViewToggle value={view} onChange={setView} />
+          <ViewToggle value={view} onChange={requestViewChange} />
           <SplitAddButton
             onSingle={handleAddSingle}
             onBulk={() => setBulkOpen(true)}
@@ -334,6 +359,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
 
       {view === "table" ? (
         <TableView
+          key={tableResetKey}
           upcoming={upcoming}
           past={past}
           pastExpanded={pastExpanded}
@@ -393,6 +419,24 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
             <AlertDialogAction onClick={() => deleteTarget && handleDelete(deleteTarget)}>
               {deleteTarget?._isNew ? "Discard" : "Delete"}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={pendingView !== null}
+        onOpenChange={(o) => { if (!o) setPendingView(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved departures?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Switching to {pendingView ?? "the other view"} will discard your unsaved Table edits.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Stay in Table</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmViewSwitch}>Discard</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
