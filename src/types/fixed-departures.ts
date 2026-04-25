@@ -184,3 +184,97 @@ export interface FDDeparture {
   fd_departure_pricing?: FDDeparturePricing[];
   fd_addon_departure_pricing?: FDAddonDeparturePricing[];
 }
+
+export type FDValueType = "percentage" | "fixed";
+export type FDDateBasis = "departure_date" | "booking_date";
+
+export interface FDCancellationRule {
+  id?: string;
+  departure_date_id?: string;
+  days_from: number | null;
+  days_to: number | null;
+  date_basis: FDDateBasis;
+  value_type: FDValueType;
+  penalty_pct: number | null;
+  penalty_adult: number | null;
+  penalty_child: number | null;
+  penalty_infant: number | null;
+  sort_order: number | null;
+}
+
+export interface FDPaymentScheduleItem {
+  id?: string;
+  departure_date_id?: string;
+  label: string | null;
+  days_from: number | null;
+  days_to: number | null;
+  date_basis: FDDateBasis;
+  value_type: FDValueType;
+  amount_pct: number | null;
+  amount_adult: number | null;
+  amount_child: number | null;
+  amount_infant: number | null;
+  sort_order: number | null;
+}
+
+export interface FDFlightSegment {
+  id?: string;
+  package_id?: string;
+  flight_group: string | null;
+  flight_type: string | null;
+  airline: string | null;
+  origin_city: string | null;
+  origin_airport: string | null;
+  destination_city: string | null;
+  destination_airport: string | null;
+  departure_time: string | null;
+  arrival_time: string | null;
+  is_direct: boolean | null;
+  stops: number | null;
+  sort_order: number | null;
+  is_included: boolean | null;
+  price_on_request: boolean | null;
+}
+
+export interface FDFlightPricing {
+  id?: string;
+  departure_date_id?: string;
+  flight_group: string;
+  price_adult: number | null;
+  price_child: number | null;
+  price_infant: number | null;
+}
+
+export interface FDVisa {
+  id?: string;
+  package_id?: string;
+  visa_included: boolean | null;
+  visa_type: string | null;
+  price_adult: number | null;
+  price_child: number | null;
+  price_infant: number | null;
+  notes: string | null;
+  insurance_included: boolean | null;
+  insurance_price_adult: number | null;
+  insurance_price_child: number | null;
+  insurance_price_infant: number | null;
+  insurance_notes: string | null;
+  use_custom_age_policy: boolean | null;
+  custom_infant_age_from: number | null;
+  custom_infant_age_to: number | null;
+  custom_child_age_from: number | null;
+  custom_child_age_to: number | null;
+  custom_adult_age_from: number | null;
+  custom_adult_age_to: number | null;
+}
+
+export interface FDTax {
+  id?: string;
+  package_id?: string;
+  name: string;
+  amount: number | null;
+  value_type: FDValueType;
+  basis: string | null;
+  included: boolean | null;
+  sort_order: number | null;
+}

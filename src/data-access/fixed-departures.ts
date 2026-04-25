@@ -16,6 +16,12 @@ import type {
   FDDeparture,
   FDDeparturePricing,
   FDAddonDeparturePricing,
+  FDCancellationRule,
+  FDPaymentScheduleItem,
+  FDFlightSegment,
+  FDFlightPricing,
+  FDVisa,
+  FDTax,
 } from "@/types/fixed-departures";
 
 const fdApi = axios.create({
@@ -219,5 +225,84 @@ export async function fdUpsertAddonDeparturePricing(
     `${BASE}/departures/${departureId}/addon-pricing`,
     rows,
   );
+  return data;
+}
+
+export async function fdGetCancellationPolicy(departureId: string): Promise<FDCancellationRule[]> {
+  const { data } = await fdApi.get<FDCancellationRule[]>(`${BASE}/departures/${departureId}/cancellation-policy`);
+  return data;
+}
+
+export async function fdReplaceCancellationPolicy(
+  departureId: string,
+  rules: Array<Omit<FDCancellationRule, "id" | "departure_date_id">>,
+): Promise<FDCancellationRule[]> {
+  const { data } = await fdApi.put<FDCancellationRule[]>(
+    `${BASE}/departures/${departureId}/cancellation-policy`,
+    rules,
+  );
+  return data;
+}
+
+export async function fdGetPaymentSchedule(departureId: string): Promise<FDPaymentScheduleItem[]> {
+  const { data } = await fdApi.get<FDPaymentScheduleItem[]>(`${BASE}/departures/${departureId}/payment-schedule`);
+  return data;
+}
+
+export async function fdReplacePaymentSchedule(
+  departureId: string,
+  items: Array<Omit<FDPaymentScheduleItem, "id" | "departure_date_id">>,
+): Promise<FDPaymentScheduleItem[]> {
+  const { data } = await fdApi.put<FDPaymentScheduleItem[]>(
+    `${BASE}/departures/${departureId}/payment-schedule`,
+    items,
+  );
+  return data;
+}
+
+export async function fdGetFlights(packageId: string): Promise<FDFlightSegment[]> {
+  const { data } = await fdApi.get<FDFlightSegment[]>(`${BASE}/packages/${packageId}/flights`);
+  return data;
+}
+
+export async function fdReplaceFlights(
+  packageId: string,
+  flights: Array<Omit<FDFlightSegment, "id" | "package_id">>,
+): Promise<FDFlightSegment[]> {
+  const { data } = await fdApi.put<FDFlightSegment[]>(`${BASE}/packages/${packageId}/flights`, flights);
+  return data;
+}
+
+export async function fdUpsertFlightPricing(
+  departureId: string,
+  payload: Omit<FDFlightPricing, "id" | "departure_date_id">,
+): Promise<FDFlightPricing> {
+  const { data } = await fdApi.put<FDFlightPricing>(
+    `${BASE}/departures/${departureId}/flight-pricing`,
+    payload,
+  );
+  return data;
+}
+
+export async function fdGetVisa(packageId: string): Promise<FDVisa | null> {
+  const { data } = await fdApi.get<FDVisa | null>(`${BASE}/packages/${packageId}/visa`);
+  return data;
+}
+
+export async function fdUpsertVisa(packageId: string, payload: Omit<FDVisa, "id" | "package_id">): Promise<FDVisa> {
+  const { data } = await fdApi.put<FDVisa>(`${BASE}/packages/${packageId}/visa`, payload);
+  return data;
+}
+
+export async function fdGetTaxes(packageId: string): Promise<FDTax[]> {
+  const { data } = await fdApi.get<FDTax[]>(`${BASE}/packages/${packageId}/taxes`);
+  return data;
+}
+
+export async function fdReplaceTaxes(
+  packageId: string,
+  taxes: Array<Omit<FDTax, "id" | "package_id">>,
+): Promise<FDTax[]> {
+  const { data } = await fdApi.put<FDTax[]>(`${BASE}/packages/${packageId}/taxes`, taxes);
   return data;
 }

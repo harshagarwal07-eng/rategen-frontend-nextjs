@@ -32,6 +32,7 @@ import { FDItineraryTab } from "./fd-tabs/tab-itinerary";
 import { FDInclusionsExclusionsTab } from "./fd-tabs/tab-inclusions-exclusions";
 import { FDAddonsTab } from "./fd-tabs/tab-addons";
 import { FDDepartureDatesTab } from "./fd-tabs/tab-departure-dates";
+import { FDPoliciesTab } from "./fd-tabs/tab-policies";
 import { FDDocumentsRemarksTab } from "./fd-tabs/tab-documents-remarks";
 import { FDTabPlaceholder } from "./fd-tabs/tab-placeholder";
 
@@ -79,6 +80,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   const incExcRef = useRef<FDTabHandle>(null);
   const addonsRef = useRef<FDTabHandle>(null);
   const departuresRef = useRef<FDTabHandle>(null);
+  const policiesRef = useRef<FDTabHandle>(null);
   const docsRemarksRef = useRef<FDTabHandle>(null);
   const prevDurationRef = useRef<number | null>(null);
 
@@ -217,6 +219,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
       case "inc-exc": return incExcRef;
       case "addons": return addonsRef;
       case "departures": return departuresRef;
+      case "policies": return policiesRef;
       case "docs-remarks": return docsRemarksRef;
       default: return null;
     }
@@ -284,7 +287,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
     ? [packageName, tourCode, countriesLine, citiesLine].filter(Boolean).join(" · ")
     : fallbackTitle;
   const anyDirty = dirtyTabs.size > 0;
-  const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures", "docs-remarks"].includes(activeTab);
+  const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures", "policies", "docs-remarks"].includes(activeTab);
 
   return (
     <>
@@ -482,7 +485,25 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                   />
                 </TabsContent>
                 <TabsContent value="flights-visa"><FDTabPlaceholder title="Flights & Visa" /></TabsContent>
-                <TabsContent value="policies"><FDTabPlaceholder title="Policies" /></TabsContent>
+                <TabsContent value="policies">
+                  <FDPoliciesTab
+                    key={tabResetKeys.policies ?? 0}
+                    ref={policiesRef}
+                    mode={mode}
+                    packageId={effectiveId}
+                    onDirtyChange={trackDirty("policies")}
+                    onSaved={() => {
+                      if (effectiveId) {
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "for-policies"] });
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "departures-for-policies"] });
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId] });
+                      }
+                      markTabSaved("policies");
+                      onSaved?.();
+                    }}
+                    onAdvance={handleAdvance}
+                  />
+                </TabsContent>
                 <TabsContent value="docs-remarks">
                   <FDDocumentsRemarksTab
                     key={tabResetKeys["docs-remarks"] ?? 0}
