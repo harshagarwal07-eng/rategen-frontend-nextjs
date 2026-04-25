@@ -53,8 +53,10 @@ import {
   DEFAULT_DURATION,
   departureToFormState,
   emptyDepartureFormState,
+  pricingFromServer,
 } from "./departure-state";
 import type { DepartureFormState } from "./departure-form";
+import type { RateSource } from "./departure-pricing-section";
 import { DepartureCalendar } from "./departure-calendar";
 import { DepartureDrawer } from "./departure-drawer";
 import { DepartureBulkSheet } from "./departure-bulk-sheet";
@@ -329,6 +331,17 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
     save: async () => handleSaveAll(),
   }));
 
+  // Source list for the per-departure "Copy rates" picker. Built from the
+  // server-truth `departures` query so unsaved drafts don't appear (they have
+  // no real id and no canonical pricing yet).
+  const rateSources = useMemo<RateSource[]>(() => {
+    return (departures ?? []).map((d) => ({
+      id: d.id,
+      departure_date: d.departure_date ?? "",
+      pricing: pricingFromServer(d),
+    }));
+  }, [departures]);
+
   const today = todayIsoDate();
   const { upcoming, past } = useMemo(() => {
     const u: DraftDeparture[] = [];
@@ -385,6 +398,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
           currency={currency}
           addons={addons}
           packageBands={packageBands}
+          rateSources={rateSources}
           getOrCreateRef={getOrCreateRef}
           updateDraft={updateDraft}
           setDeleteTarget={setDeleteTarget}
@@ -405,6 +419,7 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
         currency={currency}
         addons={addons}
         packageBands={packageBands}
+        rateSources={rateSources}
         mode={drawerState}
         onSaved={() => { void handleDrawerSaved(); }}
       />
@@ -414,6 +429,8 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
         onOpenChange={setBulkOpen}
         packageId={packageId}
         packageDuration={packageDuration}
+        currency={currency}
+        packageBands={packageBands}
         existingDepartures={departures}
         onCreated={() => { void handleBulkCreated(); }}
       />
@@ -540,6 +557,7 @@ interface TableViewProps {
   currency: string | null;
   addons: FDAddon[];
   packageBands: FDAgePolicy[];
+  rateSources: RateSource[];
   getOrCreateRef: (id: string) => React.RefObject<DepartureRowHandle | null>;
   updateDraft: (localId: string, patch: Partial<DepartureFormState>) => void;
   setDeleteTarget: (d: DraftDeparture | null) => void;
@@ -554,6 +572,7 @@ function TableView({
   currency,
   addons,
   packageBands,
+  rateSources,
   getOrCreateRef,
   updateDraft,
   setDeleteTarget,
@@ -596,6 +615,7 @@ function TableView({
             currency={currency}
             addons={addons}
             packageBands={packageBands}
+            rateSources={rateSources}
             onChange={(patch) => updateDraft(draft._localId, patch)}
             onDeleteRequest={() => setDeleteTarget(draft)}
           />

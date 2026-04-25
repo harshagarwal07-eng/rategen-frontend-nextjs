@@ -39,12 +39,18 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { fdCreateDeparture } from "@/data-access/fixed-departures";
+import { fdCreateDeparture, fdUpsertDeparturePricing } from "@/data-access/fixed-departures";
 import {
   FD_DEPARTURE_STATUSES,
   FD_AVAILABILITY_STATUSES,
+  type FDAgePolicy,
   type FDDeparture,
 } from "@/types/fixed-departures";
+import {
+  DeparturePricingSection,
+  EMPTY_LAND_PRICING,
+  type LandPricingState,
+} from "./departure-pricing-section";
 import {
   DEFAULT_CUTOFF_OFFSET_DAYS,
   computeCutoffDate,
@@ -94,6 +100,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   packageId: string;
   packageDuration: number;
+  currency: string | null;
+  packageBands: FDAgePolicy[];
   existingDepartures: FDDeparture[];
   onCreated: () => void;
 }
@@ -103,6 +111,8 @@ export function DepartureBulkSheet({
   onOpenChange,
   packageId,
   packageDuration,
+  currency,
+  packageBands,
   existingDepartures,
   onCreated,
 }: Props) {
@@ -127,8 +137,13 @@ export function DepartureBulkSheet({
   const [patternTo, setPatternTo] = useState("");
   const [patternWeekdays, setPatternWeekdays] = useState<number[]>([1]);
 
+  // Shared land pricing applied to every created departure (PUT after POST).
+  // Empty fields stay null and the pricing PUT is skipped if all fields are
+  // empty.
+  const [pricing, setPricing] = useState<LandPricingState>({ ...EMPTY_LAND_PRICING });
+
   const [isSaving, setIsSaving] = useState(false);
-  const [progress, setProgress] = useState<{ created: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{ phase: "create" | "price"; done: number; total: number } | null>(null);
 
   // Reset on each open. Calendar starts blank (no pre-population).
   useEffect(() => {
@@ -146,6 +161,7 @@ export function DepartureBulkSheet({
       const oneMonthOut = isoDate(addMonths(new Date(), 1));
       setPatternTo(oneMonthOut);
       setPatternWeekdays([1]);
+      setPricing({ ...EMPTY_LAND_PRICING });
       setIsSaving(false);
       setProgress(null);
     }
@@ -227,15 +243,20 @@ export function DepartureBulkSheet({
   const overSoft = selected.size > SOFT_CAP && !overHard;
   const canSubmit = selected.size > 0 && !overHard && !isSaving;
 
+  const hasAnyRate = useMemo(
+    () => Object.values(pricing).some((v) => v != null),
+    [pricing],
+  );
+
   const handleSave = async () => {
     if (!canSubmit) return;
     setIsSaving(true);
-    setProgress({ created: 0, total: sortedSelected.length });
-    let created = 0;
+    setProgress({ phase: "create", done: 0, total: sortedSelected.length });
+    const createdIds: string[] = [];
     let failedAt: { iso: string; error: string } | null = null;
     for (const iso of sortedSelected) {
       try {
-        await fdCreateDeparture(packageId, {
+        const dep = await fdCreateDeparture(packageId, {
           departure_date: iso,
           return_date: computeReturnDate(iso, duration) || null,
           cutoff_date: computeCutoffDate(iso, cutoffOffset) || null,
@@ -248,8 +269,8 @@ export function DepartureBulkSheet({
           availability_status: availabilityStatus || null,
           internal_notes: null,
         });
-        created++;
-        setProgress({ created, total: sortedSelected.length });
+        createdIds.push(dep.id);
+        setProgress({ phase: "create", done: createdIds.length, total: sortedSelected.length });
       } catch (e) {
         failedAt = {
           iso,
@@ -258,7 +279,30 @@ export function DepartureBulkSheet({
         break;
       }
     }
+
+    // Pricing phase: PUT shared rates to every successfully-created departure.
+    // Tracked separately so partial pricing failures don't roll back successful
+    // departure creations.
+    let pricingFailures = 0;
+    if (hasAnyRate && createdIds.length > 0) {
+      setProgress({ phase: "price", done: 0, total: createdIds.length });
+      let priced = 0;
+      for (const id of createdIds) {
+        try {
+          await fdUpsertDeparturePricing(id, {
+            pricing_type: "land_only",
+            ...pricing,
+          });
+        } catch {
+          pricingFailures++;
+        }
+        priced++;
+        setProgress({ phase: "price", done: priced, total: createdIds.length });
+      }
+    }
+
     setIsSaving(false);
+    const created = createdIds.length;
     if (failedAt) {
       toast.error(
         `Created ${created} of ${sortedSelected.length} departures. Failed at ${formatDateDisplay(failedAt.iso)}: ${failedAt.error}`,
@@ -266,7 +310,13 @@ export function DepartureBulkSheet({
       onCreated();
       return;
     }
-    toast.success(`Created ${created} departure${created === 1 ? "" : "s"}.`);
+    if (pricingFailures > 0) {
+      toast.warning(
+        `Created ${created} departure${created === 1 ? "" : "s"} but pricing save failed for ${pricingFailures} of them. Edit individually.`,
+      );
+    } else {
+      toast.success(`Created ${created} departure${created === 1 ? "" : "s"}.`);
+    }
     onCreated();
     onOpenChange(false);
   };
@@ -365,6 +415,24 @@ export function DepartureBulkSheet({
                 </Field>
               </div>
             )}
+          </div>
+
+          {/* Shared land pricing — applied via PUT to every created departure
+              after the POST loop. All fields optional; if all blank the pricing
+              PUT is skipped entirely. */}
+          <div className="rounded-md border bg-muted/30 p-3 flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-medium">Shared land pricing</span>
+              <span className="text-xs text-muted-foreground">
+                Applied to every created departure. Leave blank to skip.
+              </span>
+            </div>
+            <DeparturePricingSection
+              value={pricing}
+              onChange={(patch) => setPricing((prev) => ({ ...prev, ...patch }))}
+              currency={currency}
+              packageBands={packageBands}
+            />
           </div>
 
           {/* Pattern shortcut */}
@@ -520,7 +588,11 @@ export function DepartureBulkSheet({
             {isSaving ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {progress ? `Creating ${progress.created} / ${progress.total}…` : "Creating…"}
+                {progress
+                  ? progress.phase === "create"
+                    ? `Creating ${progress.done} / ${progress.total}…`
+                    : `Saving rates ${progress.done} / ${progress.total}…`
+                  : "Creating…"}
               </>
             ) : (
               `Create ${selected.size} departure${selected.size === 1 ? "" : "s"}`

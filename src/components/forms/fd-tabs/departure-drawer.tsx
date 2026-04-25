@@ -33,6 +33,7 @@ import {
   emptyDepartureFormState,
 } from "./departure-state";
 import { saveDeparture } from "./save-departure";
+import type { RateSource } from "./departure-pricing-section";
 import type { FDAddon, FDAgePolicy, FDDeparture } from "@/types/fixed-departures";
 
 type DrawerMode =
@@ -47,6 +48,7 @@ interface Props {
   currency: string | null;
   addons: FDAddon[];
   packageBands?: FDAgePolicy[];
+  rateSources?: RateSource[];
   mode: DrawerMode | null;
   onSaved: (saved: FDDeparture) => void;
 }
@@ -59,6 +61,7 @@ export function DepartureDrawer({
   currency,
   addons,
   packageBands,
+  rateSources,
   mode,
   onSaved,
 }: Props) {
@@ -170,6 +173,8 @@ export function DepartureDrawer({
                 currency={currency}
                 addons={addons}
                 packageBands={packageBands}
+                rateSources={rateSources}
+                excludeSourceId={mode?.kind === "edit" ? mode.departure.id : undefined}
               />
             ) : (
               <div className="text-sm text-muted-foreground">Loading…</div>

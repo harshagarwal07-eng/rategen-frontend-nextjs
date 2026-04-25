@@ -19,6 +19,7 @@ import {
   type DepartureFormErrors,
 } from "./departure-form";
 import { saveDeparture, type DepartureSaveResult } from "./save-departure";
+import type { RateSource } from "./departure-pricing-section";
 import type { FDAddon, FDAgePolicy } from "@/types/fixed-departures";
 
 export interface DraftDeparture {
@@ -75,12 +76,13 @@ interface Props {
   currency: string | null;
   addons: FDAddon[];
   packageBands?: FDAgePolicy[];
+  rateSources?: RateSource[];
   onChange: (patch: Partial<DepartureFormState>) => void;
   onDeleteRequest: () => void;
 }
 
 export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function DepartureRow(
-  { packageId, draft, defaultOpen, isPast, currency, addons, packageBands, onChange, onDeleteRequest },
+  { packageId, draft, defaultOpen, isPast, currency, addons, packageBands, rateSources, onChange, onDeleteRequest },
   ref,
 ) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -195,6 +197,8 @@ export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function Depar
             currency={currency}
             addons={addons}
             packageBands={packageBands}
+            rateSources={rateSources}
+            excludeSourceId={draft.id}
           />
         </div>
       )}

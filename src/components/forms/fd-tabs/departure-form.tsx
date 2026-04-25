@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import {
   DeparturePricingSection,
   type LandPricingState,
+  type RateSource,
 } from "./departure-pricing-section";
 import {
   DepartureAddonPricingSection,
@@ -116,9 +117,20 @@ interface Props {
   currency: string | null;
   addons: FDAddon[];
   packageBands?: FDAgePolicy[];
+  rateSources?: RateSource[];
+  excludeSourceId?: string;
 }
 
-export function DepartureForm({ value, onChange, errors, currency, addons, packageBands }: Props) {
+export function DepartureForm({
+  value,
+  onChange,
+  errors,
+  currency,
+  addons,
+  packageBands,
+  rateSources,
+  excludeSourceId,
+}: Props) {
   const handleDepartureDateChange = (newDate: string) => {
     const newReturn = computeReturnDate(newDate, value.duration);
     const patch: Partial<DepartureFormState> = {
@@ -311,6 +323,8 @@ export function DepartureForm({ value, onChange, errors, currency, addons, packa
         onChange={(patch) => onChange({ pricing: { ...value.pricing, ...patch } })}
         currency={currency}
         packageBands={packageBands}
+        rateSources={rateSources}
+        excludeSourceId={excludeSourceId}
       />
 
       {/* Section 3: Addon Pricing — only if package has add-ons */}
