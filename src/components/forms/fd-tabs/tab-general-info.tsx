@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -119,7 +121,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
     },
   });
 
-  const { fields: ageFields, update: updateAgeBand } = useFieldArray({ control: form.control, name: "age_policies" });
+  const { fields: ageFields, update: updateAgeBand, remove: removeAgeBand } = useFieldArray({ control: form.control, name: "age_policies" });
 
   // Derive stable ID arrays from query data. When the query is loading, existingPkg* is EMPTY_ROWS
   // (a stable module-level reference), so these memos don't recompute every render. When the
@@ -587,40 +589,55 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
           <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-accent/40 transition-colors">Age Policies</AccordionTrigger>
           <AccordionContent className="px-4 pb-4">
             <div className="flex flex-col gap-2">
-              <div className="grid grid-cols-[120px_1fr_1fr] gap-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="grid grid-cols-[120px_1fr_1fr_32px] gap-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 <span>Band Type</span>
                 <span>Age From</span>
                 <span>Age To</span>
+                <span />
               </div>
-              {ageFields.map((band, idx) => (
-                <div key={band.id} className="grid grid-cols-[120px_1fr_1fr] gap-3 items-center">
-                  <div className="text-sm font-medium">{band.band_name}</div>
-                  <Input
-                    type="number"
-                    min={0}
-                    className="h-8"
-                    value={form.watch(`age_policies.${idx}.age_from`)}
-                    onChange={(e) =>
-                      updateAgeBand(idx, {
-                        ...form.getValues(`age_policies.${idx}`),
-                        age_from: Number(e.target.value),
-                      })
-                    }
-                  />
-                  <Input
-                    type="number"
-                    min={0}
-                    className="h-8"
-                    value={form.watch(`age_policies.${idx}.age_to`)}
-                    onChange={(e) =>
-                      updateAgeBand(idx, {
-                        ...form.getValues(`age_policies.${idx}`),
-                        age_to: Number(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-              ))}
+              {ageFields.map((band, idx) => {
+                const lastOne = ageFields.length === 1;
+                return (
+                  <div key={band.id} className="grid grid-cols-[120px_1fr_1fr_32px] gap-3 items-center">
+                    <div className="text-sm font-medium">{band.band_name}</div>
+                    <Input
+                      type="number"
+                      min={0}
+                      className="h-8"
+                      value={form.watch(`age_policies.${idx}.age_from`)}
+                      onChange={(e) =>
+                        updateAgeBand(idx, {
+                          ...form.getValues(`age_policies.${idx}`),
+                          age_from: Number(e.target.value),
+                        })
+                      }
+                    />
+                    <Input
+                      type="number"
+                      min={0}
+                      className="h-8"
+                      value={form.watch(`age_policies.${idx}.age_to`)}
+                      onChange={(e) =>
+                        updateAgeBand(idx, {
+                          ...form.getValues(`age_policies.${idx}`),
+                          age_to: Number(e.target.value),
+                        })
+                      }
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => removeAgeBand(idx)}
+                      disabled={lastOne}
+                      title={lastOne ? "At least one band must remain" : `Remove ${band.band_name} band`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                );
+              })}
               {form.formState.errors.age_policies && (
                 <p className="text-xs text-destructive">
                   {(form.formState.errors.age_policies as { message?: string }).message ??

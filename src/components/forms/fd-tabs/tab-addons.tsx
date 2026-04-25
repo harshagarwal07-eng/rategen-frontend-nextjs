@@ -106,25 +106,37 @@ function getEffectiveBandRange(
   return getPackageBandRange(packageBands, key);
 }
 
-// A band is considered "removed" only when the addon uses a custom age policy
-// AND both edges are explicitly null. With the package policy in effect, all
-// three bands are present.
-function isBandRemoved(draft: Partial<FDAddon>, key: BandKey): boolean {
+function packageHasBand(bands: FDAgePolicy[] | undefined, key: BandKey): boolean {
+  return (bands ?? []).some((b) => b.band_name?.toLowerCase() === key);
+}
+
+// A band is "removed" if (a) the package itself doesn't have it (deleted at
+// Tab 1), or (b) the addon uses a custom policy with both edges null. The
+// first case propagates Tab 1's age-band-delete to every per-addon UI here.
+function isBandRemoved(
+  draft: Partial<FDAddon>,
+  packageBands: FDAgePolicy[] | undefined,
+  key: BandKey,
+): boolean {
+  if (!packageHasBand(packageBands, key)) return true;
   if (!draft.use_custom_age_policy) return false;
   const f = draft[`custom_${key}_age_from` as keyof FDAddon] as number | null | undefined;
   const t = draft[`custom_${key}_age_to` as keyof FDAddon] as number | null | undefined;
   return f === null && t === null;
 }
 
-function activeBands(draft: Partial<FDAddon>): BandKey[] {
-  return BAND_KEYS.filter((k) => !isBandRemoved(draft, k));
+function activeBands(
+  draft: Partial<FDAddon>,
+  packageBands: FDAgePolicy[] | undefined,
+): BandKey[] {
+  return BAND_KEYS.filter((k) => !isBandRemoved(draft, packageBands, k));
 }
 
 function bandsSummary(
   draft: Partial<FDAddon>,
   packageBands: FDAgePolicy[] | undefined,
 ): string {
-  return activeBands(draft)
+  return activeBands(draft, packageBands)
     .map((k) => {
       const { from, to } = getEffectiveBandRange(draft, packageBands, k);
       return `${BAND_LABELS[k]} ${from}-${to}`;
@@ -877,7 +889,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
       // Removed bands persist as both-null. Bands with one edge null inherit
       // from the package band; we store the inherited value to avoid ambiguity
       // between "removed" and "edited".
-      const removed = isBandRemoved(draft, k);
+      const removed = isBandRemoved(draft, packageBands, k);
       if (removed) {
         base[fromKey] = null;
         base[toKey] = null;
@@ -912,7 +924,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
         return { success: false, name, error: "Duration (days) is required" };
       }
       if (d.use_custom_age_policy) {
-        const present = activeBands(d);
+        const present = activeBands(d, bands);
         const ranges = present.map((k) => ({
           key: k,
           ...getEffectiveBandRange(d, bands, k),
@@ -942,9 +954,9 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
             child: d.price_child,
             infant: d.price_infant,
           };
-          const presentRates = activeBands(d).map((k) => rateForBand[k]);
+          const presentRates = activeBands(d, bands).map((k) => rateForBand[k]);
           if (presentRates.every((r) => r == null)) {
-            const labels = activeBands(d).map((k) => BAND_LABELS[k]).join(", ");
+            const labels = activeBands(d, bands).map((k) => BAND_LABELS[k]).join(", ");
             return { success: false, name, error: `At least one rate (${labels}) is required` };
           }
         } else {
@@ -1171,7 +1183,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
             {/* Age-based: only show fields for bands present on this addon. */}
             {isAgeBased(type, draft.price_unit) ? (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {!isBandRemoved(draft, "adult") && (
+                {!isBandRemoved(draft, packageBands, "adult") && (
                   <div className="flex flex-col gap-1.5">
                     <Label>
                       Adult ({getEffectiveBandRange(draft, packageBands, "adult").from}-
@@ -1185,7 +1197,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                     />
                   </div>
                 )}
-                {!isBandRemoved(draft, "child") && (
+                {!isBandRemoved(draft, packageBands, "child") && (
                   <div className="flex flex-col gap-1.5">
                     <Label>
                       Child ({getEffectiveBandRange(draft, packageBands, "child").from}-
@@ -1199,7 +1211,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                     />
                   </div>
                 )}
-                {!isBandRemoved(draft, "infant") && (
+                {!isBandRemoved(draft, packageBands, "infant") && (
                   <div className="flex flex-col gap-1.5">
                     <Label>
                       Infant ({getEffectiveBandRange(draft, packageBands, "infant").from}-
@@ -1416,7 +1428,7 @@ interface AddonAgeBandsSectionProps {
 function AddonAgeBandsSection({ draft, packageBands, onChange }: AddonAgeBandsSectionProps) {
   const useCustom = !!draft.use_custom_age_policy;
   const [editorOpen, setEditorOpen] = useState(useCustom);
-  const present = activeBands(draft);
+  const present = activeBands(draft, packageBands);
   const canRemoveMore = present.length > 1;
 
   useEffect(() => {
@@ -1426,6 +1438,13 @@ function AddonAgeBandsSection({ draft, packageBands, onChange }: AddonAgeBandsSe
   const seedAllFromPackage = (): Partial<DraftAddon> => {
     const patch: Partial<DraftAddon> = { use_custom_age_policy: true };
     for (const k of BAND_KEYS) {
+      // Bands missing from the package stay null — they don't exist for this
+      // addon either. Only present-in-package bands seed from package range.
+      if (!packageHasBand(packageBands, k)) {
+        patch[`custom_${k}_age_from` as const] = null;
+        patch[`custom_${k}_age_to` as const] = null;
+        continue;
+      }
       const pb = getPackageBandRange(packageBands, k);
       patch[`custom_${k}_age_from` as const] = pb.from;
       patch[`custom_${k}_age_to` as const] = pb.to;
