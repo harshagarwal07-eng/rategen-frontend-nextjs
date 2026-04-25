@@ -11,12 +11,6 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  fdCreateDeparture,
-  fdUpdateDeparture,
-  fdUpsertDeparturePricing,
-  fdUpsertAddonDeparturePricing,
-} from "@/data-access/fixed-departures";
-import {
   type DepartureFormState,
   DepartureForm,
   formatDateDisplay,
@@ -24,7 +18,8 @@ import {
   type DepartureFormErrors,
 } from "./departure-form";
 import { minLandRate } from "./departure-pricing-section";
-import type { FDAddon, FDDeparture } from "@/types/fixed-departures";
+import { saveDeparture, type DepartureSaveResult } from "./save-departure";
+import type { FDAddon } from "@/types/fixed-departures";
 
 export interface DraftDeparture {
   _localId: string;
@@ -34,9 +29,7 @@ export interface DraftDeparture {
   state: DepartureFormState;
 }
 
-export type DepartureRowSaveResult =
-  | { success: true; saved: FDDeparture }
-  | { success: false; error: string };
+export type DepartureRowSaveResult = DepartureSaveResult;
 
 export type DepartureRowHandle = {
   save: () => Promise<DepartureRowSaveResult>;
@@ -104,61 +97,12 @@ export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function Depar
         return { success: false, error: first };
       }
       setErrors({});
-
-      const departurePayload: Partial<FDDeparture> = {
-        departure_date: d.state.departure_date,
-        return_date: d.state.return_date || null,
-        cutoff_date: d.state.cutoff_date || null,
-        total_seats: d.state.total_seats,
-        seats_sold: d.state.seats_sold,
-        seats_on_hold: d.state.seats_on_hold,
-        min_pax: d.state.min_pax,
-        max_pax: d.state.max_pax,
-        departure_status: d.state.departure_status || null,
-        availability_status: d.state.availability_status || null,
-        internal_notes: d.state.internal_notes || null,
-      };
-
-      try {
-        let saved: FDDeparture;
-        if (d._isNew || !d.id) {
-          saved = await fdCreateDeparture(packageId, departurePayload);
-        } else {
-          saved = await fdUpdateDeparture(d.id, departurePayload);
-        }
-
-        const pricingPayload = {
-          pricing_type: "land_only",
-          ...d.state.pricing,
-        };
-        await fdUpsertDeparturePricing(saved.id, pricingPayload);
-
-        // Send addon override rows. Toggle ON → upsert with rates. Toggle OFF →
-        // upsert with all-null rates so previous overrides are blanked. We
-        // can't DELETE addon-pricing rows (no endpoint), so a row of nulls is
-        // the closest "use default" representation.
-        const addonRows = d.state.addon_overrides
-          .filter((o) => addons.some((a) => a.id === o.addon_id))
-          .map((o) => ({
-            addon_id: o.addon_id,
-            rate_single: o.enabled ? o.rate_single : null,
-            rate_double: o.enabled ? o.rate_double : null,
-            rate_triple: o.enabled ? o.rate_triple : null,
-            rate_child_no_bed: o.enabled ? o.rate_child_no_bed : null,
-            rate_child_extra_bed: o.enabled ? o.rate_child_extra_bed : null,
-            rate_infant: o.enabled ? o.rate_infant : null,
-          }));
-        if (addonRows.length > 0) {
-          await fdUpsertAddonDeparturePricing(saved.id, addonRows);
-        }
-
-        return { success: true, saved };
-      } catch (e) {
-        return {
-          success: false,
-          error: e instanceof Error ? e.message : "Save failed",
-        };
-      }
+      return saveDeparture({
+        packageId,
+        state: d.state,
+        existingId: d._isNew ? undefined : d.id,
+        addons,
+      });
     },
   }));
 

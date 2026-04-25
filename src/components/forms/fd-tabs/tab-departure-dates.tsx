@@ -9,10 +9,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { differenceInCalendarDays, parseISO } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronDown, Plus } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -24,6 +23,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   fdListDepartures,
@@ -43,14 +48,14 @@ import {
   type DraftDeparture,
 } from "./departure-row";
 import {
-  EMPTY_LAND_PRICING,
-  type LandPricingState,
-} from "./departure-pricing-section";
-import type { AddonOverrideState } from "./departure-addon-pricing-section";
-import {
-  computeCutoffDate,
-  type DepartureFormState,
-} from "./departure-form";
+  DEFAULT_DURATION,
+  departureToFormState,
+  emptyDepartureFormState,
+} from "./departure-state";
+import type { DepartureFormState } from "./departure-form";
+import { DepartureCalendar } from "./departure-calendar";
+import { DepartureDrawer } from "./departure-drawer";
+import { DepartureBulkSheet } from "./departure-bulk-sheet";
 
 interface Props {
   mode: "create" | "edit";
@@ -60,8 +65,11 @@ interface Props {
   onDirtyChange?: (isDirty: boolean) => void;
 }
 
-const DEFAULT_DURATION = 7;
-const DEFAULT_TOTAL_SEATS = 40;
+type ViewMode = "table" | "calendar";
+
+type DrawerState =
+  | { kind: "create"; initialDate?: string }
+  | { kind: "edit"; departure: FDDeparture };
 
 function todayIsoDate(): string {
   const now = new Date();
@@ -72,73 +80,13 @@ function localId(): string {
   return `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function pricingFromServer(d: FDDeparture): LandPricingState {
-  const land = (d.fd_departure_pricing ?? []).find((p) => p.pricing_type === "land_only");
-  if (!land) return { ...EMPTY_LAND_PRICING };
-  return {
-    rate_single: land.rate_single,
-    rate_double: land.rate_double,
-    rate_triple: land.rate_triple,
-    rate_child_no_bed: land.rate_child_no_bed,
-    rate_child_extra_bed: land.rate_child_extra_bed,
-    rate_infant: land.rate_infant,
-  };
-}
-
-function addonOverridesFromServer(d: FDDeparture): AddonOverrideState[] {
-  const rows = d.fd_addon_departure_pricing ?? [];
-  return rows.map((r) => {
-    const hasAnyRate = [
-      r.rate_single,
-      r.rate_double,
-      r.rate_triple,
-      r.rate_child_no_bed,
-      r.rate_child_extra_bed,
-      r.rate_infant,
-    ].some((v) => v != null);
-    return {
-      addon_id: r.addon_id,
-      enabled: hasAnyRate,
-      rate_single: r.rate_single,
-      rate_double: r.rate_double,
-      rate_triple: r.rate_triple,
-      rate_child_no_bed: r.rate_child_no_bed,
-      rate_child_extra_bed: r.rate_child_extra_bed,
-      rate_infant: r.rate_infant,
-    };
-  });
-}
-
 function departureToDraft(d: FDDeparture): DraftDeparture {
-  const duration =
-    d.departure_date && d.return_date
-      ? Math.max(0, differenceInCalendarDays(parseISO(d.return_date), parseISO(d.departure_date)))
-      : DEFAULT_DURATION;
   return {
     _localId: d.id,
     _isNew: false,
     _dirty: false,
     id: d.id,
-    state: {
-      departure_date: d.departure_date ?? "",
-      duration,
-      return_date: d.return_date ?? "",
-      cutoff_date: d.cutoff_date ?? "",
-      cutoff_overridden:
-        !!d.cutoff_date &&
-        !!d.departure_date &&
-        d.cutoff_date !== computeCutoffDate(d.departure_date),
-      total_seats: d.total_seats,
-      seats_sold: d.seats_sold,
-      seats_on_hold: d.seats_on_hold,
-      min_pax: d.min_pax,
-      max_pax: d.max_pax,
-      departure_status: d.departure_status ?? "planned",
-      availability_status: d.availability_status ?? "available",
-      internal_notes: d.internal_notes ?? "",
-      pricing: pricingFromServer(d),
-      addon_overrides: addonOverridesFromServer(d),
-    },
+    state: departureToFormState(d),
   };
 }
 
@@ -148,23 +96,7 @@ function emptyDraft(packageDuration: number): DraftDeparture {
     _localId: id,
     _isNew: true,
     _dirty: true,
-    state: {
-      departure_date: "",
-      duration: packageDuration,
-      return_date: "",
-      cutoff_date: "",
-      cutoff_overridden: false,
-      total_seats: DEFAULT_TOTAL_SEATS,
-      seats_sold: 0,
-      seats_on_hold: 0,
-      min_pax: 1,
-      max_pax: null,
-      departure_status: "planned",
-      availability_status: "available",
-      internal_notes: "",
-      pricing: { ...EMPTY_LAND_PRICING },
-      addon_overrides: [],
-    },
+    state: emptyDepartureFormState(packageDuration),
   };
 }
 
@@ -177,6 +109,10 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
   const [hydrated, setHydrated] = useState(false);
   const [pastExpanded, setPastExpanded] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DraftDeparture | null>(null);
+  const [view, setView] = useState<ViewMode>("table");
+  const [drawerState, setDrawerState] = useState<DrawerState | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const rowRefsMap = useRef<Map<string, React.RefObject<DepartureRowHandle | null>>>(new Map());
   const newDraftIdsRef = useRef<Set<string>>(new Set());
@@ -215,29 +151,42 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
   useEffect(() => {
     if (!departures || hydrated) return;
     const fresh = departures.map(departureToDraft);
-    // Preserve any locally-added unsaved drafts (none on first hydrate, but
-    // safe in case of later resets).
     const localOnlyDrafts = drafts.filter((d) => newDraftIdsRef.current.has(d._localId));
     setDrafts([...fresh, ...localOnlyDrafts]);
     setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [departures, hydrated]);
 
-  const updateDraft = (localId: string, patch: Partial<DepartureFormState>) => {
+  const updateDraft = (lid: string, patch: Partial<DepartureFormState>) => {
     setDrafts((prev) =>
       prev.map((d) =>
-        d._localId === localId
+        d._localId === lid
           ? { ...d, _dirty: true, state: { ...d.state, ...patch } }
           : d,
       ),
     );
   };
 
-  const handleAdd = () => {
+  const handleAddSingleRow = () => {
     const draft = emptyDraft(packageDuration);
     newDraftIdsRef.current.add(draft._localId);
     getOrCreateRef(draft._localId);
     setDrafts((prev) => [draft, ...prev]);
+  };
+
+  const handleAddSingleDrawer = (initialDate?: string) => {
+    setDrawerState({ kind: "create", initialDate });
+    setDrawerOpen(true);
+  };
+
+  const handleAddSingle = () => {
+    if (view === "table") handleAddSingleRow();
+    else handleAddSingleDrawer();
+  };
+
+  const handleEditDeparture = (d: FDDeparture) => {
+    setDrawerState({ kind: "edit", departure: d });
+    setDrawerOpen(true);
   };
 
   const handleDelete = async (draft: DraftDeparture) => {
@@ -280,8 +229,6 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
       }
       savedCount++;
       const savedId = result.saved.id;
-      // Rotate ref map: _localId becomes the server id so subsequent
-      // saves/lookups address the row by the persistent identifier.
       if (oldLocalId !== savedId) {
         const existing = rowRefsMap.current.get(oldLocalId);
         if (existing) {
@@ -307,7 +254,20 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
     return true;
   };
 
-  // Dirty propagation
+  const handleDrawerSaved = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["fd-package", packageId, "departures"] });
+    setHydrated(false);
+    onSaved();
+  };
+
+  const handleBulkCreated = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["fd-package", packageId, "departures"] });
+    setHydrated(false);
+    onSaved();
+  };
+
+  // Dirty propagation — reflects only Table view drafts. Drawer/Bulk save
+  // immediately and don't bubble dirty.
   const dirty = drafts.some((d) => d._dirty || d._isNew);
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
@@ -355,91 +315,63 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold mb-1">Departure Dates</h2>
           <p className="text-muted-foreground text-sm">
             Manage scheduled departures and per-departure pricing.
           </p>
         </div>
-        <Button type="button" size="sm" onClick={handleAdd}>
-          <Plus className="h-4 w-4" />
-          Departure
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <ViewToggle value={view} onChange={setView} />
+          <SplitAddButton
+            onSingle={handleAddSingle}
+            onBulk={() => setBulkOpen(true)}
+          />
+        </div>
       </div>
 
-      {/* Column headers for the table */}
-      {(upcoming.length > 0 || past.length > 0) && (
-        <div className="grid grid-cols-[28px_1fr_36px] items-center gap-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          <span />
-          <div className="grid grid-cols-[1.2fr_1.2fr_1fr_0.8fr_0.8fr_0.7fr_1fr] gap-3">
-            <span>Departure</span>
-            <span>Return</span>
-            <span>Cutoff</span>
-            <span>Status</span>
-            <span>Availability</span>
-            <span>Seats</span>
-            <span>Price From</span>
-          </div>
-          <span />
-        </div>
-      )}
-
-      {upcoming.length === 0 && past.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
-          <p className="text-sm">
-            No departures yet. Click <span className="font-medium">+ Departure</span> to add one.
-          </p>
-        </div>
+      {view === "table" ? (
+        <TableView
+          upcoming={upcoming}
+          past={past}
+          pastExpanded={pastExpanded}
+          setPastExpanded={setPastExpanded}
+          packageId={packageId}
+          currency={currency}
+          addons={addons}
+          getOrCreateRef={getOrCreateRef}
+          updateDraft={updateDraft}
+          setDeleteTarget={setDeleteTarget}
+        />
       ) : (
-        <div className="flex flex-col gap-2">
-          {upcoming.map((draft) => (
-            <DepartureRow
-              key={draft._localId}
-              ref={getOrCreateRef(draft._localId)}
-              packageId={packageId}
-              draft={draft}
-              defaultOpen={draft._isNew}
-              isPast={false}
-              currency={currency}
-              addons={addons}
-              onChange={(patch) => updateDraft(draft._localId, patch)}
-              onDeleteRequest={() => setDeleteTarget(draft)}
-            />
-          ))}
-
-          {past.length > 0 && (
-            <div className="mt-4 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => setPastExpanded((v) => !v)}
-                className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground"
-              >
-                <ChevronDown className={cn("h-4 w-4 transition-transform", pastExpanded && "rotate-180")} />
-                Past departures ({past.length})
-              </button>
-              {pastExpanded && (
-                <div className="flex flex-col gap-2">
-                  {past.map((draft) => (
-                    <DepartureRow
-                      key={draft._localId}
-                      ref={getOrCreateRef(draft._localId)}
-                      packageId={packageId}
-                      draft={draft}
-                      defaultOpen={false}
-                      isPast
-                      currency={currency}
-                      addons={addons}
-                      onChange={(patch) => updateDraft(draft._localId, patch)}
-                      onDeleteRequest={() => setDeleteTarget(draft)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <DepartureCalendar
+          departures={departures}
+          onCreateAt={(iso) => handleAddSingleDrawer(iso)}
+          onEditDeparture={handleEditDeparture}
+        />
       )}
+
+      <DepartureDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        packageId={packageId}
+        packageDuration={packageDuration}
+        currency={currency}
+        addons={addons}
+        mode={drawerState}
+        onSaved={() => { void handleDrawerSaved(); }}
+      />
+
+      <DepartureBulkSheet
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        packageId={packageId}
+        packageDuration={packageDuration}
+        existingDepartures={departures}
+        onCreated={() => { void handleBulkCreated(); }}
+      />
 
       <AlertDialog
         open={deleteTarget !== null}
@@ -469,3 +401,171 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
 });
 
 FDDepartureDatesTab.displayName = "FDDepartureDatesTab";
+
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: ViewMode;
+  onChange: (v: ViewMode) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-md border bg-muted p-0.5">
+      {(["table", "calendar"] as ViewMode[]).map((v) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => onChange(v)}
+          className={cn(
+            "px-3 py-1 text-xs font-medium rounded transition-colors capitalize",
+            value === v
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SplitAddButton({
+  onSingle,
+  onBulk,
+}: {
+  onSingle: () => void;
+  onBulk: () => void;
+}) {
+  return (
+    <div className="inline-flex">
+      <Button
+        type="button"
+        size="sm"
+        onClick={onSingle}
+        className="rounded-r-none"
+      >
+        <Plus className="h-4 w-4" />
+        Departure
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            size="sm"
+            className="rounded-l-none border-l border-primary-foreground/20 px-2"
+            aria-label="More add options"
+          >
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onSingle}>Add single departure</DropdownMenuItem>
+          <DropdownMenuItem onClick={onBulk}>Add bulk (date range)</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+interface TableViewProps {
+  upcoming: DraftDeparture[];
+  past: DraftDeparture[];
+  pastExpanded: boolean;
+  setPastExpanded: (v: boolean) => void;
+  packageId: string;
+  currency: string | null;
+  addons: FDAddon[];
+  getOrCreateRef: (id: string) => React.RefObject<DepartureRowHandle | null>;
+  updateDraft: (localId: string, patch: Partial<DepartureFormState>) => void;
+  setDeleteTarget: (d: DraftDeparture | null) => void;
+}
+
+function TableView({
+  upcoming,
+  past,
+  pastExpanded,
+  setPastExpanded,
+  packageId,
+  currency,
+  addons,
+  getOrCreateRef,
+  updateDraft,
+  setDeleteTarget,
+}: TableViewProps) {
+  if (upcoming.length === 0 && past.length === 0) {
+    return (
+      <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
+        <p className="text-sm">
+          No departures yet. Click <span className="font-medium">+ Departure</span> to add one.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-[28px_1fr_36px] items-center gap-2 px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span />
+        <div className="grid grid-cols-[1.2fr_1.2fr_1fr_0.8fr_0.8fr_0.7fr_1fr] gap-3">
+          <span>Departure</span>
+          <span>Return</span>
+          <span>Cutoff</span>
+          <span>Status</span>
+          <span>Availability</span>
+          <span>Seats</span>
+          <span>Price From</span>
+        </div>
+        <span />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {upcoming.map((draft) => (
+          <DepartureRow
+            key={draft._localId}
+            ref={getOrCreateRef(draft._localId)}
+            packageId={packageId}
+            draft={draft}
+            defaultOpen={draft._isNew}
+            isPast={false}
+            currency={currency}
+            addons={addons}
+            onChange={(patch) => updateDraft(draft._localId, patch)}
+            onDeleteRequest={() => setDeleteTarget(draft)}
+          />
+        ))}
+
+        {past.length > 0 && (
+          <div className="mt-4 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setPastExpanded(!pastExpanded)}
+              className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              {pastExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              Past departures ({past.length})
+            </button>
+            {pastExpanded && (
+              <div className="flex flex-col gap-2">
+                {past.map((draft) => (
+                  <DepartureRow
+                    key={draft._localId}
+                    ref={getOrCreateRef(draft._localId)}
+                    packageId={packageId}
+                    draft={draft}
+                    defaultOpen={false}
+                    isPast
+                    currency={currency}
+                    addons={addons}
+                    onChange={(patch) => updateDraft(draft._localId, patch)}
+                    onDeleteRequest={() => setDeleteTarget(draft)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
