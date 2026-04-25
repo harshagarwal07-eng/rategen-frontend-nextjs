@@ -17,11 +17,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ChevronLeft, ChevronRight, Loader2, Save, X } from "lucide-react";
-import { fdGetPackage } from "@/data-access/fixed-departures";
+import { differenceInCalendarDays, parseISO } from "date-fns";
+import { toast } from "sonner";
+import {
+  fdGetPackage,
+  fdListDepartures,
+  fdUpdateDeparture,
+} from "@/data-access/fixed-departures";
+import { computeReturnDate } from "./fd-tabs/departure-form";
 import { FDGeneralInfoTab } from "./fd-tabs/tab-general-info";
 import { FDItineraryTab } from "./fd-tabs/tab-itinerary";
 import { FDInclusionsExclusionsTab } from "./fd-tabs/tab-inclusions-exclusions";
 import { FDAddonsTab } from "./fd-tabs/tab-addons";
+import { FDDepartureDatesTab } from "./fd-tabs/tab-departure-dates";
 import { FDTabPlaceholder } from "./fd-tabs/tab-placeholder";
 
 export type FDTabHandle = {
@@ -63,6 +71,8 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   const itineraryRef = useRef<FDTabHandle>(null);
   const incExcRef = useRef<FDTabHandle>(null);
   const addonsRef = useRef<FDTabHandle>(null);
+  const departuresRef = useRef<FDTabHandle>(null);
+  const prevDurationRef = useRef<number | null>(null);
 
   const effectiveId = packageId ?? createdId;
   const mode: "create" | "edit" = packageId ? "edit" : "create";
@@ -75,14 +85,71 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
       setTabResetKeys({});
       setPendingTab(null);
       setShowTabSwitchDialog(false);
+      prevDurationRef.current = null;
     }
   }, [open, packageId]);
 
   const { data: pkg } = useQuery({
-    queryKey: ["fd-package", packageId],
-    queryFn: () => fdGetPackage(packageId as string),
-    enabled: !!packageId && open,
+    queryKey: ["fd-package", effectiveId],
+    queryFn: () => fdGetPackage(effectiveId as string),
+    enabled: !!effectiveId && open,
   });
+
+  // Reactive recalc of return_date on each upcoming departure when the
+  // package's duration_nights changes (Tab 1 save flow). Lives at the dialog
+  // level so it doesn't depend on Tab 5 being mounted; Tab 5 just re-reads
+  // departures on next mount.
+  useEffect(() => {
+    if (!effectiveId || !open) return;
+    const current = (pkg?.duration_nights as number | null | undefined) ?? null;
+    if (current == null) return;
+    if (prevDurationRef.current === null) {
+      prevDurationRef.current = current;
+      return;
+    }
+    if (prevDurationRef.current === current) return;
+    const old = prevDurationRef.current;
+    prevDurationRef.current = current;
+
+    (async () => {
+      let departures;
+      try {
+        departures = await queryClient.fetchQuery({
+          queryKey: ["fd-package", effectiveId, "departures"],
+          queryFn: () => fdListDepartures(effectiveId),
+        });
+      } catch {
+        return;
+      }
+      const today = new Date().toISOString().split("T")[0];
+      const candidates = (departures ?? []).filter((d) => {
+        if (!d.departure_date || d.departure_date < today) return false;
+        if (!d.return_date) return true;
+        const stored = differenceInCalendarDays(parseISO(d.return_date), parseISO(d.departure_date));
+        return stored === old;
+      });
+      if (candidates.length === 0) return;
+      let updated = 0;
+      for (const dep of candidates) {
+        const newReturn = computeReturnDate(dep.departure_date, current);
+        try {
+          await fdUpdateDeparture(dep.id, { return_date: newReturn });
+          updated++;
+        } catch {
+          // continue; the invalidate below ensures the UI reflects whatever
+          // the server holds even if some PATCHes failed mid-loop.
+        }
+      }
+      if (updated > 0) {
+        await queryClient.invalidateQueries({
+          queryKey: ["fd-package", effectiveId, "departures"],
+        });
+        toast.success(
+          `Updated ${updated} upcoming departure${updated === 1 ? "" : "s"} with new duration.`,
+        );
+      }
+    })();
+  }, [pkg?.duration_nights, effectiveId, open, queryClient]);
 
   const isTabDisabled = (tabId: string) => {
     if (mode === "edit") return false;
@@ -117,6 +184,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
       case "itinerary": return itineraryRef;
       case "inc-exc": return incExcRef;
       case "addons": return addonsRef;
+      case "departures": return departuresRef;
       default: return null;
     }
   };
@@ -167,7 +235,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
 
   const title = mode === "create" ? "Add New Fixed Departure" : pkg?.name || "Edit Fixed Departure";
   const anyDirty = dirtyTabs.size > 0;
-  const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons"].includes(activeTab);
+  const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures"].includes(activeTab);
 
   return (
     <>
@@ -255,6 +323,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                       const idForInvalidate = newId ?? effectiveId;
                       if (idForInvalidate) {
                         queryClient.invalidateQueries({ queryKey: ["fd-package", idForInvalidate, "for-itinerary"] });
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", idForInvalidate] });
                       }
                       onSaved?.();
                     }}
@@ -310,7 +379,22 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                     onAdvance={handleAdvance}
                   />
                 </TabsContent>
-                <TabsContent value="departures"><FDTabPlaceholder title="Departure Dates" /></TabsContent>
+                <TabsContent value="departures">
+                  <FDDepartureDatesTab
+                    key={tabResetKeys.departures ?? 0}
+                    ref={departuresRef}
+                    mode={mode}
+                    packageId={effectiveId}
+                    onDirtyChange={trackDirty("departures")}
+                    onSaved={() => {
+                      if (effectiveId) {
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "departures"] });
+                      }
+                      onSaved?.();
+                    }}
+                    onAdvance={handleAdvance}
+                  />
+                </TabsContent>
                 <TabsContent value="flights-visa"><FDTabPlaceholder title="Flights & Visa" /></TabsContent>
                 <TabsContent value="policies"><FDTabPlaceholder title="Policies" /></TabsContent>
                 <TabsContent value="docs-remarks"><FDTabPlaceholder title="Documents & Remarks" /></TabsContent>

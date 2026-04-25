@@ -13,6 +13,9 @@ import type {
   FDItineraryDay,
   FDAddon,
   FDAddonItineraryDay,
+  FDDeparture,
+  FDDeparturePricing,
+  FDAddonDeparturePricing,
 } from "@/types/fixed-departures";
 
 const fdApi = axios.create({
@@ -147,5 +150,55 @@ export async function fdReplaceAddonItinerary(
   days: Array<Omit<FDAddonItineraryDay, "id" | "addon_id" | "overnight_city">>,
 ): Promise<FDAddonItineraryDay[]> {
   const { data } = await fdApi.put<FDAddonItineraryDay[]>(`${BASE}/addons/${addonId}/itinerary`, days);
+  return data;
+}
+
+export async function fdListDepartures(packageId: string): Promise<FDDeparture[]> {
+  const { data } = await fdApi.get<FDDeparture[]>(`${BASE}/packages/${packageId}/departures`);
+  return data;
+}
+
+export async function fdCreateDeparture(
+  packageId: string,
+  payload: Partial<FDDeparture>,
+): Promise<FDDeparture> {
+  const { data } = await fdApi.post<FDDeparture>(`${BASE}/packages/${packageId}/departures`, payload);
+  return data;
+}
+
+export async function fdUpdateDeparture(
+  departureId: string,
+  payload: Partial<FDDeparture>,
+): Promise<FDDeparture> {
+  const { data } = await fdApi.patch<FDDeparture>(`${BASE}/departures/${departureId}`, payload);
+  return data;
+}
+
+export async function fdDeleteDeparture(departureId: string): Promise<{ deleted: boolean }> {
+  const { data } = await fdApi.delete<{ deleted: boolean }>(`${BASE}/departures/${departureId}`);
+  return data;
+}
+
+export async function fdUpsertDeparturePricing(
+  departureId: string,
+  payload: Omit<FDDeparturePricing, "id" | "departure_date_id">,
+): Promise<FDDeparturePricing> {
+  const { data } = await fdApi.put<FDDeparturePricing>(`${BASE}/departures/${departureId}/pricing`, payload);
+  return data;
+}
+
+export async function fdGetAddonDeparturePricing(departureId: string): Promise<FDAddonDeparturePricing[]> {
+  const { data } = await fdApi.get<FDAddonDeparturePricing[]>(`${BASE}/departures/${departureId}/addon-pricing`);
+  return data;
+}
+
+export async function fdUpsertAddonDeparturePricing(
+  departureId: string,
+  rows: Array<Omit<FDAddonDeparturePricing, "id" | "departure_date_id">>,
+): Promise<FDAddonDeparturePricing[]> {
+  const { data } = await fdApi.put<FDAddonDeparturePricing[]>(
+    `${BASE}/departures/${departureId}/addon-pricing`,
+    rows,
+  );
   return data;
 }

@@ -126,3 +126,53 @@ export interface FDAddon {
   custom_adult_age_to: number | null;
   fd_addon_itinerary_days?: FDAddonItineraryDay[];
 }
+
+export const FD_DEPARTURE_STATUSES = ["planned", "confirmed", "cancelled"] as const;
+export type FDDepartureStatus = (typeof FD_DEPARTURE_STATUSES)[number];
+
+export const FD_AVAILABILITY_STATUSES = ["available", "limited", "sold_out"] as const;
+export type FDAvailabilityStatus = (typeof FD_AVAILABILITY_STATUSES)[number];
+
+export interface FDDeparturePricing {
+  id?: string;
+  departure_date_id?: string;
+  pricing_type: string;
+  rate_single: number | null;
+  rate_double: number | null;
+  rate_triple: number | null;
+  rate_child_no_bed: number | null;
+  rate_child_extra_bed: number | null;
+  rate_infant: number | null;
+}
+
+export interface FDAddonDeparturePricing {
+  id?: string;
+  departure_date_id?: string;
+  addon_id: string;
+  rate_single: number | null;
+  rate_double: number | null;
+  rate_triple: number | null;
+  rate_child_no_bed: number | null;
+  rate_child_extra_bed: number | null;
+  rate_infant: number | null;
+}
+
+export interface FDDeparture {
+  id: string;
+  package_id: string;
+  departure_date: string;
+  return_date: string | null;
+  cutoff_date: string | null;
+  total_seats: number | null;
+  seats_sold: number | null;
+  seats_on_hold: number | null;
+  min_pax: number | null;
+  max_pax: number | null;
+  is_guaranteed: boolean | null;
+  departure_status: string | null;
+  availability_status: string | null;
+  internal_notes: string | null;
+  seats_available?: number;
+  fd_departure_pricing?: FDDeparturePricing[];
+  fd_addon_departure_pricing?: FDAddonDeparturePricing[];
+}
