@@ -59,7 +59,7 @@ export interface FDItineraryDay {
   title: string;
   description: string | null;
   includes: string | null;
-  meals_included: string[] | string | null;
+  meals_included: string[];
   overnight_city: string | null;
   overnight_city_id: string | null;
   accommodation_note: string | null;

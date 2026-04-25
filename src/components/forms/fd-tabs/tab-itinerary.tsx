@@ -83,19 +83,6 @@ function emptyDay(dayNumber: number, totalDays: number): IFDItineraryDay {
   };
 }
 
-function parseMeals(raw: string[] | string | null | undefined): string[] {
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === "string" && raw.length > 0) {
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.map(String) : [];
-    } catch {
-      return [];
-    }
-  }
-  return [];
-}
-
 function reconcileDays(
   existing: Array<Partial<IFDItineraryDay> & { day_number: number }>,
   totalDays: number,
@@ -164,7 +151,7 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
           title: d.title as string | undefined,
           description: d.description as string | undefined,
           includes: d.includes as string | undefined,
-          meals_included: parseMeals(d.meals_included as string | string[] | null),
+          meals_included: Array.isArray(d.meals_included) ? (d.meals_included as string[]) : [],
           overnight_city_id: (d.overnight_city_id as string | null) ?? null,
           accommodation_note: (d.accommodation_note as string | undefined) ?? "",
           image_url: (d.image_url as string | undefined) ?? "",
