@@ -66,6 +66,32 @@ describe("generateDates", () => {
     });
   });
 
+  describe("every_weekday frequency", () => {
+    it("returns Mon–Fri across a week, skipping Sat/Sun", () => {
+      // Jul 7 2025 = Mon, Jul 13 2025 = Sun
+      const result = generateDates("2025-07-07", "2025-07-13", "every_weekday", []);
+      expect(result).toEqual([
+        "2025-07-07", // Mon
+        "2025-07-08", // Tue
+        "2025-07-09", // Wed
+        "2025-07-10", // Thu
+        "2025-07-11", // Fri
+      ]);
+    });
+
+    it("ignores the weekdays argument", () => {
+      // Same range with explicit weekdays — should still only return Mon-Fri.
+      const result = generateDates("2025-07-07", "2025-07-13", "every_weekday", [0, 6]);
+      expect(result).toEqual([
+        "2025-07-07",
+        "2025-07-08",
+        "2025-07-09",
+        "2025-07-10",
+        "2025-07-11",
+      ]);
+    });
+  });
+
   describe("custom frequency", () => {
     it("returns days matching multiple selected weekdays (Mon, Wed, Fri)", () => {
       // Jul 7 2025 = Mon, Jul 13 2025 = Sun
