@@ -263,27 +263,23 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
     setPendingTab(null);
   };
 
-  const fullIdentity = useMemo(() => {
-    if (!pkg?.name) return "";
-    const parts: string[] = [pkg.name];
-    if (pkg.tour_code) parts.push(String(pkg.tour_code));
-    if (pkgCountries.length > 0) parts.push(pkgCountries.map((c) => c.country_name).join(", "));
-    if (pkgCities.length > 0) parts.push(pkgCities.map((c) => c.city_name).join(", "));
-    return parts.join(" · ");
-  }, [pkg?.name, pkg?.tour_code, pkgCountries, pkgCities]);
-
-  const TITLE_MAX_CHARS = 80;
-  const truncatedIdentity = useMemo(() => {
-    if (fullIdentity.length <= TITLE_MAX_CHARS) return fullIdentity;
-    return `${fullIdentity.slice(0, TITLE_MAX_CHARS - 1)}…`;
-  }, [fullIdentity]);
-
-  const hasIdentity = fullIdentity.length > 0;
-  const title = hasIdentity
-    ? truncatedIdentity
-    : mode === "create"
-      ? "Add new FD"
-      : "Edit Fixed Departure";
+  const packageName = (pkg?.name as string | null | undefined) ?? "";
+  const tourCode = (pkg?.tour_code as string | null | undefined) ?? "";
+  const countriesLine = useMemo(
+    () => pkgCountries.map((c) => c.country_name).join(", "),
+    [pkgCountries],
+  );
+  const citiesLine = useMemo(
+    () => pkgCities.map((c) => c.city_name).join(", "),
+    [pkgCities],
+  );
+  const hasIdentity = packageName.length > 0;
+  const fallbackTitle = mode === "create" ? "Add new FD" : "Edit Fixed Departure";
+  // sr-only DialogTitle for accessibility — the visible header is the
+  // multi-line block below.
+  const srTitle = hasIdentity
+    ? [packageName, tourCode, countriesLine, citiesLine].filter(Boolean).join(" · ")
+    : fallbackTitle;
   const anyDirty = dirtyTabs.size > 0;
   const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures"].includes(activeTab);
 
@@ -296,20 +292,47 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
           onEscapeKeyDown={(e) => e.preventDefault()}
           showCloseButton={false}
         >
-          <DialogTitle className="sr-only">{title}</DialogTitle>
+          <DialogTitle className="sr-only">{srTitle}</DialogTitle>
           <div className="sticky top-0 z-10">
-            <div className="border-b bg-background px-6 py-3 flex items-center justify-between">
-              <div
-                className="text-base font-semibold truncate"
-                title={hasIdentity && fullIdentity !== truncatedIdentity ? fullIdentity : undefined}
-              >
-                {title}
-              </div>
+            <div className="border-b bg-background px-6 py-3 flex items-start justify-between gap-4">
+              {hasIdentity ? (
+                <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3 min-w-0">
+                    <div className="text-base font-semibold truncate" title={packageName}>
+                      {packageName}
+                    </div>
+                    {tourCode && (
+                      <span
+                        className="shrink-0 rounded-full border bg-muted/60 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                        title={`Tour Code: ${tourCode}`}
+                      >
+                        Tour Code: {tourCode}
+                      </span>
+                    )}
+                  </div>
+                  {countriesLine && (
+                    <div className="text-xs text-muted-foreground truncate" title={countriesLine}>
+                      <span className="font-semibold uppercase tracking-wide mr-1">Countries:</span>
+                      {countriesLine}
+                    </div>
+                  )}
+                  {citiesLine && (
+                    <div className="text-xs text-muted-foreground truncate" title={citiesLine}>
+                      <span className="font-semibold uppercase tracking-wide mr-1">Cities:</span>
+                      {citiesLine}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-base font-semibold truncate flex-1">
+                  {fallbackTitle}
+                </div>
+              )}
               <DialogClose asChild>
                 <button
                   type="button"
                   onClick={requestClose}
-                  className="rounded-sm opacity-70 hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="shrink-0 rounded-sm opacity-70 hover:opacity-100 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring"
                   aria-label="Close"
                 >
                   <X className="h-4 w-4" />
