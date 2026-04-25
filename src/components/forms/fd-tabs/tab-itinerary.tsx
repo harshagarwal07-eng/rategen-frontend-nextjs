@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ChevronDown, ChevronRight, Copy, Save, Settings2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -66,14 +67,23 @@ interface Props {
   onAdvance: () => void;
 }
 
-function defaultTitle(dayNumber: number, totalDays: number): string {
+function dayLabel(dayNumber: number, totalDays: number): string {
   return dayNumber === totalDays ? `Day ${dayNumber} (Departure)` : `Day ${dayNumber}`;
 }
 
-function emptyDay(dayNumber: number, totalDays: number): IFDItineraryDay {
+function mealLabelsFromList(meals: string[]): string {
+  const lower = meals.map((m) => m.toLowerCase());
+  const parts: string[] = [];
+  if (lower.some((m) => m.includes("breakfast"))) parts.push("B");
+  if (lower.some((m) => m.includes("lunch"))) parts.push("L");
+  if (lower.some((m) => m.includes("dinner"))) parts.push("D");
+  return parts.join(", ");
+}
+
+function emptyDay(dayNumber: number): IFDItineraryDay {
   return {
     day_number: dayNumber,
-    title: defaultTitle(dayNumber, totalDays),
+    title: "",
     description: "",
     includes: "",
     meals_included: [],
@@ -95,7 +105,7 @@ function reconcileDays(
     if (e) {
       out.push({
         day_number: i,
-        title: e.title || defaultTitle(i, totalDays),
+        title: e.title ?? "",
         description: e.description ?? "",
         includes: e.includes ?? "",
         meals_included: Array.isArray(e.meals_included) ? e.meals_included : [],
@@ -104,7 +114,7 @@ function reconcileDays(
         image_url: e.image_url ?? "",
       });
     } else {
-      out.push(emptyDay(i, totalDays));
+      out.push(emptyDay(i));
     }
   }
   return out;
@@ -130,6 +140,23 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
     queryFn: () => fdGetPackageCountries(packageId as string),
     enabled: !!packageId,
   });
+
+  const countryIdsKey = pkgCountries.map((c) => c.id).sort().join(",");
+  const { data: allCitiesInCountries = [] } = useQuery<FDCity[]>({
+    queryKey: ["fd-cities-in-pkg-countries", countryIdsKey],
+    queryFn: async () => {
+      if (pkgCountries.length === 0) return [];
+      const all = await Promise.all(pkgCountries.map((c) => fdGetCitiesByCountry(c.id)));
+      return all.flat() as FDCity[];
+    },
+    enabled: pkgCountries.length > 0,
+  });
+
+  const cityNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of allCitiesInCountries) m.set(c.id, c.city_name);
+    return m;
+  }, [allCitiesInCountries]);
 
   const durationNights = (pkg?.duration_nights as number | null) ?? 0;
   const totalDays = durationNights > 0 ? durationNights + 1 : 0;
@@ -269,7 +296,7 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
   const handleClearDay = (dayNumber: number) => {
     const idx = form.getValues("days").findIndex((d) => d.day_number === dayNumber);
     if (idx === -1) return;
-    const empty = emptyDay(dayNumber, totalDays);
+    const empty = emptyDay(dayNumber);
     form.setValue(`days.${idx}`, empty, { shouldDirty: true });
     setClearTarget(null);
     toast.success(`Cleared Day ${dayNumber}`);
@@ -386,16 +413,20 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
         {fields.map((field, idx) => {
           const dayNumber = field.day_number;
           const isOpen = openDays.has(dayNumber);
+          const watchedTitle = form.watch(`days.${idx}.title`) ?? "";
+          const watchedMeals: string[] = form.watch(`days.${idx}.meals_included`) ?? [];
+          const watchedOvernight = form.watch(`days.${idx}.overnight_city_id`) ?? null;
+          const cityName = watchedOvernight ? cityNameById.get(watchedOvernight) ?? null : null;
           return (
             <div key={field.id} className="rounded-md border bg-card">
               <DayHeader
                 dayNumber={dayNumber}
-                title={form.watch(`days.${idx}.title`) || defaultTitle(dayNumber, totalDays)}
+                dayLabelText={dayLabel(dayNumber, totalDays)}
+                titleDisplay={watchedTitle.trim()}
+                mealsLabel={mealLabelsFromList(watchedMeals)}
+                overnightCityName={cityName}
                 isOpen={isOpen}
                 onToggle={() => toggleDay(dayNumber)}
-                onTitleChange={(v) =>
-                  form.setValue(`days.${idx}.title`, v, { shouldDirty: true })
-                }
                 onCopyConfirm={(targets) => handleCopyToTargets(idx, targets)}
                 onClear={() => setClearTarget(dayNumber)}
                 otherDays={fields
@@ -455,10 +486,12 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
 
 interface DayHeaderProps {
   dayNumber: number;
-  title: string;
+  dayLabelText: string;
+  titleDisplay: string;
+  mealsLabel: string;
+  overnightCityName: string | null;
   isOpen: boolean;
   onToggle: () => void;
-  onTitleChange: (v: string) => void;
   onCopyConfirm: (targets: number[]) => void;
   onClear: () => void;
   otherDays: number[];
@@ -466,10 +499,12 @@ interface DayHeaderProps {
 
 function DayHeader({
   dayNumber,
-  title,
+  dayLabelText,
+  titleDisplay,
+  mealsLabel,
+  overnightCityName,
   isOpen,
   onToggle,
-  onTitleChange,
   onCopyConfirm,
   onClear,
   otherDays,
@@ -516,13 +551,28 @@ function DayHeader({
       >
         <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen ? "" : "-rotate-90")} />
       </button>
-      <div className="text-sm font-semibold w-14 shrink-0">Day {dayNumber}</div>
-      <Input
-        value={title}
-        onChange={(e) => onTitleChange(e.target.value)}
-        onClick={(e) => e.stopPropagation()}
-        className="h-8 flex-1"
-      />
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex flex-1 items-center gap-2 min-w-0 text-left"
+      >
+        <span className="text-sm font-semibold shrink-0">{dayLabelText}</span>
+        <span className={cn("text-sm truncate", titleDisplay ? "" : "text-muted-foreground italic")}>
+          {titleDisplay || "No title"}
+        </span>
+        {mealsLabel && (
+          <>
+            <span className="text-muted-foreground/50 shrink-0">·</span>
+            <span className="text-xs text-muted-foreground shrink-0">{mealsLabel}</span>
+          </>
+        )}
+        {overnightCityName && (
+          <>
+            <span className="text-muted-foreground/50 shrink-0">·</span>
+            <span className="text-xs text-muted-foreground truncate">{overnightCityName}</span>
+          </>
+        )}
+      </button>
       <Popover open={copyOpen} onOpenChange={setCopyOpen}>
         <PopoverTrigger asChild>
           <Button
@@ -631,7 +681,6 @@ function DayBody({
   countriesSelected,
 }: DayBodyProps) {
   const description = form.watch(`days.${idx}.description`) ?? "";
-  const includes = form.watch(`days.${idx}.includes`) ?? "";
   const meals: string[] = form.watch(`days.${idx}.meals_included`) ?? [];
   const imageUrl: string = form.watch(`days.${idx}.image_url`) ?? "";
 
@@ -643,6 +692,14 @@ function DayBody({
   return (
     <>
       <div className="flex flex-col gap-1.5">
+        <Label className="text-xs">Day Title</Label>
+        <Input
+          placeholder="e.g. Arrival in Paris"
+          {...form.register(`days.${idx}.title`)}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Description</Label>
         <TiptapEditor
           initialContent={description}
@@ -650,19 +707,17 @@ function DayBody({
             form.setValue(`days.${idx}.description`, html, { shouldDirty: true })
           }
           placeholder="Describe the day's plan..."
+          tools={["bold", "italic", "underline"]}
           className="min-h-[160px]"
         />
       </div>
 
       <div className="flex flex-col gap-1.5">
         <Label className="text-xs">Includes</Label>
-        <TiptapEditor
-          initialContent={includes}
-          onChange={(html) =>
-            form.setValue(`days.${idx}.includes`, html, { shouldDirty: true })
-          }
+        <Textarea
+          rows={2}
           placeholder="What's included today..."
-          className="min-h-[120px]"
+          {...form.register(`days.${idx}.includes`)}
         />
       </div>
 
@@ -683,8 +738,8 @@ function DayBody({
                     : `${meals.length} selected`}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-72 p-2" align="start">
-              <div className="flex flex-col gap-1 max-h-72 overflow-y-auto">
+            <PopoverContent className="w-72 p-0" align="start">
+              <div className="max-h-[280px] overflow-y-auto p-2 flex flex-col gap-1">
                 {allMealOptions.map((m) => (
                   <div
                     key={m}

@@ -53,7 +53,7 @@ export type IFDGeneralInfo = z.infer<typeof FDGeneralInfoSchema>;
 
 export const FDItineraryDaySchema = z.object({
   day_number: z.coerce.number().int().min(1),
-  title: z.string().min(1, "Title is required"),
+  title: z.string().default(""),
   description: z.string().nullable().optional().default(""),
   includes: z.string().nullable().optional().default(""),
   meals_included: z.array(z.string()).default([]),
