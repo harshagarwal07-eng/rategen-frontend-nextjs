@@ -881,7 +881,10 @@ function AddonCard({
             <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pricing</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">Adult</Label>
+                <Label className="text-xs">
+                  Adult ({getEffectiveBandRange(draft, packageBands, "adult").from}-
+                  {getEffectiveBandRange(draft, packageBands, "adult").to})
+                </Label>
                 <Input
                   type="number"
                   min={0}
@@ -894,7 +897,10 @@ function AddonCard({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">Child</Label>
+                <Label className="text-xs">
+                  Child ({getEffectiveBandRange(draft, packageBands, "child").from}-
+                  {getEffectiveBandRange(draft, packageBands, "child").to})
+                </Label>
                 <Input
                   type="number"
                   min={0}
@@ -907,7 +913,10 @@ function AddonCard({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs">Infant</Label>
+                <Label className="text-xs">
+                  Infant ({getEffectiveBandRange(draft, packageBands, "infant").from}-
+                  {getEffectiveBandRange(draft, packageBands, "infant").to})
+                </Label>
                 <Input
                   type="number"
                   min={0}
