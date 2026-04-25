@@ -31,12 +31,19 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+export interface DateRangePreset {
+  label: string;
+  getRange: () => { from: Date; to: Date };
+}
+
 interface DateRangePickerProps {
   value?: string;
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** Override the preset shortcut list. Defaults to module-wide presets. */
+  presets?: DateRangePreset[];
 }
 
 function formatDateRange(range: DateRange | undefined): string {
@@ -182,7 +189,9 @@ export function DateRangePicker({
   placeholder = "e.g., Jan 1 - Mar 31",
   disabled = false,
   className,
+  presets,
 }: DateRangePickerProps) {
+  const activePresets = presets ?? DATE_PRESETS;
   const [inputValue, setInputValue] = React.useState("");
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const [month, setMonth] = React.useState<Date | undefined>(new Date());
@@ -267,7 +276,7 @@ export function DateRangePicker({
   }, [inputValue, date, addRange]);
 
   const handlePresetClick = React.useCallback(
-    (preset: (typeof DATE_PRESETS)[0]) => {
+    (preset: DateRangePreset) => {
       const range = preset.getRange();
       addRange(range);
     },
@@ -339,7 +348,7 @@ export function DateRangePicker({
           />
           {/* Presets */}
           <div className="flex flex-wrap gap-1.5 border-t px-3 py-3 max-w-md">
-            {DATE_PRESETS.map((preset) => (
+            {activePresets.map((preset) => (
               <Button
                 key={preset.label}
                 type="button"

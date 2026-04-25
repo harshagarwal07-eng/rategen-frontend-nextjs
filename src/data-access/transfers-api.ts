@@ -14,6 +14,15 @@ import {
   TransferCurrencyOption,
   TransferPackageDetail,
   TransferPackageCreateInput,
+  TransferSeason,
+  SeasonDateRange,
+  SicRate,
+  PrivatePerPaxRate,
+  VehicleRateRow,
+  VehicleRateType,
+  DiscountType,
+  AgePolicyBand,
+  PackageTax,
 } from "@/types/transfers";
 
 type Result<T> = { data: T | null; error: string | null };
@@ -190,4 +199,205 @@ export async function replaceCancellationRules(
     rules,
   );
   return unwrap<unknown>(raw);
+}
+
+// ── Tab 3 — Seasons & Rates ────────────────────────────────────────────
+
+export async function listPackageSeasons(
+  packageId: string,
+): Promise<Result<TransferSeason[]>> {
+  const raw = await http.get<TransferSeason[]>(`/api/transfers/packages/${packageId}/seasons`);
+  return unwrap<TransferSeason[]>(raw);
+}
+
+export async function createSeason(
+  packageId: string,
+  dto: { name: string; status: string; sort_order?: number },
+): Promise<Result<TransferSeason>> {
+  const raw = await http.post<TransferSeason>(
+    `/api/transfers/packages/${packageId}/seasons`,
+    dto,
+  );
+  return unwrap<TransferSeason>(raw);
+}
+
+export async function patchSeason(
+  seasonId: string,
+  dto: {
+    name?: string | null;
+    exception_rules?: string | null;
+    vehicle_rate_type?: VehicleRateType | null;
+    child_discount_type?: DiscountType | null;
+    child_discount_value?: number | null;
+    infant_discount_type?: DiscountType | null;
+    infant_discount_value?: number | null;
+    sort_order?: number;
+  },
+): Promise<Result<TransferSeason>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.patch<TransferSeason>(`/api/transfers/seasons/${seasonId}`, dto);
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function deleteSeason(
+  seasonId: string,
+): Promise<Result<{ deleted: boolean }>> {
+  const raw = await http.delete<{ deleted: boolean }>(`/api/transfers/seasons/${seasonId}`);
+  return unwrap<{ deleted: boolean }>(raw);
+}
+
+export async function duplicateSeason(
+  seasonId: string,
+): Promise<Result<{ id: string; name: string }>> {
+  const raw = await http.post<{ id: string; name: string }>(
+    `/api/transfers/seasons/${seasonId}/duplicate`,
+    {},
+  );
+  return unwrap<{ id: string; name: string }>(raw);
+}
+
+export async function replaceSeasonDateRanges(
+  seasonId: string,
+  ranges: SeasonDateRange[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/seasons/${seasonId}/date-ranges`,
+      ranges,
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function replaceSeasonBlackoutDates(
+  seasonId: string,
+  dates: string[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/seasons/${seasonId}/blackout-dates`,
+      dates,
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function replaceSeasonSicRates(
+  seasonId: string,
+  rates: SicRate[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/seasons/${seasonId}/sic-rates`,
+      rates,
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function replaceSeasonPrivateRates(
+  seasonId: string,
+  rates: PrivatePerPaxRate[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/seasons/${seasonId}/private-rates`,
+      rates,
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+// Backend strips `brand` field; sending it is harmless but we drop it client-side
+// to keep payloads minimal.
+export async function replaceSeasonVehicleRates(
+  seasonId: string,
+  rates: VehicleRateRow[],
+): Promise<Result<unknown>> {
+  const stripped = rates.map((r) => ({
+    vehicle_type_id: r.vehicle_type_id,
+    rate: r.rate,
+    max_pax: r.max_pax,
+    max_pax_with_luggage: r.max_pax_with_luggage,
+    max_luggage: r.max_luggage,
+    max_kms_day: r.max_kms_day,
+    max_hrs_day: r.max_hrs_day,
+    supplement_hr: r.supplement_hr,
+    supplement_km: r.supplement_km,
+  }));
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/seasons/${seasonId}/vehicle-rates`,
+      stripped,
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function replacePackageAgePolicies(
+  packageId: string,
+  bands: AgePolicyBand[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/packages/${packageId}/age-policies`,
+      bands.map((b, i) => ({
+        band_name: b.band_name,
+        age_from: b.age_from,
+        age_to: b.age_to,
+        band_order: b.band_order ?? i,
+      })),
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function listPackageTaxes(
+  packageId: string,
+): Promise<Result<PackageTax[]>> {
+  const raw = await http.get<PackageTax[]>(`/api/transfers/packages/${packageId}/taxes`);
+  return unwrap<PackageTax[]>(raw);
+}
+
+export async function replacePackageTaxes(
+  packageId: string,
+  taxes: PackageTax[],
+): Promise<Result<PackageTax[]>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put<PackageTax[]>(
+      `/api/transfers/packages/${packageId}/taxes`,
+      taxes.map((t) => ({
+        name: t.name,
+        rate: t.rate,
+        rate_type: t.rate_type,
+        is_inclusive: t.is_inclusive,
+      })),
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
 }

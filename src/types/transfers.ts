@@ -305,3 +305,100 @@ export type TransferPackageCreateInput = Omit<
   TransferPackageDetail,
   'id' | 'transfer_id' | 'created_at' | 'updated_at' | 'transfer_package_stops' | 'transfer_operational_hours' | 'transfer_cancellation_policies'
 >;
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tab 3 — Seasons & Rates
+// ─────────────────────────────────────────────────────────────────────────
+
+export type DiscountType = 'percent' | 'fixed';
+
+export type VehicleRateType = 'per_vehicle' | 'per_hour' | 'per_km';
+
+export type SeasonDateRange = {
+  valid_from: string; // ISO date
+  valid_till: string; // ISO date
+};
+
+export type SeasonBlackoutDate = {
+  blackout_date: string; // ISO date
+};
+
+export type SicRate = {
+  id?: string;
+  season_id?: string;
+  adult_rate: number;
+  child_rate: number;
+  max_pax: number | null;
+  max_luggage: number | null;
+  supplement_hr: number | null;
+  supplement_km: number | null;
+};
+
+export type PrivatePerPaxRate = {
+  id?: string;
+  season_id?: string;
+  pax_count: number;
+  rate: number;
+};
+
+export type VehicleRateRow = {
+  id?: string;
+  season_id?: string;
+  vehicle_type_id: string;
+  rate: number;
+  max_pax: number | null;
+  max_pax_with_luggage: number | null;
+  max_luggage: number | null;
+  max_kms_day: number | null;
+  max_hrs_day: number | null;
+  supplement_hr: number | null;
+  supplement_km: number | null;
+  vehicle_types?: {
+    brand: string | null;
+    code: string;
+    label: string;
+    pax_capacity: number | null;
+    has_luggage_variant: boolean;
+    pax_capacity_with_luggage: number | null;
+    luggage_capacity: number | null;
+  } | null;
+};
+
+export type TransferSeason = {
+  id: string;
+  package_id: string;
+  dmc_id?: string;
+  name: string | null;
+  exception_rules: string | null;
+  sort_order: number | null;
+  status: string;
+  vehicle_rate_type: VehicleRateType | null;
+  child_discount_type: DiscountType | null;
+  child_discount_value: number | null;
+  infant_discount_type: DiscountType | null;
+  infant_discount_value: number | null;
+  created_at?: string;
+  updated_at?: string;
+  transfer_season_date_ranges: SeasonDateRange[];
+  transfer_season_blackout_dates: SeasonBlackoutDate[];
+  transfer_season_sic_rates: SicRate[];
+  transfer_season_private_rates: PrivatePerPaxRate[];
+  transfer_season_vehicle_rates: VehicleRateRow[];
+};
+
+export type AgePolicyBand = {
+  id?: string;
+  package_id?: string;
+  band_name: string;
+  age_from: number;
+  age_to: number;
+  band_order?: number;
+};
+
+export type PackageTax = {
+  id?: string;
+  name: string;
+  rate: number;
+  rate_type: 'percentage' | 'fixed';
+  is_inclusive: boolean;
+};
