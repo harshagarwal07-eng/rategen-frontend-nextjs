@@ -23,13 +23,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { AlertModal } from "@/components/ui/alert-modal";
@@ -42,6 +35,7 @@ import {
   deleteTransferPackage,
   replacePackageStops,
   replaceOperationalHours,
+  listTransferPackages,
 } from "@/data-access/transfers-api";
 import {
   TransferPackageDetail,
@@ -88,20 +82,11 @@ const PackageFormSchema = z.object({
   inclusions: z.string().nullable().optional(),
   exclusions: z.string().nullable().optional(),
   is_preferred: z.boolean().optional(),
-  status: z.string(),
 });
 
 type PackageFormValues = z.infer<typeof PackageFormSchema>;
 
 // ── Helpers ────────────────────────────────────────────────────
-
-const STATUS_BADGE: Record<string, string> = {
-  active: "bg-green-100 text-green-800",
-  inactive: "bg-red-100 text-red-800",
-  draft: "bg-muted text-muted-foreground",
-  published: "bg-blue-100 text-blue-800",
-  archived: "bg-gray-100 text-gray-600",
-};
 
 function formatDuration(days: number, hours: number, minutes: number): string {
   const parts = [];
@@ -233,7 +218,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
         inclusions: pkg.inclusions ?? null,
         exclusions: pkg.exclusions ?? null,
         is_preferred: pkg.is_preferred ?? false,
-        status: pkg.status || "draft",
       },
     });
 
@@ -257,7 +241,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
     const isPending = pkg.id.startsWith("pending");
     const hasDuration =
       pkg.duration_days > 0 || pkg.duration_hours > 0 || pkg.duration_minutes > 0;
-    const statusClass = STATUS_BADGE[pkg.status] ?? STATUS_BADGE.draft;
 
     useImperativeHandle(ref, () => ({
       save: async (): Promise<SaveResult> => {
@@ -284,7 +267,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
             inclusions: values.inclusions?.trim() || null,
             exclusions: values.exclusions?.trim() || null,
             is_preferred: values.is_preferred ?? false,
-            status: values.status,
+            status: 'active',
             direction_id: null,
           };
 
@@ -419,15 +402,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
               )}
             </button>
 
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide",
-                statusClass
-              )}
-            >
-              {pkg.status}
-            </span>
-
             {pkg.is_preferred && (
               <span className="shrink-0 rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] uppercase tracking-wide">
                 Preferred
@@ -462,8 +436,8 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
             <div className="px-4 pb-4 pt-3 border-t flex flex-col gap-4">
               <Form {...form}>
                 <form className="flex flex-col gap-4">
-                  {/* Row 1 — Name | Status | Preferred */}
-                  <div className="grid grid-cols-[1fr_180px_140px] gap-3 items-end">
+                  {/* Row 1 — Name | Preferred */}
+                  <div className="grid grid-cols-[1fr_140px] gap-3 items-end">
                     <FormField
                       control={form.control}
                       name="name"
@@ -473,31 +447,6 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                           <FormControl>
                             <Input {...field} />
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="status"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Status</FormLabel>
-                          <Select
-                            value={field.value}
-                            onValueChange={field.onChange}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="draft">Draft</SelectItem>
-                              <SelectItem value="active">Active</SelectItem>
-                              <SelectItem value="inactive">Inactive</SelectItem>
-                            </SelectContent>
-                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -866,16 +815,13 @@ export default function Tab2Packages({
 
     const loadPackages = async () => {
       try {
-        const res = await fetch(`/api/transfers/${transferId}/packages`);
-        if (res.ok) {
-          const data = await res.json();
+        const result = await listTransferPackages(transferId);
+        if (result.data) {
           setPackages(
-            (Array.isArray(data) ? data : []).map(
-              (p: TransferPackageDetail) => ({
-                ...p,
-                _localId: p.id,
-              })
-            )
+            (result.data as TransferPackageDetail[]).map((p) => ({
+              ...p,
+              _localId: p.id,
+            }))
           );
         }
       } catch (e) {
