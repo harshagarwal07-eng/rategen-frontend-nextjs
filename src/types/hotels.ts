@@ -1,6 +1,40 @@
 import { IHotelRoom } from "@/components/forms/schemas/hotels-datastore-schema";
 import type { MealType } from "@/constants/meal-types";
 
+// DMC Hotels (NestJS /api/hotels backend)
+export interface DmcHotel {
+  id: string;
+  name: string;
+  hotel_code?: string | null;
+  currency: string;
+  property_type?: string | null;
+  country_id?: string | null;
+  country?: string | null;
+  city_id?: string | null;
+  city?: string | null;
+  country_name?: string | null;
+  city_name?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  star_rating?: number | null;
+  is_preferred: boolean;
+  email?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  address?: string | null;
+  description?: string | null;
+  status: "active" | "inactive";
+  created_at: string;
+  dmc_id: string;
+  master_hotel_id?: string | null;
+  contract_count: number;
+}
+
+export interface DmcHotelListResponse {
+  data: DmcHotel[];
+  total: number;
+}
+
 export type AgePolicy = {
   adult: {
     rooms?: { from: number; to: number };
