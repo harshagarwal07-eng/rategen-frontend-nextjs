@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import isEqual from "lodash/isEqual";
 import { ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,12 +83,14 @@ function localId(): string {
 }
 
 function departureToDraft(d: FDDeparture): DraftDeparture {
+  const state = departureToFormState(d);
   return {
     _localId: d.id,
     _isNew: false,
     _dirty: false,
+    _orig: state,
     id: d.id,
-    state: departureToFormState(d),
+    state,
   };
 }
 
@@ -163,11 +166,14 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
 
   const updateDraft = (lid: string, patch: Partial<DepartureFormState>) => {
     setDrafts((prev) =>
-      prev.map((d) =>
-        d._localId === lid
-          ? { ...d, _dirty: true, state: { ...d.state, ...patch } }
-          : d,
-      ),
+      prev.map((d) => {
+        if (d._localId !== lid) return d;
+        const nextState = { ...d.state, ...patch };
+        // New drafts: always dirty until first save (no original to compare).
+        // Existing drafts: dirty iff state differs from _orig.
+        const dirty = d._isNew ? true : !!d._orig && !isEqual(nextState, d._orig);
+        return { ...d, _dirty: dirty, state: nextState };
+      }),
     );
   };
 
@@ -241,10 +247,19 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
         }
       }
       newDraftIdsRef.current.delete(oldLocalId);
+      const savedState = departureToFormState(result.saved);
       setDrafts((prev) =>
         prev.map((d) =>
           d._localId === oldLocalId
-            ? { ...d, _dirty: false, _isNew: false, id: savedId, _localId: savedId }
+            ? {
+                ...d,
+                _dirty: false,
+                _isNew: false,
+                _orig: savedState,
+                state: savedState,
+                id: savedId,
+                _localId: savedId,
+              }
             : d,
         ),
       );

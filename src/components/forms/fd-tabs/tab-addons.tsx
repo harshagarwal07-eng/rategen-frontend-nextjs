@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import isEqual from "lodash/isEqual";
 import {
   ChevronDown,
   ChevronRight,
@@ -219,7 +220,68 @@ type DraftAddon = Partial<FDAddon> & {
   _localId: string;
   _isNew: boolean;
   _dirty?: boolean;
+  // Day cards live here (not in card-local state) so revert-comparisons in the
+  // parent see them. `_orig` is the comparable snapshot at hydration / last
+  // successful save; `_dirty` is recomputed by deep-equal against `_orig`.
+  _days?: AddonDayState[];
+  _orig?: AddonComparable;
 };
+
+interface AddonComparable {
+  name: string;
+  description: string;
+  addon_type: FDAddonType;
+  is_mandatory: boolean;
+  duration_days: number | null;
+  price_adult: number | null;
+  price_child: number | null;
+  price_infant: number | null;
+  price_unit: string | null;
+  max_capacity: number | null;
+  inclusions: string[];
+  exclusions: string[];
+  transfer_type: string;
+  transfer_mode: string;
+  tour_includes_transfer: boolean;
+  tour_transfer_type: string;
+  use_custom_age_policy: boolean;
+  custom_infant_age_from: number | null;
+  custom_infant_age_to: number | null;
+  custom_child_age_from: number | null;
+  custom_child_age_to: number | null;
+  custom_adult_age_from: number | null;
+  custom_adult_age_to: number | null;
+  days: AddonDayState[];
+}
+
+function addonComparable(d: DraftAddon): AddonComparable {
+  return {
+    name: d.name ?? "",
+    description: d.description ?? "",
+    addon_type: d.addon_type as FDAddonType,
+    is_mandatory: !!d.is_mandatory,
+    duration_days: d.duration_days ?? null,
+    price_adult: d.price_adult ?? null,
+    price_child: d.price_child ?? null,
+    price_infant: d.price_infant ?? null,
+    price_unit: d.price_unit ?? null,
+    max_capacity: d.max_capacity ?? null,
+    inclusions: d.inclusions ?? [],
+    exclusions: d.exclusions ?? [],
+    transfer_type: d.transfer_type ?? "",
+    transfer_mode: d.transfer_mode ?? "",
+    tour_includes_transfer: !!d.tour_includes_transfer,
+    tour_transfer_type: d.tour_transfer_type ?? "",
+    use_custom_age_policy: !!d.use_custom_age_policy,
+    custom_infant_age_from: d.custom_infant_age_from ?? null,
+    custom_infant_age_to: d.custom_infant_age_to ?? null,
+    custom_child_age_from: d.custom_child_age_from ?? null,
+    custom_child_age_to: d.custom_child_age_to ?? null,
+    custom_adult_age_from: d.custom_adult_age_from ?? null,
+    custom_adult_age_to: d.custom_adult_age_to ?? null,
+    days: d._days ?? [],
+  };
+}
 
 export type AddonCardHandle = {
   save: () => Promise<SaveResult>;
@@ -276,12 +338,34 @@ function mealsSummary(meals: string[]): string {
   return parts.join(", ");
 }
 
+function mapDaysFromServer(
+  nested: FDAddon["fd_addon_itinerary_days"],
+  duration: number,
+): AddonDayState[] {
+  const mapped: AddonDayState[] = (nested ?? []).map((d) => ({
+    day_number: d.day_number,
+    title: d.title ?? "",
+    description: d.description ?? "",
+    includes: d.includes ?? "",
+    meals_included: Array.isArray(d.meals_included) ? d.meals_included : [],
+    overnight_city_id: d.overnight_city_id ?? null,
+    accommodation_note: d.accommodation_note ?? "",
+    image_url: d.image_url ?? "",
+  }));
+  return reconcileAddonDays(mapped, duration);
+}
+
 function addonToDraft(a: FDAddon): DraftAddon {
   // Coerce null price_unit to the first valid option for the type — "None" was
   // removed as a valid choice so legacy rows hydrate to a sensible default.
   const needsCoerce = a.addon_type !== "multi_day_tour" && a.price_unit == null;
   const price_unit = needsCoerce ? defaultPriceUnitForType(a.addon_type) : a.price_unit;
-  return { ...a, price_unit, _localId: a.id, _isNew: false };
+  const days = a.addon_type === "multi_day_tour"
+    ? mapDaysFromServer(a.fd_addon_itinerary_days, a.duration_days ?? 0)
+    : [];
+  const base: DraftAddon = { ...a, price_unit, _localId: a.id, _isNew: false, _days: days };
+  base._orig = addonComparable(base);
+  return base;
 }
 
 function emptyDraft(type: FDAddonType): DraftAddon {
@@ -305,6 +389,8 @@ function emptyDraft(type: FDAddonType): DraftAddon {
     tour_includes_transfer: false,
     tour_transfer_type: "",
     fd_addon_itinerary_days: [],
+    _days: type === "multi_day_tour" ? reconcileAddonDays([], 1) : [],
+    // _orig stays undefined for new drafts; _isNew alone keeps them dirty.
   };
 }
 
@@ -391,7 +477,16 @@ export const FDAddonsTab = forwardRef<FDTabHandle, Props>(function FDAddonsTab({
 
   const updateDraft = (localId: string, patch: Partial<DraftAddon>) => {
     setDrafts((prev) =>
-      prev.map((d) => (d._localId === localId ? { ...d, ...patch, _dirty: true } : d)),
+      prev.map((d) => {
+        if (d._localId !== localId) return d;
+        const next = { ...d, ...patch };
+        // New drafts: stay dirty until first save (no original to compare).
+        // Existing drafts: dirty iff the comparable form differs from _orig.
+        next._dirty = d._isNew
+          ? true
+          : !!d._orig && !isEqual(addonComparable(next), d._orig);
+        return next;
+      }),
     );
   };
 
@@ -428,11 +523,13 @@ export const FDAddonsTab = forwardRef<FDTabHandle, Props>(function FDAddonsTab({
       }
     }
     setDrafts((prev) =>
-      prev.map((d) =>
-        d._localId === localId
-          ? { ...addonToDraft(saved), _localId: saved.id }
-          : d,
-      ),
+      prev.map((d) => {
+        if (d._localId !== localId) return d;
+        const fresh = addonToDraft(saved);
+        // addonToDraft already populates `_orig`; ensure _localId tracks the
+        // server id and clear _dirty.
+        return { ...fresh, _localId: saved.id, _dirty: false };
+      }),
     );
   };
 
@@ -647,27 +744,18 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
   const [customMeals, setCustomMeals] = useState<string[]>([]);
   const [newCustomMeal, setNewCustomMeal] = useState("");
   const [manageMealsOpen, setManageMealsOpen] = useState(false);
-  const [addonDays, setAddonDays] = useState<AddonDayState[]>(() => {
-    const nested = draft.fd_addon_itinerary_days ?? [];
-    const mapped: AddonDayState[] = nested.map((d) => ({
-      day_number: d.day_number,
-      title: d.title ?? "",
-      description: d.description ?? "",
-      includes: d.includes ?? "",
-      meals_included: Array.isArray(d.meals_included) ? d.meals_included : [],
-      overnight_city_id: d.overnight_city_id ?? null,
-      accommodation_note: d.accommodation_note ?? "",
-      image_url: d.image_url ?? "",
-    }));
-    return reconcileAddonDays(mapped, draft.duration_days ?? 0);
-  });
+
+  // Day cards now live on `draft._days` (parent state) so revert-comparisons
+  // see them. Reads are direct; writes go through onChange.
+  const addonDays = draft._days ?? [];
 
   const type = draft.addon_type as FDAddonType;
 
   // Seed custom meals from existing nested days on first mount.
   useEffect(() => {
     const customs = new Set<string>();
-    for (const d of addonDays) {
+    const days = draft._days ?? [];
+    for (const d of days) {
       for (const m of d.meals_included) {
         if (!PREDEFINED_MEALS.includes(m as (typeof PREDEFINED_MEALS)[number])) customs.add(m);
       }
@@ -681,10 +769,11 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
   useEffect(() => {
     if (type !== "multi_day_tour") return;
     const target = draft.duration_days ?? 0;
-    if (addonDays.length !== target) {
-      setAddonDays((prev) => reconcileAddonDays(prev, target));
+    const current = draft._days ?? [];
+    if (current.length !== target) {
+      onChange({ _days: reconcileAddonDays(current, target) });
     }
-  }, [draft.duration_days, type, addonDays.length]);
+  }, [draft.duration_days, type, draft._days, onChange]);
 
   const allMealOptions = useMemo(
     () => [...PREDEFINED_MEALS, ...customMeals],
@@ -707,19 +796,20 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
 
   const handleRemoveCustomMeal = (name: string) => {
     setCustomMeals((prev) => prev.filter((m) => m !== name));
-    setAddonDays((prev) =>
-      prev.map((d) => ({
+    const current = draft._days ?? [];
+    onChange({
+      _days: current.map((d) => ({
         ...d,
         meals_included: d.meals_included.filter((m) => m !== name),
       })),
-    );
+    });
   };
 
-  const flagDirty = useCallback(() => onChange({}), [onChange]);
-
   const updateDay = (idx: number, patch: Partial<AddonDayState>) => {
-    setAddonDays((prev) => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
-    flagDirty();
+    const current = draft._days ?? [];
+    onChange({
+      _days: current.map((d, i) => (i === idx ? { ...d, ...patch } : d)),
+    });
   };
 
   const toggleMeal = (idx: number, m: string) => {
@@ -804,8 +894,6 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
   // Stash latest values so the imperative save handle reads current state.
   const draftRef = useRef(draft);
   draftRef.current = draft;
-  const addonDaysRef = useRef(addonDays);
-  addonDaysRef.current = addonDays;
   const packageBandsRef = useRef(packageBands);
   packageBandsRef.current = packageBands;
 
@@ -813,7 +901,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
     save: async (): Promise<SaveResult> => {
       const d = draftRef.current;
       const t = d.addon_type as FDAddonType;
-      const days = addonDaysRef.current;
+      const days = d._days ?? [];
       const bands = packageBandsRef.current;
       const name = (d.name ?? "").trim() || "(unnamed)";
 
@@ -1282,8 +1370,9 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                     onToggleMeal={(m) => toggleMeal(idx, m)}
                     onClear={() => updateDay(idx, emptyDay(day.day_number))}
                     onCopy={(targets) => {
-                      setAddonDays((prev) =>
-                        prev.map((d) =>
+                      const current = draft._days ?? [];
+                      onChange({
+                        _days: current.map((d) =>
                           targets.includes(d.day_number)
                             ? {
                                 ...d,
@@ -1296,7 +1385,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                               }
                             : d,
                         ),
-                      );
+                      });
                       toast.success(
                         `Copied to ${targets.length} day${targets.length === 1 ? "" : "s"}`,
                       );

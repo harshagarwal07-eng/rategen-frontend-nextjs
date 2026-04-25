@@ -25,6 +25,9 @@ export interface DraftDeparture {
   _localId: string;
   _isNew: boolean;
   _dirty: boolean;
+  // Snapshot of `state` at hydration / last successful save. Used by the
+  // parent's value-comparison dirty calc so type-then-revert clears `_dirty`.
+  _orig?: DepartureFormState;
   id?: string;
   state: DepartureFormState;
 }

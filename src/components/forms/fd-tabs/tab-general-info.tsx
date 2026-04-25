@@ -1,10 +1,11 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import isEqual from "lodash/isEqual";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -135,9 +136,17 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
   const countryIdsKey = existingCountryIds.join(",");
   const cityIdsKey = existingCityIds.join(",");
 
+  // Baseline values for value-comparison dirty tracking. Updated on every
+  // hydration and after every successful save; isDirty is then derived by
+  // deep-comparing live form values against this baseline. Solves the RHF
+  // quirk where `formState.isDirty` doesn't auto-revert when a user types and
+  // then erases (the field stays in `dirtyFields` even when value matches
+  // default).
+  const baselineRef = useRef<IFDGeneralInfo | null>(null);
+
   useEffect(() => {
     if (!initialData) return;
-    form.reset({
+    const next: IFDGeneralInfo = {
       id: initialData.id,
       name: (initialData.name as string) ?? "",
       tour_code: (initialData.tour_code as string | null) ?? "",
@@ -164,7 +173,9 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
               }))
               .sort((a, b) => a.band_order - b.band_order)
           : DEFAULT_AGE_BANDS,
-    });
+    };
+    form.reset(next);
+    baselineRef.current = next;
     // countryIdsKey/cityIdsKey are scalar proxies for existingCountryIds/existingCityIds — using
     // them as deps means the effect fires when IDs actually change, not on every array reference
     // rotation caused by inline `= []` defaults.
@@ -308,6 +319,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
 
       onSaved(mode === "create" ? currentId : undefined);
       form.reset(values, { keepValues: true });
+      baselineRef.current = values;
       if (mode === "create") onAdvance();
       return true;
     } catch (e) {
@@ -320,8 +332,13 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
 
   const onSubmit = (values: IFDGeneralInfo) => { void submitImpl(values); };
 
-  // Dirty propagation
-  const isDirty = form.formState.isDirty;
+  // Dirty propagation — compares live values against the hydration/save
+  // baseline so a typed-then-reverted field correctly clears dirty.
+  const watched = useWatch({ control: form.control });
+  const isDirty = useMemo(
+    () => baselineRef.current !== null && !isEqual(watched, baselineRef.current),
+    [watched],
+  );
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
   const lastReportedDirty = useRef<boolean | undefined>(undefined);

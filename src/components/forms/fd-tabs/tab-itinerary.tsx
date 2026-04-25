@@ -1,10 +1,11 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useForm, useFieldArray, Controller, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import isEqual from "lodash/isEqual";
 import { ChevronDown, ChevronRight, Copy, Settings2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -177,6 +178,11 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
 
   const { fields, replace } = useFieldArray({ control: form.control, name: "days" });
 
+  // Baseline values for value-comparison dirty tracking. Set on hydration and
+  // after save; isDirty is then derived by deep-comparing live form values
+  // against this baseline (so typed-then-reverted fields clear dirty cleanly).
+  const baselineRef = useRef<IFDItinerary | null>(null);
+
   // Hydrate from server data on first load when totalDays is known.
   // Uses form.reset (not useFieldArray.replace) so the reconciled days become
   // the new clean baseline — otherwise every appended row counts as a user
@@ -196,7 +202,9 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
         }))
       : [];
     const reconciled = reconcileDays(existing, totalDays);
-    form.reset({ days: reconciled });
+    const next: IFDItinerary = { days: reconciled };
+    form.reset(next);
+    baselineRef.current = next;
     // Initial customMeals = unique non-predefined meals across all days
     const customs = new Set<string>();
     for (const d of reconciled) {
@@ -334,6 +342,7 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
       toast.success(mode === "create" ? "Itinerary saved" : "Itinerary updated");
       onSaved();
       form.reset(values, { keepValues: true });
+      baselineRef.current = values;
       if (mode === "create") onAdvance();
       return true;
     } catch (e) {
@@ -346,8 +355,12 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
 
   const onSubmit = (values: IFDItinerary) => { void submitImpl(values); };
 
-  // Dirty propagation
-  const isDirty = form.formState.isDirty;
+  // Dirty propagation — value-comparison so type-then-revert clears dirty.
+  const watched = useWatch({ control: form.control });
+  const isDirty = useMemo(
+    () => baselineRef.current !== null && !isEqual(watched, baselineRef.current),
+    [watched],
+  );
   const onDirtyChangeRef = useRef(onDirtyChange);
   onDirtyChangeRef.current = onDirtyChange;
   const lastReportedDirty = useRef<boolean | undefined>(undefined);
