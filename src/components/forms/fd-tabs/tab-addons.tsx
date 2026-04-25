@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  createRef,
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -178,6 +187,14 @@ type DraftAddon = Partial<FDAddon> & {
   _dirty?: boolean;
 };
 
+export type AddonCardHandle = {
+  save: () => Promise<SaveResult>;
+};
+
+type SaveResult =
+  | { success: true; name: string; saved: FDAddon }
+  | { success: false; name: string; error: string };
+
 // Frontend draft state for a multi-day-tour's nested days.
 interface AddonDayState {
   day_number: number;
@@ -259,6 +276,15 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
   const [hydrated, setHydrated] = useState(false);
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DraftAddon | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const cardRefsMap = useRef<Map<string, React.RefObject<AddonCardHandle | null>>>(new Map());
+
+  const getOrCreateRef = (localId: string): React.RefObject<AddonCardHandle | null> => {
+    if (!cardRefsMap.current.has(localId)) {
+      cardRefsMap.current.set(localId, createRef<AddonCardHandle>());
+    }
+    return cardRefsMap.current.get(localId)!;
+  };
 
   const { data: addons } = useQuery<FDAddon[]>({
     queryKey: ["fd-package", packageId, "addons"],
@@ -313,7 +339,9 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
   );
 
   const handleAddType = (type: FDAddonType) => {
-    setDrafts((prev) => [...prev, emptyDraft(type)]);
+    const draft = emptyDraft(type);
+    getOrCreateRef(draft._localId);
+    setDrafts((prev) => [...prev, draft]);
     setTypePickerOpen(false);
   };
 
@@ -325,6 +353,7 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
 
   const removeDraft = (localId: string) => {
     setDrafts((prev) => prev.filter((d) => d._localId !== localId));
+    cardRefsMap.current.delete(localId);
   };
 
   const handleDelete = async (draft: DraftAddon) => {
@@ -347,6 +376,13 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
   };
 
   const handleCardSaved = (localId: string, saved: FDAddon) => {
+    if (localId !== saved.id) {
+      const existingRef = cardRefsMap.current.get(localId);
+      if (existingRef) {
+        cardRefsMap.current.delete(localId);
+        cardRefsMap.current.set(saved.id, existingRef);
+      }
+    }
     setDrafts((prev) =>
       prev.map((d) =>
         d._localId === localId
@@ -354,16 +390,44 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
           : d,
       ),
     );
-    queryClient.invalidateQueries({ queryKey: ["fd-package", packageId, "addons"] });
-    onSaved();
   };
 
-  const handleNext = () => {
-    if (hasUnsavedNew) {
-      toast.error("Save all new add-ons before continuing");
+  const handleSaveAll = async (): Promise<{ success: number; failures: { name: string; error: string }[] }> => {
+    setIsSaving(true);
+    try {
+      const draftsSnapshot = [...drafts];
+      let success = 0;
+      const failures: { name: string; error: string }[] = [];
+      for (const draft of draftsSnapshot) {
+        const ref = cardRefsMap.current.get(draft._localId);
+        if (!ref?.current) continue;
+        const result = await ref.current.save();
+        if (result.success) {
+          success++;
+          handleCardSaved(draft._localId, result.saved);
+        } else {
+          failures.push({ name: result.name, error: result.error });
+        }
+      }
+      if (success > 0) {
+        queryClient.invalidateQueries({ queryKey: ["fd-package", packageId, "addons"] });
+        onSaved();
+      }
+      return { success, failures };
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleNext = async () => {
+    const { success, failures } = await handleSaveAll();
+    if (failures.length === 0) {
+      if (drafts.length > 0) toast.success("All add-ons saved");
+      if (mode === "create") onAdvance();
       return;
     }
-    onAdvance();
+    const failList = failures.map((f) => `${f.name} — ${f.error}`).join("; ");
+    toast.error(`${success} saved, ${failures.length} failed: ${failList}`);
   };
 
   if (!packageId) {
@@ -401,12 +465,13 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
         <div className="flex flex-col gap-3">
           {drafts.map((draft) => (
             <AddonCard
+              ref={getOrCreateRef(draft._localId)}
               key={draft._localId}
               draft={draft}
               packageId={packageId}
               packageBands={packageBands}
+              dirty={!!draft._isNew || !!draft._dirty}
               onChange={(patch) => updateDraft(draft._localId, patch)}
-              onSaved={(saved) => handleCardSaved(draft._localId, saved)}
               onDeleteRequest={() => setDeleteTarget(draft)}
               overnightCitySearchFn={overnightCitySearchFn}
               overnightCityFetchByValue={overnightCityFetchByValue}
@@ -417,16 +482,16 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
       )}
 
       <div className="flex items-center justify-end gap-2 border-t pt-4">
-        <Button type="button" onClick={handleNext} disabled={hasUnsavedNew}>
+        <Button type="button" onClick={handleNext} disabled={isSaving}>
           {mode === "create" ? (
             <>
-              Save &amp; Next
+              {isSaving ? "Saving..." : "Save & Next"}
               <ChevronRight className="h-4 w-4" />
             </>
           ) : (
             <>
               <Save className="h-4 w-4" />
-              Done
+              {isSaving ? "Saving..." : "Save"}
             </>
           )}
         </Button>
@@ -501,27 +566,26 @@ interface AddonCardProps {
   draft: DraftAddon;
   packageId: string;
   packageBands: FDAgePolicy[];
+  dirty: boolean;
   onChange: (patch: Partial<DraftAddon>) => void;
-  onSaved: (saved: FDAddon) => void;
   onDeleteRequest: () => void;
   overnightCitySearchFn: (search: string) => Promise<IOption[]>;
   overnightCityFetchByValue: (id: string) => Promise<IOption | null>;
   countriesSelected: boolean;
 }
 
-function AddonCard({
+const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard({
   draft,
   packageId,
   packageBands,
+  dirty,
   onChange,
-  onSaved,
   onDeleteRequest,
   overnightCitySearchFn,
   overnightCityFetchByValue,
   countriesSelected,
-}: AddonCardProps) {
+}, ref) {
   const [isOpen, setIsOpen] = useState(draft._isNew);
-  const [isSaving, setIsSaving] = useState(false);
   const [customMeals, setCustomMeals] = useState<string[]>([]);
   const [newCustomMeal, setNewCustomMeal] = useState("");
   const [manageMealsOpen, setManageMealsOpen] = useState(false);
@@ -593,8 +657,11 @@ function AddonCard({
     );
   };
 
+  const flagDirty = useCallback(() => onChange({}), [onChange]);
+
   const updateDay = (idx: number, patch: Partial<AddonDayState>) => {
     setAddonDays((prev) => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
+    flagDirty();
   };
 
   const toggleMeal = (idx: number, m: string) => {
@@ -659,72 +726,78 @@ function AddonCard({
     return base;
   };
 
-  const validateCustomAgeBands = (): string | null => {
-    if (!draft.use_custom_age_policy) return null;
-    const ranges = BAND_KEYS.map((k) => ({
-      key: k,
-      ...getEffectiveBandRange(draft, packageBands, k),
-    }));
-    for (const r of ranges) {
-      if (r.to <= r.from) return `${BAND_LABELS[r.key]}: age To must be greater than age From`;
-    }
-    for (let i = 1; i < ranges.length; i++) {
-      if (ranges[i].from < ranges[i - 1].to) {
-        return `Age bands overlap: ${BAND_LABELS[ranges[i].key]} starts before ${BAND_LABELS[ranges[i - 1].key]} ends`;
-      }
-    }
-    return null;
-  };
+  // Stash latest values so the imperative save handle reads current state.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const addonDaysRef = useRef(addonDays);
+  addonDaysRef.current = addonDays;
+  const packageBandsRef = useRef(packageBands);
+  packageBandsRef.current = packageBands;
 
-  const handleSave = async () => {
-    if (!draft.name || !draft.name.trim()) {
-      toast.error("Name is required");
-      return;
-    }
-    if (type === "multi_day_tour" && (!draft.duration_days || draft.duration_days < 1)) {
-      toast.error("Duration (days) is required");
-      return;
-    }
-    const ageErr = validateCustomAgeBands();
-    if (ageErr) {
-      toast.error(ageErr);
-      return;
-    }
-    setIsSaving(true);
-    try {
-      const payload = buildPayload();
-      let saved: FDAddon;
-      if (draft._isNew) {
-        saved = await fdCreateAddon(packageId, payload);
-      } else {
-        if (!draft.id) throw new Error("Missing addon id");
-        saved = await fdUpdateAddon(draft.id, payload);
-      }
+  useImperativeHandle(ref, () => ({
+    save: async (): Promise<SaveResult> => {
+      const d = draftRef.current;
+      const t = d.addon_type as FDAddonType;
+      const days = addonDaysRef.current;
+      const bands = packageBandsRef.current;
+      const name = (d.name ?? "").trim() || "(unnamed)";
 
-      if (type === "multi_day_tour") {
-        const daysPayload = addonDays.map((d) => ({
-          day_number: d.day_number,
-          title: d.title,
-          description: d.description || null,
-          includes: d.includes || null,
-          meals_included: d.meals_included,
-          overnight_city_id: d.overnight_city_id || null,
-          accommodation_note: d.accommodation_note || null,
-          image_url: d.image_url || null,
+      if (!d.name || !d.name.trim()) {
+        return { success: false, name, error: "Name is required" };
+      }
+      if (t === "multi_day_tour" && (!d.duration_days || d.duration_days < 1)) {
+        return { success: false, name, error: "Duration (days) is required" };
+      }
+      if (d.use_custom_age_policy) {
+        const ranges = BAND_KEYS.map((k) => ({
+          key: k,
+          ...getEffectiveBandRange(d, bands, k),
         }));
-        const savedDays = await fdReplaceAddonItinerary(saved.id, daysPayload);
-        saved = { ...saved, fd_addon_itinerary_days: savedDays };
+        for (const r of ranges) {
+          if (r.to <= r.from) {
+            return { success: false, name, error: `${BAND_LABELS[r.key]}: age To must be greater than age From` };
+          }
+        }
+        for (let i = 1; i < ranges.length; i++) {
+          if (ranges[i].from < ranges[i - 1].to) {
+            return {
+              success: false,
+              name,
+              error: `Age bands overlap: ${BAND_LABELS[ranges[i].key]} starts before ${BAND_LABELS[ranges[i - 1].key]} ends`,
+            };
+          }
+        }
       }
 
-      toast.success(draft._isNew ? "Add-on created" : "Add-on saved");
-      onSaved(saved);
-      setIsOpen(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+      try {
+        const payload = buildPayload();
+        let saved: FDAddon;
+        if (d._isNew) {
+          saved = await fdCreateAddon(packageId, payload);
+        } else {
+          if (!d.id) throw new Error("Missing addon id");
+          saved = await fdUpdateAddon(d.id, payload);
+        }
+        if (t === "multi_day_tour") {
+          const daysPayload = days.map((day) => ({
+            day_number: day.day_number,
+            title: day.title,
+            description: day.description || null,
+            includes: day.includes || null,
+            meals_included: day.meals_included,
+            overnight_city_id: day.overnight_city_id || null,
+            accommodation_note: day.accommodation_note || null,
+            image_url: day.image_url || null,
+          }));
+          const savedDays = await fdReplaceAddonItinerary(saved.id, daysPayload);
+          saved = { ...saved, fd_addon_itinerary_days: savedDays };
+        }
+        return { success: true, name, saved };
+      } catch (e) {
+        return { success: false, name, error: e instanceof Error ? e.message : "Save failed" };
+      }
+    },
+  }));
 
   const nameDisplay = (draft.name ?? "").trim() || "(unnamed)";
   const priceUnitList = type === "multi_day_tour" ? [] : PRICE_UNIT_OPTIONS[type];
@@ -745,6 +818,12 @@ function AddonCard({
           onClick={() => setIsOpen((v) => !v)}
           className="flex flex-1 items-center gap-2 min-w-0 text-left"
         >
+          {dirty && (
+            <span
+              className="w-2 h-2 rounded-full bg-yellow-500 shrink-0"
+              aria-label="Unsaved changes"
+            />
+          )}
           <span className={cn("text-sm font-semibold truncate", !(draft.name ?? "").trim() && "text-muted-foreground italic")}>
             {nameDisplay}
           </span>
@@ -1092,17 +1171,13 @@ function AddonCard({
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t pt-3">
-            <Button type="button" onClick={handleSave} disabled={isSaving}>
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : draft._isNew ? "Create Add-on" : "Save"}
-            </Button>
-          </div>
         </div>
       )}
     </div>
   );
-}
+});
+
+AddonCard.displayName = "AddonCard";
 
 interface AddonAgeBandsSectionProps {
   draft: DraftAddon;
