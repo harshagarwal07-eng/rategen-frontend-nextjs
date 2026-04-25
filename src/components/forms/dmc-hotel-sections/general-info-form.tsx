@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -53,6 +53,9 @@ interface DmcHotelGeneralInfoFormProps {
   initialHotel: DmcHotel | null;
   onSaved: (hotel: DmcHotel) => void;
   onDirtyChange: (dirty: boolean) => void;
+  formRef?: RefObject<HTMLFormElement>;
+  hideFooter?: boolean;
+  onSavingChange?: (saving: boolean) => void;
 }
 
 export default function GeneralInfoForm({
@@ -60,8 +63,15 @@ export default function GeneralInfoForm({
   initialHotel,
   onSaved,
   onDirtyChange,
+  formRef,
+  hideFooter = false,
+  onSavingChange,
 }: DmcHotelGeneralInfoFormProps) {
   const [isSaving, setIsSaving] = useState(false);
+
+  const onSavingChangeRef = useRef(onSavingChange);
+  onSavingChangeRef.current = onSavingChange;
+  useEffect(() => { onSavingChangeRef.current?.(isSaving); }, [isSaving]);
 
   const form = useForm<GeneralInfoFormValues>({
     resolver: zodResolver(GeneralInfoSchema),
@@ -167,7 +177,7 @@ export default function GeneralInfoForm({
   return (
     <div className="space-y-6">
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           {/* Basic Info */}
           <BorderedCard title="Basic">
             <div className="space-y-4">
@@ -475,15 +485,16 @@ export default function GeneralInfoForm({
             />
           </BorderedCard>
 
-          {/* Sticky Save Button */}
-          <div className="sticky bottom-0 border-t bg-background px-6 py-3 flex items-center justify-end gap-3">
-            {isDirty && !isSaving && (
-              <span className="text-xs text-yellow-600 font-medium">Unsaved changes</span>
-            )}
-            <Button type="submit" disabled={!isDirty || isSaving}>
-              {isSaving ? "Saving…" : "Save"}
-            </Button>
-          </div>
+          {!hideFooter && (
+            <div className="sticky bottom-0 border-t bg-background px-6 py-3 flex items-center justify-end gap-3">
+              {isDirty && !isSaving && (
+                <span className="text-xs text-yellow-600 font-medium">Unsaved changes</span>
+              )}
+              <Button type="submit" disabled={!isDirty || isSaving}>
+                {isSaving ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          )}
         </form>
       </Form>
     </div>
