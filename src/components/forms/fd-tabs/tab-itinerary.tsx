@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Copy, Save, Settings2, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy, Settings2, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +41,7 @@ import {
 } from "@/components/forms/schemas/fixed-departures-schema";
 import type { FDCity, FDPackageDetail } from "@/types/fixed-departures";
 import type { IOption } from "@/types/common";
+import type { FDTabHandle } from "@/components/forms/fd-fullscreen-form";
 import { cn } from "@/lib/utils";
 
 const PREDEFINED_MEALS = [
@@ -65,6 +66,7 @@ interface Props {
   packageId: string | null;
   onSaved: () => void;
   onAdvance: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 function dayLabel(dayNumber: number, totalDays: number): string {
@@ -120,7 +122,13 @@ function reconcileDays(
   return out;
 }
 
-export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
+export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItineraryTab({
+  mode,
+  packageId,
+  onSaved,
+  onAdvance,
+  onDirtyChange,
+}, ref) {
   const [isSaving, setIsSaving] = useState(false);
   const [openDays, setOpenDays] = useState<Set<number>>(new Set([1]));
   const [customMeals, setCustomMeals] = useState<string[]>([]);
@@ -302,10 +310,10 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
     toast.success(`Cleared Day ${dayNumber}`);
   };
 
-  const onSubmit = async (values: IFDItinerary) => {
+  const submitImpl = async (values: IFDItinerary): Promise<boolean> => {
     if (!packageId) {
       toast.error("Save Tab 1 first");
-      return;
+      return false;
     }
     setIsSaving(true);
     try {
@@ -322,13 +330,45 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
       await fdReplaceItinerary(packageId, payload);
       toast.success(mode === "create" ? "Itinerary saved" : "Itinerary updated");
       onSaved();
+      form.reset(values, { keepValues: true });
       if (mode === "create") onAdvance();
+      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
+      return false;
     } finally {
       setIsSaving(false);
     }
   };
+
+  const onSubmit = (values: IFDItinerary) => { void submitImpl(values); };
+
+  // Dirty propagation
+  const isDirty = form.formState.isDirty;
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  const lastReportedDirty = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (lastReportedDirty.current !== isDirty) {
+      lastReportedDirty.current = isDirty;
+      onDirtyChangeRef.current?.(isDirty);
+    }
+  }, [isDirty]);
+  useEffect(() => {
+    return () => { onDirtyChangeRef.current?.(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    save: async () => {
+      const valid = await form.trigger();
+      if (!valid) {
+        toast.error("Fix form errors before saving");
+        return false;
+      }
+      return submitImpl(form.getValues());
+    },
+  }));
 
   if (!packageId) {
     return (
@@ -418,7 +458,7 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
           const watchedOvernight = form.watch(`days.${idx}.overnight_city_id`) ?? null;
           const cityName = watchedOvernight ? cityNameById.get(watchedOvernight) ?? null : null;
           return (
-            <div key={field.id} className="rounded-md border bg-card">
+            <div key={field.id} className="rounded-lg border-2 border-muted bg-accent/30 overflow-hidden">
               <DayHeader
                 dayNumber={dayNumber}
                 dayLabelText={dayLabel(dayNumber, totalDays)}
@@ -450,21 +490,7 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
         })}
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t pt-4">
-        <Button type="submit" disabled={isSaving}>
-          {mode === "create" ? (
-            <>
-              {isSaving ? "Saving..." : "Save & Next"}
-              <ChevronRight className="h-4 w-4" />
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save"}
-            </>
-          )}
-        </Button>
-      </div>
+      <button type="submit" className="hidden" disabled={isSaving} aria-hidden="true" tabIndex={-1} />
 
       <AlertDialog open={clearTarget !== null} onOpenChange={(o) => !o && setClearTarget(null)}>
         <AlertDialogContent>
@@ -482,7 +508,9 @@ export function FDItineraryTab({ mode, packageId, onSaved, onAdvance }: Props) {
       </AlertDialog>
     </form>
   );
-}
+});
+
+FDItineraryTab.displayName = "FDItineraryTab";
 
 interface DayHeaderProps {
   dayNumber: number;
@@ -542,14 +570,14 @@ function DayHeader({
   };
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2">
+    <div className="flex items-center gap-2 px-3 py-2 hover:bg-accent/40 transition-colors">
       <button
         type="button"
         onClick={onToggle}
         className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted shrink-0"
         aria-label={isOpen ? "Collapse" : "Expand"}
       >
-        <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen ? "" : "-rotate-90")} />
+        <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isOpen ? "rotate-180" : "")} />
       </button>
       <button
         type="button"

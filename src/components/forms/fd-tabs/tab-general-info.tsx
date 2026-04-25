@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useForm, useFieldArray, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronRight, Save } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -42,6 +40,7 @@ import {
 import { FDGeneralInfoSchema, type IFDGeneralInfo } from "@/components/forms/schemas/fixed-departures-schema";
 import type { FDPackageDetail, FDCity } from "@/types/fixed-departures";
 import type { IOption } from "@/types/common";
+import type { FDTabHandle } from "@/components/forms/fd-fullscreen-form";
 
 const DEFAULT_AGE_BANDS = [
   { band_name: "Infant", age_from: 0, age_to: 1, band_order: 1 },
@@ -57,9 +56,17 @@ interface Props {
   initialData: FDPackageDetail | null;
   onSaved: (newId?: string) => void;
   onAdvance: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
-export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdvance }: Props) {
+export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGeneralInfoTab({
+  mode,
+  packageId,
+  initialData,
+  onSaved,
+  onAdvance,
+  onDirtyChange,
+}, ref) {
   const [isSaving, setIsSaving] = useState(false);
 
   const { data: countries = [] } = useQuery({
@@ -210,7 +217,7 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
     [existingPkgCities]
   );
 
-  const onSubmit = async (values: IFDGeneralInfo) => {
+  const submitImpl = async (values: IFDGeneralInfo): Promise<boolean> => {
     setIsSaving(true);
     try {
       const packagePayload = {
@@ -265,14 +272,45 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
       }
 
       onSaved(mode === "create" ? currentId : undefined);
-
+      form.reset(values, { keepValues: true });
       if (mode === "create") onAdvance();
+      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
+      return false;
     } finally {
       setIsSaving(false);
     }
   };
+
+  const onSubmit = (values: IFDGeneralInfo) => { void submitImpl(values); };
+
+  // Dirty propagation
+  const isDirty = form.formState.isDirty;
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  const lastReportedDirty = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (lastReportedDirty.current !== isDirty) {
+      lastReportedDirty.current = isDirty;
+      onDirtyChangeRef.current?.(isDirty);
+    }
+  }, [isDirty]);
+  useEffect(() => {
+    return () => { onDirtyChangeRef.current?.(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    save: async () => {
+      const valid = await form.trigger();
+      if (!valid) {
+        toast.error("Fix form errors before saving");
+        return false;
+      }
+      return submitImpl(form.getValues());
+    },
+  }));
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
@@ -513,21 +551,10 @@ export function FDGeneralInfoTab({ mode, packageId, initialData, onSaved, onAdva
         </AccordionItem>
       </Accordion>
 
-      <div className="flex items-center justify-end gap-2 border-t pt-4">
-        <Button type="submit" disabled={isSaving}>
-          {mode === "create" ? (
-            <>
-              {isSaving ? "Saving..." : "Save & Next"}
-              <ChevronRight className="h-4 w-4" />
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save"}
-            </>
-          )}
-        </Button>
-      </div>
+      {/* Hidden submit so Enter key still triggers save via parent */}
+      <button type="submit" className="hidden" disabled={isSaving} aria-hidden="true" tabIndex={-1} />
     </form>
   );
-}
+});
+
+FDGeneralInfoTab.displayName = "FDGeneralInfoTab";

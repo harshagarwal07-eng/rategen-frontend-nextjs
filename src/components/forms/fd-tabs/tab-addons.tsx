@@ -16,7 +16,6 @@ import {
   ChevronDown,
   ChevronRight,
   Plus,
-  Save,
   Settings2,
   Trash2,
   X,
@@ -69,6 +68,7 @@ import {
 } from "@/data-access/fixed-departures";
 import type { FDAddon, FDAddonType, FDAgePolicy, FDCity, FDPackageDetail } from "@/types/fixed-departures";
 import type { IOption } from "@/types/common";
+import type { FDTabHandle } from "@/components/forms/fd-fullscreen-form";
 import { cn } from "@/lib/utils";
 
 type BandKey = "infant" | "child" | "adult";
@@ -179,6 +179,7 @@ interface Props {
   packageId: string | null;
   onSaved: () => void;
   onAdvance: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 type DraftAddon = Partial<FDAddon> & {
@@ -270,7 +271,13 @@ function emptyDraft(type: FDAddonType): DraftAddon {
   };
 }
 
-export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
+export const FDAddonsTab = forwardRef<FDTabHandle, Props>(function FDAddonsTab({
+  mode,
+  packageId,
+  onSaved,
+  onAdvance,
+  onDirtyChange,
+}, ref) {
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<DraftAddon[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -419,16 +426,37 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
     }
   };
 
-  const handleNext = async () => {
+  const handleNext = async (): Promise<boolean> => {
     const { success, failures } = await handleSaveAll();
     if (failures.length === 0) {
       if (drafts.length > 0) toast.success("All add-ons saved");
       if (mode === "create") onAdvance();
-      return;
+      return true;
     }
     const failList = failures.map((f) => `${f.name} — ${f.error}`).join("; ");
     toast.error(`${success} saved, ${failures.length} failed: ${failList}`);
+    return false;
   };
+
+  // Dirty propagation
+  const dirty = drafts.some((d) => !!d._isNew || !!d._dirty);
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  const lastReportedDirty = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (lastReportedDirty.current !== dirty) {
+      lastReportedDirty.current = dirty;
+      onDirtyChangeRef.current?.(dirty);
+    }
+  }, [dirty]);
+  useEffect(() => {
+    return () => { onDirtyChangeRef.current?.(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    save: async () => handleNext(),
+  }));
 
   if (!packageId) {
     return (
@@ -481,22 +509,6 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
         </div>
       )}
 
-      <div className="flex items-center justify-end gap-2 border-t pt-4">
-        <Button type="button" onClick={handleNext} disabled={isSaving}>
-          {mode === "create" ? (
-            <>
-              {isSaving ? "Saving..." : "Save & Next"}
-              <ChevronRight className="h-4 w-4" />
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save"}
-            </>
-          )}
-        </Button>
-      </div>
-
       <TypePickerDialog
         open={typePickerOpen}
         onOpenChange={setTypePickerOpen}
@@ -528,7 +540,9 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
       </AlertDialog>
     </div>
   );
-}
+});
+
+FDAddonsTab.displayName = "FDAddonsTab";
 
 interface TypePickerDialogProps {
   open: boolean;
@@ -803,15 +817,15 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
   const priceUnitList = type === "multi_day_tour" ? [] : PRICE_UNIT_OPTIONS[type];
 
   return (
-    <div className="rounded-md border bg-card">
-      <div className="flex items-center gap-2 px-3 py-2">
+    <div className="rounded-lg border-2 border-muted bg-accent/30 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 hover:bg-accent/40 transition-colors">
         <button
           type="button"
           onClick={() => setIsOpen((v) => !v)}
           className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted shrink-0"
           aria-label={isOpen ? "Collapse" : "Expand"}
         >
-          <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen ? "" : "-rotate-90")} />
+          <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isOpen ? "rotate-180" : "")} />
         </button>
         <button
           type="button"
@@ -1367,15 +1381,15 @@ function AddonDayCard({
 
   const meals = day.meals_included;
   return (
-    <div className="rounded-md border bg-background">
-      <div className="flex items-center gap-2 px-3 py-2">
+    <div className="rounded-lg border bg-background">
+      <div className="flex items-center gap-2 px-3 py-2 hover:bg-accent/30 transition-colors">
         <button
           type="button"
           onClick={() => setIsOpen((v) => !v)}
           className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted shrink-0"
           aria-label={isOpen ? "Collapse" : "Expand"}
         >
-          <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen ? "" : "-rotate-90")} />
+          <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", isOpen ? "rotate-180" : "")} />
         </button>
         <button
           type="button"

@@ -1,30 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Building2,
   Car,
-  ChevronRight,
   MapPin,
   MoreHorizontal,
   Receipt,
-  Save,
   User,
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { BulletListInput } from "@/components/ui/bullet-list-input";
 import { fdGetPackage, fdUpdatePackage } from "@/data-access/fixed-departures";
 import type { FDPackageDetail } from "@/types/fixed-departures";
+import type { FDTabHandle } from "@/components/forms/fd-fullscreen-form";
 
 interface Props {
   mode: "create" | "edit";
   packageId: string | null;
   onSaved: () => void;
   onAdvance: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 type CategoryKey = "hotels" | "tours" | "transfers" | "meals" | "guide" | "taxes" | "other";
@@ -63,10 +62,17 @@ function asStringArray(v: unknown): string[] {
   return v.map((x) => String(x));
 }
 
-export function FDInclusionsExclusionsTab({ mode, packageId, onSaved, onAdvance }: Props) {
+export const FDInclusionsExclusionsTab = forwardRef<FDTabHandle, Props>(function FDInclusionsExclusionsTab({
+  mode,
+  packageId,
+  onSaved,
+  onAdvance,
+  onDirtyChange,
+}, ref) {
   const [state, setState] = useState<State>(emptyState);
-  const [isSaving, setIsSaving] = useState(false);
+  const [, setIsSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [hydratedSnapshot, setHydratedSnapshot] = useState<State | null>(null);
 
   const { data: pkg } = useQuery<FDPackageDetail>({
     queryKey: ["fd-package", packageId, "for-inc-exc"],
@@ -82,6 +88,7 @@ export function FDInclusionsExclusionsTab({ mode, packageId, onSaved, onAdvance 
       next[c.excCol] = asStringArray(pkg[c.excCol]);
     }
     setState(next);
+    setHydratedSnapshot(next);
     setHydrated(true);
   }, [pkg, hydrated]);
 
@@ -89,10 +96,37 @@ export function FDInclusionsExclusionsTab({ mode, packageId, onSaved, onAdvance 
     setState((prev) => ({ ...prev, [key]: value }));
   };
 
-  const onSubmit = async () => {
+  const isDirty = useMemo(() => {
+    if (!hydratedSnapshot) return false;
+    for (const c of CATEGORIES) {
+      const a = state[c.incCol];
+      const b = hydratedSnapshot[c.incCol];
+      if (a.length !== b.length || a.some((v, i) => v !== b[i])) return true;
+      const a2 = state[c.excCol];
+      const b2 = hydratedSnapshot[c.excCol];
+      if (a2.length !== b2.length || a2.some((v, i) => v !== b2[i])) return true;
+    }
+    return false;
+  }, [state, hydratedSnapshot]);
+
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onDirtyChangeRef.current = onDirtyChange;
+  const lastReportedDirty = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (lastReportedDirty.current !== isDirty) {
+      lastReportedDirty.current = isDirty;
+      onDirtyChangeRef.current?.(isDirty);
+    }
+  }, [isDirty]);
+  useEffect(() => {
+    return () => { onDirtyChangeRef.current?.(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const submitImpl = async (): Promise<boolean> => {
     if (!packageId) {
       toast.error("Save Tab 1 first");
-      return;
+      return false;
     }
     setIsSaving(true);
     try {
@@ -104,13 +138,26 @@ export function FDInclusionsExclusionsTab({ mode, packageId, onSaved, onAdvance 
       await fdUpdatePackage(packageId, payload);
       toast.success(mode === "create" ? "Inclusions & exclusions saved" : "Inclusions & exclusions updated");
       onSaved();
+      const cleaned: State = emptyState();
+      for (const c of CATEGORIES) {
+        cleaned[c.incCol] = payload[c.incCol];
+        cleaned[c.excCol] = payload[c.excCol];
+      }
+      setHydratedSnapshot(cleaned);
+      setState(cleaned);
       if (mode === "create") onAdvance();
+      return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
+      return false;
     } finally {
       setIsSaving(false);
     }
   };
+
+  useImperativeHandle(ref, () => ({
+    save: () => submitImpl(),
+  }));
 
   if (!packageId) {
     return (
@@ -129,7 +176,7 @@ export function FDInclusionsExclusionsTab({ mode, packageId, onSaved, onAdvance 
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        void onSubmit();
+        void submitImpl();
       }}
       className="flex flex-col gap-6"
     >
@@ -171,21 +218,8 @@ export function FDInclusionsExclusionsTab({ mode, packageId, onSaved, onAdvance 
         );
       })}
 
-      <div className="flex items-center justify-end gap-2 border-t pt-4">
-        <Button type="submit" disabled={isSaving}>
-          {mode === "create" ? (
-            <>
-              {isSaving ? "Saving..." : "Save & Next"}
-              <ChevronRight className="h-4 w-4" />
-            </>
-          ) : (
-            <>
-              <Save className="h-4 w-4" />
-              {isSaving ? "Saving..." : "Save"}
-            </>
-          )}
-        </Button>
-      </div>
     </form>
   );
-}
+});
+
+FDInclusionsExclusionsTab.displayName = "FDInclusionsExclusionsTab";
