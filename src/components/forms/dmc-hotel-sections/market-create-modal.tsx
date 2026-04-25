@@ -34,8 +34,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { createMarket } from "@/data-access/dmc-markets";
-import { fetchCountries } from "@/data-access/datastore";
+import { createMarket, listCountries } from "@/data-access/dmc-markets";
 import { toast } from "sonner";
 
 const MarketFormSchema = z.object({
@@ -55,7 +54,6 @@ interface MarketCreateModalProps {
 interface CountryOption {
   value: string;
   label: string;
-  code?: string;
 }
 
 function CountryMultiSelect({
@@ -70,8 +68,11 @@ function CountryMultiSelect({
   const [open, setOpen] = useState(false);
 
   const { data: countries = [] } = useQuery<CountryOption[]>({
-    queryKey: ["countries"],
-    queryFn: () => fetchCountries(),
+    queryKey: ["master-countries"],
+    queryFn: async () => {
+      const result = await listCountries();
+      return (result.data ?? []).map((c) => ({ value: c.id, label: c.name }));
+    },
     staleTime: 30 * 60 * 1000,
   });
 

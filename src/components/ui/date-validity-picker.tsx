@@ -1,3 +1,6 @@
+// Single date-range picker with FY/CY presets and year-month dropdown nav.
+// Returns {from, to} Date objects. Used by contract validity fields.
+// For multi-range season editors, use `date-range-picker.tsx` instead.
 "use client";
 
 import * as React from "react";

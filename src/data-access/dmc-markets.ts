@@ -34,3 +34,13 @@ export async function createMarket(payload: CreateMarketPayload): Promise<Result
   const raw = await http.post<Market>("/api/master/markets", payload);
   return unwrap<Market>(raw);
 }
+
+export interface Country {
+  id: string;
+  name: string;
+}
+
+export async function listCountries(): Promise<Result<Country[]>> {
+  const raw = await http.get<Country[]>("/api/master/countries");
+  return unwrap<Country[]>(raw);
+}

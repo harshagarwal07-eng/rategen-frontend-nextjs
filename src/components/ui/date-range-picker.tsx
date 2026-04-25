@@ -1,3 +1,8 @@
+// Multi-range date picker. Stores ranges as comma-separated strings.
+// Used by: hotel-rooms-form, tour-packages-form, transfer-packages-form,
+//          combo-season-fields, manual-{hotel,tour,transfer}-sheet, data-table-toolbar,
+//          agent-ledger-sheet, supplier-ledger-sheet.
+// For single date-range fields, use `date-validity-picker.tsx` instead.
 "use client";
 
 import * as React from "react";
