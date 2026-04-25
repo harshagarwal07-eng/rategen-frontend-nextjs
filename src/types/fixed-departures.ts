@@ -117,5 +117,12 @@ export interface FDAddon {
   transfer_mode: string | null;
   tour_includes_transfer: boolean | null;
   tour_transfer_type: string | null;
+  use_custom_age_policy: boolean | null;
+  custom_infant_age_from: number | null;
+  custom_infant_age_to: number | null;
+  custom_child_age_from: number | null;
+  custom_child_age_to: number | null;
+  custom_adult_age_from: number | null;
+  custom_adult_age_to: number | null;
   fd_addon_itinerary_days?: FDAddonItineraryDay[];
 }

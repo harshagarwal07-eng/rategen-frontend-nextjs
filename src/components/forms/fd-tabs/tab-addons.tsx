@@ -54,12 +54,59 @@ import {
   fdUpdateAddon,
   fdDeleteAddon,
   fdReplaceAddonItinerary,
+  fdGetPackage,
   fdGetPackageCountries,
   fdGetCitiesByCountry,
 } from "@/data-access/fixed-departures";
-import type { FDAddon, FDAddonType, FDCity } from "@/types/fixed-departures";
+import type { FDAddon, FDAddonType, FDAgePolicy, FDCity, FDPackageDetail } from "@/types/fixed-departures";
 import type { IOption } from "@/types/common";
 import { cn } from "@/lib/utils";
+
+type BandKey = "infant" | "child" | "adult";
+const BAND_KEYS: BandKey[] = ["infant", "child", "adult"];
+const BAND_LABELS: Record<BandKey, string> = { infant: "Infant", child: "Child", adult: "Adult" };
+const FALLBACK_BAND_RANGES: Record<BandKey, { from: number; to: number }> = {
+  infant: { from: 0, to: 1 },
+  child: { from: 2, to: 11 },
+  adult: { from: 12, to: 99 },
+};
+
+function getPackageBandRange(
+  bands: FDAgePolicy[] | undefined,
+  key: BandKey,
+): { from: number; to: number } {
+  const match = (bands ?? []).find((b) => b.band_name?.toLowerCase() === key);
+  if (match) return { from: match.age_from, to: match.age_to };
+  return FALLBACK_BAND_RANGES[key];
+}
+
+function getEffectiveBandRange(
+  draft: Partial<FDAddon>,
+  packageBands: FDAgePolicy[] | undefined,
+  key: BandKey,
+): { from: number; to: number } {
+  if (draft.use_custom_age_policy) {
+    return {
+      from: (draft[`custom_${key}_age_from` as keyof FDAddon] as number | null | undefined) ??
+        getPackageBandRange(packageBands, key).from,
+      to: (draft[`custom_${key}_age_to` as keyof FDAddon] as number | null | undefined) ??
+        getPackageBandRange(packageBands, key).to,
+    };
+  }
+  return getPackageBandRange(packageBands, key);
+}
+
+function bandsSummary(
+  draft: Partial<FDAddon>,
+  packageBands: FDAgePolicy[] | undefined,
+): string {
+  return BAND_KEYS
+    .map((k) => {
+      const { from, to } = getEffectiveBandRange(draft, packageBands, k);
+      return `${BAND_LABELS[k]} ${from}-${to}`;
+    })
+    .join(" · ");
+}
 
 const PREDEFINED_MEALS = [
   "Breakfast",
@@ -225,6 +272,13 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
     enabled: !!packageId,
   });
 
+  const { data: pkg } = useQuery<FDPackageDetail>({
+    queryKey: ["fd-package", packageId],
+    queryFn: () => fdGetPackage(packageId as string),
+    enabled: !!packageId,
+  });
+  const packageBands = (pkg?.fd_age_policies ?? []) as FDAgePolicy[];
+
   useEffect(() => {
     if (!addons || hydrated) return;
     setDrafts(addons.map(addonToDraft));
@@ -350,6 +404,7 @@ export function FDAddonsTab({ mode, packageId, onSaved, onAdvance }: Props) {
               key={draft._localId}
               draft={draft}
               packageId={packageId}
+              packageBands={packageBands}
               onChange={(patch) => updateDraft(draft._localId, patch)}
               onSaved={(saved) => handleCardSaved(draft._localId, saved)}
               onDeleteRequest={() => setDeleteTarget(draft)}
@@ -445,6 +500,7 @@ function TypePickerDialog({ open, onOpenChange, onPick }: TypePickerDialogProps)
 interface AddonCardProps {
   draft: DraftAddon;
   packageId: string;
+  packageBands: FDAgePolicy[];
   onChange: (patch: Partial<DraftAddon>) => void;
   onSaved: (saved: FDAddon) => void;
   onDeleteRequest: () => void;
@@ -456,6 +512,7 @@ interface AddonCardProps {
 function AddonCard({
   draft,
   packageId,
+  packageBands,
   onChange,
   onSaved,
   onDeleteRequest,
@@ -586,7 +643,37 @@ function AddonCard({
       base.transfer_mode = null;
     }
 
+    const useCustomAge = !!draft.use_custom_age_policy;
+    base.use_custom_age_policy = useCustomAge;
+    for (const k of BAND_KEYS) {
+      const fromKey = `custom_${k}_age_from` as const;
+      const toKey = `custom_${k}_age_to` as const;
+      base[fromKey] = useCustomAge
+        ? (draft[fromKey] as number | null | undefined) ?? getPackageBandRange(packageBands, k).from
+        : null;
+      base[toKey] = useCustomAge
+        ? (draft[toKey] as number | null | undefined) ?? getPackageBandRange(packageBands, k).to
+        : null;
+    }
+
     return base;
+  };
+
+  const validateCustomAgeBands = (): string | null => {
+    if (!draft.use_custom_age_policy) return null;
+    const ranges = BAND_KEYS.map((k) => ({
+      key: k,
+      ...getEffectiveBandRange(draft, packageBands, k),
+    }));
+    for (const r of ranges) {
+      if (r.to <= r.from) return `${BAND_LABELS[r.key]}: age To must be greater than age From`;
+    }
+    for (let i = 1; i < ranges.length; i++) {
+      if (ranges[i].from < ranges[i - 1].to) {
+        return `Age bands overlap: ${BAND_LABELS[ranges[i].key]} starts before ${BAND_LABELS[ranges[i - 1].key]} ends`;
+      }
+    }
+    return null;
   };
 
   const handleSave = async () => {
@@ -596,6 +683,11 @@ function AddonCard({
     }
     if (type === "multi_day_tour" && (!draft.duration_days || draft.duration_days < 1)) {
       toast.error("Duration (days) is required");
+      return;
+    }
+    const ageErr = validateCustomAgeBands();
+    if (ageErr) {
+      toast.error(ageErr);
       return;
     }
     setIsSaving(true);
@@ -776,6 +868,13 @@ function AddonCard({
               </>
             )}
           </div>
+
+          {/* Per-add-on age bands */}
+          <AddonAgeBandsSection
+            draft={draft}
+            packageBands={packageBands}
+            onChange={onChange}
+          />
 
           {/* Pricing */}
           <div className="rounded-md border bg-muted/20 p-3 flex flex-col gap-3">
@@ -989,6 +1088,138 @@ function AddonCard({
               <Save className="h-4 w-4" />
               {isSaving ? "Saving..." : draft._isNew ? "Create Add-on" : "Save"}
             </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface AddonAgeBandsSectionProps {
+  draft: DraftAddon;
+  packageBands: FDAgePolicy[];
+  onChange: (patch: Partial<DraftAddon>) => void;
+}
+
+function AddonAgeBandsSection({ draft, packageBands, onChange }: AddonAgeBandsSectionProps) {
+  const useCustom = !!draft.use_custom_age_policy;
+  const [editorOpen, setEditorOpen] = useState(useCustom);
+
+  useEffect(() => {
+    if (useCustom) setEditorOpen(true);
+  }, [useCustom]);
+
+  const handleEdge = (key: BandKey, edge: "from" | "to", val: string) => {
+    const num = val === "" ? null : Number(val);
+    if (!useCustom) {
+      // First edit: seed all six fields from package bands so the override is fully specified.
+      const patch: Partial<DraftAddon> = { use_custom_age_policy: true };
+      for (const k of BAND_KEYS) {
+        const pb = getPackageBandRange(packageBands, k);
+        const f = `custom_${k}_age_from` as const;
+        const t = `custom_${k}_age_to` as const;
+        patch[f] = k === key && edge === "from" ? num : pb.from;
+        patch[t] = k === key && edge === "to" ? num : pb.to;
+      }
+      onChange(patch);
+      return;
+    }
+    onChange({ [`custom_${key}_age_${edge}`]: num } as Partial<DraftAddon>);
+  };
+
+  const handleReset = () => {
+    onChange({
+      use_custom_age_policy: false,
+      custom_infant_age_from: null,
+      custom_infant_age_to: null,
+      custom_child_age_from: null,
+      custom_child_age_to: null,
+      custom_adult_age_from: null,
+      custom_adult_age_to: null,
+    });
+    setEditorOpen(false);
+  };
+
+  const summary = bandsSummary(draft, packageBands);
+
+  return (
+    <div className="rounded-md border bg-muted/20 p-3 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Age Bands
+          </span>
+          {useCustom && (
+            <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] uppercase tracking-wide">
+              Custom
+            </span>
+          )}
+        </div>
+        {!editorOpen && (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs"
+            onClick={() => setEditorOpen(true)}
+          >
+            Change Age
+          </Button>
+        )}
+      </div>
+
+      {!editorOpen && <div className="text-sm">{summary}</div>}
+
+      {editorOpen && (
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-[80px_1fr_1fr] gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span>Band</span>
+            <span>Age From</span>
+            <span>Age To</span>
+          </div>
+          {BAND_KEYS.map((k) => {
+            const range = getEffectiveBandRange(draft, packageBands, k);
+            return (
+              <div key={k} className="grid grid-cols-[80px_1fr_1fr] gap-2 items-center">
+                <div className="text-sm font-medium">{BAND_LABELS[k]}</div>
+                <Input
+                  type="number"
+                  min={0}
+                  className="h-8"
+                  value={range.from}
+                  onChange={(e) => handleEdge(k, "from", e.target.value)}
+                />
+                <Input
+                  type="number"
+                  min={0}
+                  className="h-8"
+                  value={range.to}
+                  onChange={(e) => handleEdge(k, "to", e.target.value)}
+                />
+              </div>
+            );
+          })}
+          <div className="flex items-center justify-between pt-1">
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto p-0 text-xs text-muted-foreground"
+              onClick={handleReset}
+            >
+              Reset to Package Bands
+            </Button>
+            {!useCustom && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setEditorOpen(false)}
+              >
+                Cancel
+              </Button>
+            )}
           </div>
         </div>
       )}
