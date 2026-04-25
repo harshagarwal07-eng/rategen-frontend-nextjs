@@ -110,6 +110,15 @@ export const http = {
     }
   },
 
+  patch: async <T>(url: string, data = {}): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.patch<ApiResponse<T>>(url, data);
+      return response.data;
+    } catch (error) {
+      return handleApiError(error);
+    }
+  },
+
   delete: async <T>(url: string): Promise<ApiResponse<T>> => {
     try {
       const response = await api.delete<ApiResponse<T>>(url);
