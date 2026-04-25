@@ -32,9 +32,9 @@ import { FDItineraryTab } from "./fd-tabs/tab-itinerary";
 import { FDInclusionsExclusionsTab } from "./fd-tabs/tab-inclusions-exclusions";
 import { FDAddonsTab } from "./fd-tabs/tab-addons";
 import { FDDepartureDatesTab } from "./fd-tabs/tab-departure-dates";
+import { FDFlightsVisaTab } from "./fd-tabs/tab-flights-visa";
 import { FDPoliciesTab } from "./fd-tabs/tab-policies";
 import { FDDocumentsRemarksTab } from "./fd-tabs/tab-documents-remarks";
-import { FDTabPlaceholder } from "./fd-tabs/tab-placeholder";
 
 export type FDTabHandle = {
   save: () => Promise<boolean>;
@@ -80,6 +80,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   const incExcRef = useRef<FDTabHandle>(null);
   const addonsRef = useRef<FDTabHandle>(null);
   const departuresRef = useRef<FDTabHandle>(null);
+  const flightsVisaRef = useRef<FDTabHandle>(null);
   const policiesRef = useRef<FDTabHandle>(null);
   const docsRemarksRef = useRef<FDTabHandle>(null);
   const prevDurationRef = useRef<number | null>(null);
@@ -219,6 +220,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
       case "inc-exc": return incExcRef;
       case "addons": return addonsRef;
       case "departures": return departuresRef;
+      case "flights-visa": return flightsVisaRef;
       case "policies": return policiesRef;
       case "docs-remarks": return docsRemarksRef;
       default: return null;
@@ -287,7 +289,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
     ? [packageName, tourCode, countriesLine, citiesLine].filter(Boolean).join(" · ")
     : fallbackTitle;
   const anyDirty = dirtyTabs.size > 0;
-  const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures", "policies", "docs-remarks"].includes(activeTab);
+  const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures", "flights-visa", "policies", "docs-remarks"].includes(activeTab);
 
   return (
     <>
@@ -484,7 +486,26 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                     onAdvance={handleAdvance}
                   />
                 </TabsContent>
-                <TabsContent value="flights-visa"><FDTabPlaceholder title="Flights & Visa" /></TabsContent>
+                <TabsContent value="flights-visa">
+                  <FDFlightsVisaTab
+                    key={tabResetKeys["flights-visa"] ?? 0}
+                    ref={flightsVisaRef}
+                    mode={mode}
+                    packageId={effectiveId}
+                    onDirtyChange={trackDirty("flights-visa")}
+                    onSaved={() => {
+                      if (effectiveId) {
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "flights"] });
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "visa"] });
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "taxes"] });
+                        queryClient.invalidateQueries({ queryKey: ["fd-package", effectiveId, "for-flights-visa"] });
+                      }
+                      markTabSaved("flights-visa");
+                      onSaved?.();
+                    }}
+                    onAdvance={handleAdvance}
+                  />
+                </TabsContent>
                 <TabsContent value="policies">
                   <FDPoliciesTab
                     key={tabResetKeys.policies ?? 0}
