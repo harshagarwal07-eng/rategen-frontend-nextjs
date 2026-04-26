@@ -30,7 +30,7 @@ import {
 import { DmcContract } from "@/types/dmc-contracts";
 import {
   AgePoliciesLocalState,
-  wrapBands,
+  wrapAgePolicies,
 } from "./sections/age-policies-section";
 import {
   RoomsLocalState,
@@ -118,10 +118,13 @@ export default function CopyFromContractDialog({
       const payload: CopyPayload = {};
 
       if (ageRes && ageRes.data) {
-        payload.age = {
-          rooms: stripIds(wrapBands(ageRes.data.rooms ?? [])),
-          meals: stripIds(wrapBands(ageRes.data.meals ?? [])),
-        };
+        // Drop server ids on each band's sub-blocks so everything inserts
+        // fresh on the target contract.
+        payload.age = wrapAgePolicies(ageRes.data).map((b) => ({
+          ...b,
+          rooms: b.rooms ? { ...b.rooms, id: null } : undefined,
+          meals: b.meals ? { ...b.meals, id: null } : undefined,
+        }));
       }
 
       let copiedRooms: RoomsLocalState | undefined;
@@ -335,6 +338,3 @@ function CheckRow({
   );
 }
 
-function stripIds<T extends { id?: string | null }>(items: T[]): T[] {
-  return items.map((i) => ({ ...i, id: null }));
-}

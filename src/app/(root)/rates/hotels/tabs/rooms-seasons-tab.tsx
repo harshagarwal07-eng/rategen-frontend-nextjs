@@ -38,9 +38,9 @@ import { DmcContract } from "@/types/dmc-contracts";
 import AgePoliciesSection, {
   AgePoliciesErrors,
   AgePoliciesLocalState,
-  stripBands,
-  validateScope,
-  wrapBands,
+  stripAgePolicies,
+  validateAgePolicies,
+  wrapAgePolicies,
 } from "./sections/age-policies-section";
 import SeasonsSection, {
   SeasonsErrors,
@@ -78,7 +78,7 @@ interface Props {
   onSavingChange?: (saving: boolean) => void;
 }
 
-const EMPTY_AGE_STATE: AgePoliciesLocalState = { rooms: [], meals: [] };
+const EMPTY_AGE_STATE: AgePoliciesLocalState = [];
 
 const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsSeasonsTab(
   { hotelId, onDirtyChange, onSavingChange },
@@ -186,7 +186,7 @@ function ContractEditor({
   // ─── Age Policies ───────────────────────────────────────────────────
   const [ageState, setAgeState] = useState<AgePoliciesLocalState>(EMPTY_AGE_STATE);
   const [ageSnapshot, setAgeSnapshot] = useState<AgePoliciesLocalState>(EMPTY_AGE_STATE);
-  const [, setAgeErrors] = useState<AgePoliciesErrors>({ rooms: {}, meals: {} });
+  const [, setAgeErrors] = useState<AgePoliciesErrors>({});
   const [ageLoaded, setAgeLoaded] = useState(false);
 
   useEffect(() => {
@@ -194,10 +194,7 @@ function ContractEditor({
     setAgeLoaded(false);
     getAgePolicies(selectedContractId).then((res) => {
       if (cancelled) return;
-      const initial: AgePoliciesLocalState = {
-        rooms: wrapBands(res.data?.rooms ?? []),
-        meals: wrapBands(res.data?.meals ?? []),
-      };
+      const initial = wrapAgePolicies(res.data ?? null);
       setAgeState(initial);
       setAgeSnapshot(initial);
       setAgeLoaded(true);
@@ -329,11 +326,11 @@ function ContractEditor({
     const blockers: string[] = [];
 
     if (ageDirty) {
-      const re = validateScope(ageState.rooms);
-      const me = validateScope(ageState.meals);
-      if (Object.keys(re).length || Object.keys(me).length) {
-        blockers.push("Age policies");
-      }
+      const ae = validateAgePolicies(ageState);
+      const hasErr = Object.values(ae).some(
+        (e) => e.duplicate || e.rooms?.age || e.rooms?.overlap || e.meals?.age || e.meals?.overlap
+      );
+      if (hasErr) blockers.push("Age policies");
     }
     if (seasonsDirty) {
       const se = validateSeasons(seasonsState);
@@ -362,18 +359,12 @@ function ContractEditor({
     try {
       // 1. Age policies
       if (ageDirty) {
-        const payload = {
-          rooms: stripBands(ageState.rooms),
-          meals: stripBands(ageState.meals),
-        };
+        const payload = stripAgePolicies(ageState);
         const res = await putAgePolicies(selectedContractId, payload);
         if (res.error || !res.data) {
           throw new SectionError("Age policies", res.error || "Save failed");
         }
-        const next: AgePoliciesLocalState = {
-          rooms: wrapBands(res.data.rooms ?? []),
-          meals: wrapBands(res.data.meals ?? []),
-        };
+        const next = wrapAgePolicies(res.data);
         setAgeState(next);
         setAgeSnapshot(next);
       }
@@ -505,7 +496,7 @@ function ContractEditor({
       <div className="space-y-3">
         <FDCard
           title="AGE POLICY"
-          count={`${ageState.rooms.length + ageState.meals.length} bands`}
+          count={`${ageState.filter((b) => b.rooms || b.meals).length} bands`}
           defaultOpen
         >
           <AgePoliciesSection
@@ -608,10 +599,7 @@ function buildRoomIdRemap(
 }
 
 function ageStatesEqual(a: AgePoliciesLocalState, b: AgePoliciesLocalState): boolean {
-  return (
-    JSON.stringify(stripBands(a.rooms)) === JSON.stringify(stripBands(b.rooms)) &&
-    JSON.stringify(stripBands(a.meals)) === JSON.stringify(stripBands(b.meals))
-  );
+  return JSON.stringify(stripAgePolicies(a)) === JSON.stringify(stripAgePolicies(b));
 }
 
 function seasonsStatesEqual(a: SeasonsLocalState, b: SeasonsLocalState): boolean {
