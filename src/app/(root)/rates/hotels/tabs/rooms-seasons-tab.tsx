@@ -214,6 +214,9 @@ function ContractEditor({
   const [seasonsSnapshot, setSeasonsSnapshot] = useState<SeasonsLocalState>([]);
   const [, setSeasonsErrors] = useState<SeasonsErrors>({});
   const [seasonsLoaded, setSeasonsLoaded] = useState(false);
+  // One-shot seed flag: ContractEditor remounts on contract change (key=
+  // contractId), so this resets naturally per contract.
+  const seasonsSeededRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -229,6 +232,31 @@ function ContractEditor({
       cancelled = true;
     };
   }, [selectedContractId]);
+
+  // Default "All Season" seed: when the GET returns zero seasons AND the
+  // contract has a stay period set, seed one local season covering the full
+  // stay. Snapshot stays empty so the section is dirty — user must Save All
+  // Changes to persist. If the user deletes it, we DON'T re-seed (the ref
+  // gate prevents that).
+  useEffect(() => {
+    if (seasonsSeededRef.current) return;
+    if (!seasonsLoaded) return;
+    if (!selected) return;
+    if (seasonsSnapshot.length > 0) return;
+    const sf = selected.stay_valid_from;
+    const st = selected.stay_valid_till;
+    if (!sf || !st) return;
+
+    seasonsSeededRef.current = true;
+    setSeasonsState([
+      {
+        _localId: `season-${crypto.randomUUID()}`,
+        id: null,
+        name: "All Season",
+        date_ranges: [{ date_from: sf, date_to: st }],
+      },
+    ]);
+  }, [seasonsLoaded, selected, seasonsSnapshot]);
 
   const seasonsDirty = useMemo(() => {
     if (!seasonsLoaded) return false;
@@ -335,7 +363,7 @@ function ContractEditor({
     if (seasonsDirty) {
       const se = validateSeasons(seasonsState);
       const hasErr = Object.values(se).some(
-        (e) => e.name || e.overlapAcross || Object.keys(e.ranges).length > 0
+        (e) => e.name || e.rangeOrder || e.overlapWithin || e.overlapAcross
       );
       if (hasErr) blockers.push("Seasons");
     }
