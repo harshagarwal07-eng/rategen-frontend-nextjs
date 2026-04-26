@@ -94,27 +94,45 @@ export function Autocomplete({
     };
   }, [mode, debouncedSearch, onSearch, maxResults, disabled, open]);
 
-  /* ---------------- HYDRATE SELECTED VALUE (EDIT MODE) ---------------- */
+  /* ---------------- HYDRATE SELECTED VALUE (CLIENT MODE) ---------------- */
   React.useEffect(() => {
+    if (mode !== "client") return;
     if (!value) {
       setSelectedOption(null);
       return;
     }
+    const opt = options.find((o) => o.value === value);
+    if (opt) {
+      setSelectedOption((prev) =>
+        prev?.value === opt.value && prev?.label === opt.label ? prev : opt,
+      );
+    }
+  }, [value, mode, options]);
 
-    // client mode hydrate
-    if (mode === "client") {
-      const opt = options.find((o) => o.value === value);
-      if (opt) setSelectedOption(opt);
+  /* ---------------- HYDRATE SELECTED VALUE (SERVER MODE) ---------------- */
+  // `options` is intentionally excluded from deps: server-mode hydration uses
+  // fetchByValue, never the (often unset, default-`[]`) options prop. Including
+  // it would re-fire on every parent render when callers omit the prop, and
+  // since fetchByValue returns a fresh `{value,label}` object each call,
+  // setSelectedOption never bails out — yielding an infinite render loop.
+  React.useEffect(() => {
+    if (mode !== "server") return;
+    if (!value) {
+      setSelectedOption(null);
       return;
     }
-
-    // server mode hydrate (critical)
-    if (mode === "server" && fetchByValue) {
-      fetchByValue(value).then((opt) => {
-        if (opt) setSelectedOption(opt);
-      });
-    }
-  }, [value, mode, options, fetchByValue]);
+    if (!fetchByValue) return;
+    let cancelled = false;
+    fetchByValue(value).then((opt) => {
+      if (cancelled || !opt) return;
+      setSelectedOption((prev) =>
+        prev?.value === opt.value && prev?.label === opt.label ? prev : opt,
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [value, mode, fetchByValue]);
 
   /* ---------------- CLEANUP ---------------- */
   React.useEffect(() => {
