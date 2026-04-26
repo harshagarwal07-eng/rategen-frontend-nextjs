@@ -198,7 +198,7 @@ export interface TourListRow {
   country_id: string | null;
   currency_id: string | null;
   markup_pct: number | null;
-  is_preferred?: boolean;
+  is_preferred: boolean | null;
   created_at: string;
 }
 

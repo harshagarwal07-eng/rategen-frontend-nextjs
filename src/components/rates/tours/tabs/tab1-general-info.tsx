@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -24,13 +23,10 @@ import {
 } from "@/components/ui/select";
 import { Autocomplete } from "@/components/ui/autocomplete";
 import { Button } from "@/components/ui/button";
-import { MapPin, Plus, X, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, X, Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import GeoPickerModal, {
-  GeoSelection,
-} from "@/components/shared/geo-picker-modal";
-import { fetchEntity } from "@/data-access/geo-picker-api";
+import { CitySelect } from "@/components/shared/city-select";
 import { addTourImage, deleteTourImage } from "@/data-access/tours-api";
 import {
   TourCountryOption,
@@ -51,8 +47,8 @@ const GeneralInfoSchema = z.object({
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   description: z.string().optional(),
-  is_preferred: z.boolean().optional(),
   status: z.enum(["draft", "active", "inactive", "published", "archived"]),
+  is_preferred: z.boolean().optional(),
 });
 
 export type TourGeneralInfoValues = z.infer<typeof GeneralInfoSchema>;
@@ -105,8 +101,8 @@ export default function TourGeneralInfoForm({
           ? initialData.longitude
           : undefined,
       description: initialData?.description ?? "",
-      is_preferred: Boolean(initialData?.is_preferred),
       status: ((initialData?.status as TourStatus) ?? "draft"),
+      is_preferred: initialData?.is_preferred ?? false,
     },
   });
 
@@ -198,8 +194,8 @@ export default function TourGeneralInfoForm({
             ? initialData.longitude
             : undefined,
         description: initialData.description ?? "",
-        is_preferred: Boolean(initialData.is_preferred),
         status: (initialData.status as TourStatus) ?? "draft",
+        is_preferred: initialData.is_preferred ?? false,
       });
       lastCountryRef.current = initialData.country_id ?? "";
     }
@@ -266,11 +262,11 @@ export default function TourGeneralInfoForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>City</FormLabel>
-                  <CityPicker
-                    value={field.value || ""}
-                    countryId={watchCountryId || ""}
+                  <CitySelect
+                    value={field.value || null}
+                    countryId={watchCountryId || null}
                     onChange={(id) =>
-                      form.setValue("geo_id", id, { shouldDirty: true })
+                      form.setValue("geo_id", id ?? "", { shouldDirty: true })
                     }
                   />
                   <FormMessage />
@@ -296,44 +292,19 @@ export default function TourGeneralInfoForm({
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-2">
-              <FormField
-                control={form.control}
-                name="website"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Website</FormLabel>
-                    <FormControl>
-                      <Input placeholder="https://..." {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <FormField
-              control={form.control}
-              name="is_preferred"
-              render={({ field }) => (
-                <FormItem className="flex items-end gap-3 pb-2">
-                  <div className="flex flex-col gap-1">
-                    <FormLabel>Preferred</FormLabel>
-                    <p className="text-xs text-muted-foreground">
-                      Highlight this tour with a star.
-                    </p>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={Boolean(field.value)}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          <FormField
+            control={form.control}
+            name="website"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Website</FormLabel>
+                <FormControl>
+                  <Input placeholder="https://..." {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <FormField
@@ -425,6 +396,21 @@ export default function TourGeneralInfoForm({
               </FormItem>
             )}
           />
+
+          <FormField
+            control={form.control}
+            name="is_preferred"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <FormLabel>Preferred Tour</FormLabel>
+                </div>
+                <FormControl>
+                  <Switch checked={field.value} onCheckedChange={field.onChange} />
+                </FormControl>
+              </FormItem>
+            )}
+          />
         </form>
       </Form>
 
@@ -438,103 +424,6 @@ export default function TourGeneralInfoForm({
       )}
       {watchGeoId && watchCountryId === "" && null}
     </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// City picker — single-select wrapper around GeoPickerModal
-// ─────────────────────────────────────────────────────────────────────────
-
-function CityPicker({
-  value,
-  countryId,
-  onChange,
-}: {
-  value: string;
-  countryId: string;
-  onChange: (id: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [label, setLabel] = useState<string>("");
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!value) {
-      setLabel("");
-      return;
-    }
-    fetchEntity(value).then((r) => {
-      if (cancelled || !r.data) return;
-      setLabel(r.data.name);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [value]);
-
-  const initialSelections: GeoSelection[] = value
-    ? [{ kind: "geo", id: value, label, country_id: countryId || undefined }]
-    : [];
-
-  return (
-    <>
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => setOpen(true)}
-        disabled={!countryId}
-        title={!countryId ? "Select a country first" : undefined}
-        className={cn(
-          "h-9 w-full justify-start font-normal",
-          !value && "text-muted-foreground",
-        )}
-      >
-        <MapPin className="h-4 w-4 mr-2 shrink-0" />
-        {value ? (label || "Loading…") : countryId ? "Select a city…" : "Pick country first"}
-        {value && (
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => {
-              e.stopPropagation();
-              onChange("");
-              setLabel("");
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                onChange("");
-                setLabel("");
-              }
-            }}
-            className="ml-auto rounded p-0.5 hover:bg-muted"
-            aria-label="Clear city"
-          >
-            <X className="h-3.5 w-3.5" />
-          </span>
-        )}
-      </Button>
-      <GeoPickerModal
-        open={open}
-        onOpenChange={setOpen}
-        countryId={countryId || null}
-        fieldLabel="City"
-        initialSelections={initialSelections}
-        onApply={(next) => {
-          // Single-select: keep the most recently picked city.
-          const cities = next.filter((s) => s.kind === "geo");
-          const last = cities[cities.length - 1];
-          if (last) {
-            onChange(last.id);
-            setLabel(last.label ?? "");
-          } else {
-            onChange("");
-            setLabel("");
-          }
-        }}
-      />
-    </>
   );
 }
 
