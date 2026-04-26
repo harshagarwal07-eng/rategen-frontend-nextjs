@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, Save, X } from "lucide-react";
+import { ChevronRight, Loader2, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getHotel } from "@/data-access/dmc-hotels";
 import { createContract } from "@/data-access/dmc-contracts";
@@ -90,6 +90,8 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
   const handleHotelSaved = async (saved: DmcHotel) => {
     setHotel(saved);
 
+    let contractSaveFailed = false;
+
     if (pendingContracts.length > 0) {
       setContractSaving(true);
       const successfulTempIds = new Set<string>();
@@ -123,6 +125,7 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
       }
 
       if (failures.length > 0) {
+        contractSaveFailed = true;
         toast.error(
           `Failed to save contract${failures.length === 1 ? "" : "s"}: ${failures.join(", ")}`
         );
@@ -132,6 +135,14 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
     }
 
     setInternalHotelId(saved.id);
+
+    // Save & Next: advance to Rooms & Seasons after a clean Tab 1 save in
+    // both create and edit modes. Mirrors the FD pattern of only advancing
+    // when the active tab's save returned a truthy success — partial
+    // contract failures keep us on Tab 1 so the user can retry.
+    if (!contractSaveFailed) {
+      setActiveTab("rooms-seasons");
+    }
   };
 
   const displayName = hotel?.name || "";
@@ -287,10 +298,15 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Saving...
                       </>
-                    ) : (
+                    ) : activeTab === "rooms-seasons" ? (
                       <>
                         <Save className="mr-2 h-4 w-4" />
-                        {activeTab === "rooms-seasons" ? "Save All Changes" : "Save"}
+                        Save All Changes
+                      </>
+                    ) : (
+                      <>
+                        Save &amp; Next
+                        <ChevronRight className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
