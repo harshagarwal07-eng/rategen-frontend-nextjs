@@ -125,21 +125,35 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
 
   if (!hotelId) {
     return (
-      <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Save the hotel first to manage rooms and seasons.
-      </div>
+      <TabFrame>
+        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-md">
+          <p className="text-sm">
+            Save the hotel first to manage rooms and seasons.
+          </p>
+        </div>
+      </TabFrame>
     );
   }
 
   if (contractsLoading) {
-    return <div className="text-sm text-muted-foreground">Loading contracts…</div>;
+    return (
+      <TabFrame>
+        <div className="text-center py-12 text-muted-foreground">
+          <p className="text-sm">Loading contracts…</p>
+        </div>
+      </TabFrame>
+    );
   }
 
   if (contracts.length === 0) {
     return (
-      <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-        No contracts yet. Add a contract on the General Info tab first.
-      </div>
+      <TabFrame>
+        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-md">
+          <p className="text-sm">
+            No contracts yet. Add a contract on the General Info tab first.
+          </p>
+        </div>
+      </TabFrame>
     );
   }
 
@@ -148,22 +162,42 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
   }
 
   return (
-    <ContractEditor
-      key={selectedContractId}
-      contracts={contracts}
-      selectedContractId={selectedContractId}
-      onSelect={setSelectedContractId}
-      selected={selected}
-      onDirtyChange={onDirtyChange}
-      onSavingChange={onSavingChange}
-      registerSave={(fn) => {
-        innerSaveRef.current = fn;
-      }}
-    />
+    <TabFrame>
+      <ContractEditor
+        key={selectedContractId}
+        contracts={contracts}
+        selectedContractId={selectedContractId}
+        onSelect={setSelectedContractId}
+        selected={selected}
+        onDirtyChange={onDirtyChange}
+        onSavingChange={onSavingChange}
+        registerSave={(fn) => {
+          innerSaveRef.current = fn;
+        }}
+      />
+    </TabFrame>
   );
 });
 
 export default RoomsSeasonsTab;
+
+// Standard tab heading + intro paragraph, mirroring transfers' Tab 3
+// (frontend/src/components/rates/transfers/tabs/tab3-seasons-rates.tsx
+// lines 949-955). Used by every render branch so the heading is stable
+// across loading / empty / loaded states.
+function TabFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Rooms &amp; Seasons</h2>
+        <p className="text-muted-foreground">
+          Per-contract age policies, seasons, room categories, and taxes.
+        </p>
+      </div>
+      {children}
+    </div>
+  );
+}
 
 function ContractEditor({
   contracts,
@@ -555,7 +589,7 @@ function ContractEditor({
       <div className="space-y-3">
         <div ref={agePoliciesAnchorRef}>
           <FDCard
-            title="AGE POLICY"
+            title="Age Policy"
             count={`${ageState.filter((b) => b.rooms || b.meals).length} bands`}
             defaultOpen
           >
@@ -569,7 +603,7 @@ function ContractEditor({
         </div>
 
         <FDCard
-          title="SEASONS"
+          title="Seasons"
           count={`${seasonsState.length} season${seasonsState.length === 1 ? "" : "s"}`}
           defaultOpen={false}
         >
@@ -590,7 +624,7 @@ function ContractEditor({
         </FDCard>
 
         <FDCard
-          title="ROOM CATEGORIES"
+          title="Room Categories"
           count={`${roomsState.length} room${roomsState.length === 1 ? "" : "s"}`}
           defaultOpen
         >
@@ -605,8 +639,8 @@ function ContractEditor({
         </FDCard>
 
         <FDCard
-          title="TAXES & FEES"
-          count={taxesState.length}
+          title="Taxes & Fees"
+          count={`${taxesState.length} tax${taxesState.length === 1 ? "" : "es"}`}
           defaultOpen={false}
         >
           <TaxesSection
@@ -708,7 +742,7 @@ function ContractSelectorRow({
           value={selectedContractId ?? undefined}
           onValueChange={(v) => onSelect(v)}
         >
-          <SelectTrigger className="h-10">
+          <SelectTrigger className="h-9 text-sm">
             <SelectValue placeholder="Select a contract" />
           </SelectTrigger>
           <SelectContent>
