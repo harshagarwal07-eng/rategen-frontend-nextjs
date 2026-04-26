@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   addYears,
   endOfYear,
@@ -9,15 +9,14 @@ import {
   parse,
   startOfYear,
 } from "date-fns";
-import { Copy, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   DateRangePicker,
   type DateRangePreset,
 } from "@/components/ui/date-range-picker";
-import { FDCard } from "@/components/ui/fd-card";
+import { cn } from "@/lib/utils";
 import { ContractSeason, ContractSeasonRow } from "@/types/contract-tab2";
 
 export interface LocalSeason {
@@ -261,62 +260,94 @@ export default function SeasonsSection({
     ]);
   };
 
-  if (state.length === 0) {
-    return (
-      <div className="space-y-3">
-        <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No seasons defined. Click &ldquo;+ Add Season&rdquo; to start.
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addSeason}
-          disabled={disabled}
-        >
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add Season
-        </Button>
-      </div>
-    );
-  }
+  // Per-season open/close state lives at the section level so it survives
+  // re-renders without remounting the cards. Newly-added seasons auto-open.
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const toggleOpen = (id: string) =>
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const handleAddSeason = () => {
+    const id = newLocalId();
+    onChange([...state, { _localId: id, id: null, name: "", date_ranges: [] }]);
+    setOpenIds((prev) => new Set(prev).add(id));
+  };
+
+  const handleDuplicate = (srcId: string) => {
+    const src = state.find((s) => s._localId === srcId);
+    if (!src) return;
+    const id = newLocalId();
+    onChange([
+      ...state,
+      {
+        _localId: id,
+        id: null,
+        name: `${src.name} (Copy)`.trim(),
+        date_ranges: src.date_ranges.map((r) => ({ ...r })),
+      },
+    ]);
+    setOpenIds((prev) => new Set(prev).add(id));
+  };
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex items-start justify-between">
+        <p className="text-[11px] text-muted-foreground/80">
+          Date ranges per season. Use a preset (All Season, Current CY, …) or
+          pick custom ranges in the popover.
+        </p>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={addSeason}
+          onClick={handleAddSeason}
           disabled={disabled}
         >
           <Plus className="h-3.5 w-3.5 mr-1" /> Add Season
         </Button>
       </div>
 
-      <div className="space-y-2">
-        {state.map((s) => (
-          <SeasonCard
-            key={s._localId}
-            season={s}
-            errors={errors[s._localId] ?? {}}
-            disabled={disabled}
-            presets={presets}
-            onPatch={(patch) => updateSeason(s._localId, patch)}
-            onDuplicate={() => duplicateSeason(s._localId)}
-            onDelete={() => removeSeason(s._localId)}
-          />
-        ))}
-      </div>
+      {state.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-md">
+          <p className="text-sm">No seasons yet. Click &ldquo;Add Season&rdquo;.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {state.map((s) => (
+            <SeasonCard
+              key={s._localId}
+              season={s}
+              errors={errors[s._localId] ?? {}}
+              disabled={disabled}
+              presets={presets}
+              isOpen={openIds.has(s._localId)}
+              onToggle={() => toggleOpen(s._localId)}
+              onPatch={(patch) => updateSeason(s._localId, patch)}
+              onDuplicate={() => handleDuplicate(s._localId)}
+              onDelete={() => removeSeason(s._localId)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
+// Lightweight inner card matching transfers' SeasonCard chrome (rounded-md
+// border bg-muted/20, manual ChevronDown rotate). FDCard / Radix Accordion
+// is intentionally NOT used here — that heavy chrome is reserved for the
+// four outer Tab 2 sections only.
 function SeasonCard({
   season,
   errors,
   disabled,
   presets,
+  isOpen,
+  onToggle,
   onPatch,
   onDuplicate,
   onDelete,
@@ -325,74 +356,113 @@ function SeasonCard({
   errors: SeasonErrors;
   disabled: boolean;
   presets: DateRangePreset[];
+  isOpen: boolean;
+  onToggle: () => void;
   onPatch: (patch: Partial<LocalSeason>) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
-  const titleText = season.name.trim() || "(unnamed season)";
+  const titleText = season.name.trim() || "Unnamed Season";
   const summary =
     season.date_ranges.length === 0
-      ? "no ranges"
-      : `${season.date_ranges.length} range${season.date_ranges.length === 1 ? "" : "s"}`;
+      ? "No dates set"
+      : season.date_ranges.length === 1
+        ? `${season.date_ranges.length} range`
+        : `${season.date_ranges.length} ranges`;
+  const isPending = !season.id;
 
   return (
-    <FDCard
-      title={
-        <span className="flex items-center gap-2">
-          <span className="font-medium">{titleText}</span>
-          <span className="text-[11px] text-muted-foreground font-normal">
+    <div className="rounded-md border bg-muted/20">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
+        <button
+          type="button"
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted shrink-0"
+          onClick={onToggle}
+          aria-label={isOpen ? "Collapse season" : "Expand season"}
+        >
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 transition-transform duration-200",
+              isOpen && "rotate-180"
+            )}
+          />
+        </button>
+
+        <button
+          type="button"
+          className="flex flex-1 items-center gap-2 min-w-0 text-left"
+          onClick={onToggle}
+        >
+          <span
+            className={cn(
+              "text-xs font-semibold truncate",
+              !season.name.trim() && "text-muted-foreground italic"
+            )}
+          >
+            {titleText}
+          </span>
+          <span className="text-xs text-muted-foreground truncate">
             {summary}
           </span>
-        </span>
-      }
-      defaultOpen
-      rightSlot={
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={onDuplicate}
-            disabled={disabled}
-            aria-label="Duplicate season"
-            title="Duplicate season"
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={onDelete}
-            disabled={disabled}
-            aria-label="Delete season"
-            title="Delete season"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-3">
-        <div>
-          <Label className="text-xs">Name</Label>
-          <Input
-            value={season.name}
-            disabled={disabled}
-            placeholder="Season name (e.g. Peak)"
-            onChange={(e) => onPatch({ name: e.target.value })}
-            className="h-9 mt-1 max-w-md"
-          />
-          {errors.name && (
-            <div className="text-[11px] text-destructive mt-1">{errors.name}</div>
+          {isPending && (
+            <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+              Unsaved
+            </span>
           )}
-        </div>
+        </button>
 
-        <div>
-          <Label className="text-xs">Date ranges</Label>
-          <div className="mt-1 max-w-md">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={onDuplicate}
+          disabled={disabled}
+          title="Duplicate season"
+          aria-label="Duplicate season"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={onDelete}
+          disabled={disabled}
+          title="Delete season"
+          aria-label="Delete season"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {isOpen && (
+        <div className="px-3 pb-3 pt-2 border-t flex flex-col gap-4">
+          <div>
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground block mb-1">
+              Season Name
+            </label>
+            <Input
+              value={season.name}
+              disabled={disabled}
+              placeholder="All Season"
+              onChange={(e) => onPatch({ name: e.target.value })}
+              className="h-8 text-sm max-w-xs"
+            />
+            {errors.name && (
+              <p className="mt-1 text-[10px] text-destructive">{errors.name}</p>
+            )}
+          </div>
+
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarPlus className="h-3.5 w-3.5 text-muted-foreground" />
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Date Ranges
+              </label>
+            </div>
             <DateRangePicker
               value={rangesToPickerValue(season.date_ranges)}
               onChange={(next) =>
@@ -402,16 +472,16 @@ function SeasonCard({
               presets={presets}
               placeholder="Pick dates or apply a preset…"
             />
+            {(errors.rangeOrder || errors.overlapWithin || errors.overlapAcross) && (
+              <p className="mt-1 text-[10px] text-destructive">
+                {[errors.rangeOrder, errors.overlapWithin, errors.overlapAcross]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
           </div>
-          {(errors.rangeOrder || errors.overlapWithin || errors.overlapAcross) && (
-            <div className="text-[11px] text-destructive mt-1 space-x-2">
-              {errors.rangeOrder && <span>{errors.rangeOrder}</span>}
-              {errors.overlapWithin && <span>{errors.overlapWithin}</span>}
-              {errors.overlapAcross && <span>{errors.overlapAcross}</span>}
-            </div>
-          )}
         </div>
-      </div>
-    </FDCard>
+      )}
+    </div>
   );
 }
