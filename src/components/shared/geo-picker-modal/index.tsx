@@ -20,7 +20,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Autocomplete } from "@/components/ui/autocomplete";
 import { cn } from "@/lib/utils";
+import { listCountries } from "@/data-access/geo-picker-api";
+import type { TransferCountryOption } from "@/types/transfers";
 import CityKindContent from "./kinds/city-kind";
 import CustomPointKindContent from "./kinds/custom-point-kind";
 import type {
@@ -30,10 +33,10 @@ import type {
 
 export type { GeoSelection } from "./types";
 
-// Registry — adding a new kind means appending to this array. The shell
-// renders enabled kinds as active tabs and disabled ones as greyed-out
-// "coming soon" placeholders. Each kind owns its content area and writes
-// into the shared selections array.
+// Module-scoped country list cache — populated on first modal open and
+// reused across remounts.
+const countriesCache = { value: null as TransferCountryOption[] | null };
+
 const KINDS: GeoPickerKind[] = [
   {
     id: "city",
@@ -89,11 +92,11 @@ const KINDS: GeoPickerKind[] = [
 export interface GeoPickerModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  // The transfer's primary country (from Tab 1). Used as the default
+  // browse target inside the modal and to suppress the country prefix
+  // in chips for same-country selections.
   countryId: string | null;
-  // Field label shown in the modal title — "Origin", "Destination", etc.
   fieldLabel: string;
-  // Existing selections to seed the modal. The modal makes a local copy
-  // and only commits on Apply — Cancel discards.
   initialSelections: GeoSelection[];
   onApply: (next: GeoSelection[]) => void;
 }
@@ -111,31 +114,69 @@ export default function GeoPickerModal({
     initialSelections,
   );
   const [search, setSearch] = useState("");
+  const [activeCountryId, setActiveCountryId] = useState<string | null>(
+    countryId,
+  );
+  const [countries, setCountries] = useState<TransferCountryOption[] | null>(
+    countriesCache.value,
+  );
 
-  // Reset local state when the modal re-opens with new initial selections.
   useEffect(() => {
     if (open) {
       setSelections(initialSelections);
       setSearch("");
       setActiveKindId(KINDS[0].id);
+      setActiveCountryId(countryId);
     }
-  }, [open, initialSelections]);
+  }, [open, initialSelections, countryId]);
+
+  useEffect(() => {
+    if (countriesCache.value) return;
+    let cancelled = false;
+    listCountries().then((r) => {
+      if (cancelled) return;
+      const data = r.data ?? [];
+      countriesCache.value = data;
+      setCountries(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const activeKind = useMemo(
     () => KINDS.find((k) => k.id === activeKindId) ?? KINDS[0],
     [activeKindId],
   );
 
+  const countryOptions = useMemo(
+    () =>
+      (countries ?? []).map((c) => ({
+        label: c.country_name,
+        value: c.id,
+        code: c.country_code,
+      })),
+    [countries],
+  );
+
   function removeSelection(s: GeoSelection) {
     setSelections((prev) =>
-      prev.filter(
-        (p) => !(p.kind === s.kind && p.id === s.id),
-      ),
+      prev.filter((p) => !(p.kind === s.kind && p.id === s.id)),
     );
   }
 
   function chipKey(s: GeoSelection) {
     return `${s.kind}:${s.id}`;
+  }
+
+  function chipText(s: GeoSelection): string {
+    const base = s.label ?? s.id;
+    // Suppress country prefix for selections from the transfer's primary
+    // country to keep chips short. Always include it for cross-country.
+    if (s.country_name && s.country_id && s.country_id !== countryId) {
+      return `${s.country_name} › ${base}`;
+    }
+    return base;
   }
 
   return (
@@ -144,8 +185,19 @@ export default function GeoPickerModal({
         className="sm:max-w-4xl p-0 gap-0 overflow-hidden"
         showCloseButton={false}
       >
-        {/* Header — search + close */}
+        {/* Header — country selector + search + close */}
         <div className="flex items-center gap-2 px-4 py-3 border-b">
+          <div className="w-56 shrink-0">
+            <Autocomplete
+              options={countryOptions}
+              value={activeCountryId ?? ""}
+              onChange={(v) => setActiveCountryId(v || null)}
+              placeholder={
+                countries === null ? "Loading countries…" : "Select country…"
+              }
+              searchPlaceholder="Search countries…"
+            />
+          </div>
           <div className="relative flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -210,13 +262,13 @@ export default function GeoPickerModal({
 
         {/* Active kind content */}
         <div className="px-4 py-3">
-          {!countryId ? (
+          {!activeCountryId ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              Pick a country in Tab 1 first.
+              Pick a country above to start browsing.
             </div>
           ) : activeKind.Content ? (
             <activeKind.Content
-              countryId={countryId}
+              activeCountryId={activeCountryId}
               selections={selections}
               onChange={setSelections}
               search={search}
@@ -247,7 +299,7 @@ export default function GeoPickerModal({
                       variant="secondary"
                       className="gap-1 pr-1 max-w-full"
                     >
-                      <span className="truncate">{s.label ?? s.id}</span>
+                      <span className="truncate">{chipText(s)}</span>
                       {s.kind === "dmc_custom" && (
                         <span className="text-[9px] uppercase tracking-wide opacity-70">
                           custom
@@ -257,7 +309,7 @@ export default function GeoPickerModal({
                         type="button"
                         onClick={() => removeSelection(s)}
                         className="ml-0.5 rounded hover:bg-destructive/10 hover:text-destructive p-0.5"
-                        aria-label={`Remove ${s.label ?? s.id}`}
+                        aria-label={`Remove ${chipText(s)}`}
                       >
                         <X className="h-3 w-3" />
                       </button>

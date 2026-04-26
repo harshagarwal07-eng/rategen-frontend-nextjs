@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
+import { Check, ChevronDown, ChevronRight, Loader2, Minus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import {
@@ -12,33 +12,80 @@ import {
   type TreeCityNode,
   type TreeZoneNode,
 } from "@/data-access/geo-picker-api";
-import type { GeoPickerKindContentProps, GeoSelection } from "../types";
+import type {
+  GeoPickerKindContentProps,
+  GeoSelection,
+} from "../types";
 
-// Cache trees across modal opens (per countryId). Mounted-once per session.
+// Cache trees across modal opens (per countryId). Module-scoped so multiple
+// modal mounts share the same fetch.
 const treeCache = new Map<string, CountryTreeResponse>();
 
-type Node =
-  | { kind: "city"; node: TreeCityNode }
-  | { kind: "zone"; node: TreeZoneNode; cityId: string }
-  | { kind: "area"; node: TreeAreaNode; cityId: string; zoneId: string | null };
+// ── Cascade helpers ──────────────────────────────────────────────
 
-function nodeBreadcrumb(
+function cityDescendantIds(c: TreeCityNode): string[] {
+  const out: string[] = [];
+  for (const a of c.areas) out.push(a.id);
+  for (const z of c.zones) {
+    out.push(z.id);
+    for (const a of z.areas) out.push(a.id);
+  }
+  return out;
+}
+
+function zoneDescendantIds(z: TreeZoneNode): string[] {
+  return z.areas.map((a) => a.id);
+}
+
+// State of a parent node given the current selection set:
+//   'checked'       — self and all descendants selected (or no descendants)
+//   'indeterminate' — at least one descendant or self selected, but not all
+//   'unchecked'     — nothing in this subtree selected
+function parentState(
+  selfId: string,
+  descendantIds: string[],
+  selected: Set<string>,
+): "checked" | "indeterminate" | "unchecked" {
+  const all = [selfId, ...descendantIds];
+  let on = 0;
+  for (const id of all) if (selected.has(id)) on++;
+  if (on === 0) return "unchecked";
+  if (on === all.length) return "checked";
+  return "indeterminate";
+}
+
+// Walk the tree once and map each node id to its breadcrumb (relative
+// to the country, no country prefix).
+function buildBreadcrumbMap(
   tree: CountryTreeResponse,
-  id: string,
-): string | undefined {
+): Record<string, string> {
+  const m: Record<string, string> = {};
   for (const c of tree.cities) {
-    if (c.id === id) return c.name;
-    for (const a of c.areas) {
-      if (a.id === id) return `${c.name} › ${a.name}`;
-    }
+    m[c.id] = c.name;
+    for (const a of c.areas) m[a.id] = `${c.name} › ${a.name}`;
     for (const z of c.zones) {
-      if (z.id === id) return `${c.name} › ${z.name}`;
-      for (const a of z.areas) {
-        if (a.id === id) return `${c.name} › ${z.name} › ${a.name}`;
-      }
+      m[z.id] = `${c.name} › ${z.name}`;
+      for (const a of z.areas) m[a.id] = `${c.name} › ${z.name} › ${a.name}`;
     }
   }
-  return undefined;
+  return m;
+}
+
+// Walk the tree once and map each node id to its type. Used when cascading
+// so descendant entries get the right `nodeType`.
+function buildTypeMap(
+  tree: CountryTreeResponse,
+): Record<string, "city" | "zone" | "area"> {
+  const m: Record<string, "city" | "zone" | "area"> = {};
+  for (const c of tree.cities) {
+    m[c.id] = "city";
+    for (const a of c.areas) m[a.id] = "area";
+    for (const z of c.zones) {
+      m[z.id] = "zone";
+      for (const a of z.areas) m[a.id] = "area";
+    }
+  }
+  return m;
 }
 
 function nodeMatchesQuery(needle: string, name: string): boolean {
@@ -100,14 +147,10 @@ function buildVisibility(
           cityHasHit = true;
         }
       }
-      // If the zone itself matches but no area was hit, still surface its
-      // areas underneath (don't filter them out).
       if (vz.has(z.id) && !zoneHasHit) {
         for (const a of z.areas) va.add(a.id);
       }
     }
-    // If the city itself matches but no descendant hit, keep all
-    // descendants visible.
     if (cityHasHit && !q) {
       for (const a of c.areas) va.add(a.id);
       for (const z of c.zones) {
@@ -115,7 +158,6 @@ function buildVisibility(
         for (const a of z.areas) va.add(a.id);
       }
     } else if (vc.has(c.id) && q && nodeMatchesQuery(q, c.name)) {
-      // City name matched the query — show its full subtree too.
       for (const a of c.areas) va.add(a.id);
       for (const z of c.zones) {
         vz.add(z.id);
@@ -128,44 +170,55 @@ function buildVisibility(
 }
 
 export default function CityKindContent({
-  countryId,
+  activeCountryId,
   selections,
   onChange,
   search,
 }: GeoPickerKindContentProps) {
   const [tree, setTree] = useState<CountryTreeResponse | null>(
-    treeCache.get(countryId) ?? null,
+    treeCache.get(activeCountryId) ?? null,
   );
-  const [loading, setLoading] = useState<boolean>(!treeCache.has(countryId));
+  const [loading, setLoading] = useState<boolean>(
+    !treeCache.has(activeCountryId),
+  );
   const [error, setError] = useState<string | null>(null);
   const [expandedCities, setExpandedCities] = useState<Set<string>>(new Set());
   const [expandedZones, setExpandedZones] = useState<Set<string>>(new Set());
 
+  // Re-fetch (or pull from cache) when the active country changes.
   useEffect(() => {
-    if (!countryId) return;
-    if (treeCache.has(countryId)) {
-      setTree(treeCache.get(countryId) ?? null);
+    if (!activeCountryId) return;
+    if (treeCache.has(activeCountryId)) {
+      setTree(treeCache.get(activeCountryId) ?? null);
       setLoading(false);
+      setError(null);
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchCountryTree(countryId).then((r) => {
+    setTree(null);
+    fetchCountryTree(activeCountryId).then((r) => {
       if (cancelled) return;
       if (r.error || !r.data) {
         setError(r.error ?? "Failed to load tree");
         setLoading(false);
         return;
       }
-      treeCache.set(countryId, r.data);
+      treeCache.set(activeCountryId, r.data);
       setTree(r.data);
       setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [countryId]);
+  }, [activeCountryId]);
+
+  // Reset expand state on country switch so the new tree starts collapsed.
+  useEffect(() => {
+    setExpandedCities(new Set());
+    setExpandedZones(new Set());
+  }, [activeCountryId]);
 
   const visibility = useMemo(() => {
     if (!tree)
@@ -178,7 +231,12 @@ export default function CityKindContent({
     return buildVisibility(tree, search);
   }, [tree, search]);
 
-  // Auto-expand parents of search hits.
+  const breadcrumbMap = useMemo(
+    () => (tree ? buildBreadcrumbMap(tree) : {}),
+    [tree],
+  );
+  const typeMap = useMemo(() => (tree ? buildTypeMap(tree) : {}), [tree]);
+
   const effectiveExpandedCities = useMemo(() => {
     if (!search.trim()) return expandedCities;
     return new Set([...expandedCities, ...visibility.autoExpand]);
@@ -189,38 +247,77 @@ export default function CityKindContent({
     return new Set([...expandedZones, ...visibility.autoExpand]);
   }, [expandedZones, search, visibility.autoExpand]);
 
-  // Selection helpers — only touch geo-kind entries.
-  const selectedGeoIds = useMemo(() => {
+  // Selection set for this country only — cross-country selections live in
+  // the parent state and stay untouched by this kind's logic.
+  const selectedIdsThisCountry = useMemo(() => {
     const s = new Set<string>();
-    for (const sel of selections) if (sel.kind === "geo") s.add(sel.id);
+    for (const sel of selections) {
+      if (sel.kind !== "geo") continue;
+      // Only include selections from the active country in cascade math.
+      // Selections lacking country_id (legacy) are still rendered if their
+      // id happens to be in this tree.
+      if (sel.country_id && sel.country_id !== activeCountryId) continue;
+      s.add(sel.id);
+    }
     return s;
-  }, [selections]);
+  }, [selections, activeCountryId]);
 
-  function toggleNode(node: Node) {
+  function applyToggle(idsToAdd: string[], idsToRemove: string[]) {
     if (!tree) return;
-    const id =
-      node.kind === "city"
-        ? node.node.id
-        : node.kind === "zone"
-          ? node.node.id
-          : node.node.id;
-    const name = node.node.name;
-    const nodeType = node.kind;
-    const breadcrumb = nodeBreadcrumb(tree, id);
-    const label = breadcrumb ?? name;
-    const others = selections.filter(
-      (s) => !(s.kind === "geo" && s.id === id),
-    );
-    if (selectedGeoIds.has(id)) {
-      onChange(others);
-    } else {
-      const next: GeoSelection = {
+    const removeSet = new Set(idsToRemove);
+    const addSet = new Set(idsToAdd);
+    // Drop any existing geo selections from this country that intersect the
+    // remove set, then append fresh entries for the add set.
+    const filtered = selections.filter((s) => {
+      if (s.kind !== "geo") return true;
+      if (s.country_id && s.country_id !== activeCountryId) return true;
+      // Same-country geo selection — keep unless we're removing it.
+      return !removeSet.has(s.id);
+    });
+    const additions: GeoSelection[] = [];
+    for (const id of addSet) {
+      // Don't double-add if already present (this can happen when a child
+      // was already selected and the parent gets cascaded).
+      if (filtered.some((s) => s.kind === "geo" && s.id === id)) continue;
+      const nodeType = typeMap[id];
+      if (!nodeType) continue;
+      additions.push({
         kind: "geo",
         id,
-        label,
+        label: breadcrumbMap[id],
         nodeType,
-      };
-      onChange([...others, next]);
+        country_id: tree.country_id,
+        country_name: tree.country_name,
+      });
+    }
+    onChange([...filtered, ...additions]);
+  }
+
+  function toggleCity(c: TreeCityNode) {
+    const desc = cityDescendantIds(c);
+    const state = parentState(c.id, desc, selectedIdsThisCountry);
+    if (state === "checked") {
+      applyToggle([], [c.id, ...desc]);
+    } else {
+      applyToggle([c.id, ...desc], []);
+    }
+  }
+
+  function toggleZone(z: TreeZoneNode) {
+    const desc = zoneDescendantIds(z);
+    const state = parentState(z.id, desc, selectedIdsThisCountry);
+    if (state === "checked") {
+      applyToggle([], [z.id, ...desc]);
+    } else {
+      applyToggle([z.id, ...desc], []);
+    }
+  }
+
+  function toggleArea(a: TreeAreaNode) {
+    if (selectedIdsThisCountry.has(a.id)) {
+      applyToggle([], [a.id]);
+    } else {
+      applyToggle([a.id], []);
     }
   }
 
@@ -269,9 +366,10 @@ export default function CityKindContent({
       <div className="p-2 space-y-0.5">
         {tree.cities.map((c) => {
           if (!visibleCity.has(c.id)) return null;
+          const desc = cityDescendantIds(c);
+          const cityState = parentState(c.id, desc, selectedIdsThisCountry);
           const hasChildren = c.zones.length > 0 || c.areas.length > 0;
           const expanded = effectiveExpandedCities.has(c.id);
-          const cityChecked = selectedGeoIds.has(c.id);
           return (
             <div key={c.id}>
               <Row
@@ -279,10 +377,8 @@ export default function CityKindContent({
                 hasChildren={hasChildren}
                 expanded={expanded}
                 onExpandToggle={() => toggleCityExpanded(c.id)}
-                checked={cityChecked}
-                onCheckedChange={() =>
-                  toggleNode({ kind: "city", node: c })
-                }
+                state={cityState}
+                onCheckedChange={() => toggleCity(c)}
                 label={c.name}
                 badge="city"
               />
@@ -295,15 +391,12 @@ export default function CityKindContent({
                         key={a.id}
                         level={1}
                         hasChildren={false}
-                        checked={selectedGeoIds.has(a.id)}
-                        onCheckedChange={() =>
-                          toggleNode({
-                            kind: "area",
-                            node: a,
-                            cityId: c.id,
-                            zoneId: null,
-                          })
+                        state={
+                          selectedIdsThisCountry.has(a.id)
+                            ? "checked"
+                            : "unchecked"
                         }
+                        onCheckedChange={() => toggleArea(a)}
                         label={a.name}
                         badge="area"
                       />
@@ -311,6 +404,12 @@ export default function CityKindContent({
                   {c.zones
                     .filter((z) => visibleZone.has(z.id))
                     .map((z) => {
+                      const zDesc = zoneDescendantIds(z);
+                      const zState = parentState(
+                        z.id,
+                        zDesc,
+                        selectedIdsThisCountry,
+                      );
                       const zExpanded = effectiveExpandedZones.has(z.id);
                       const zHasAreas = z.areas.length > 0;
                       return (
@@ -320,14 +419,8 @@ export default function CityKindContent({
                             hasChildren={zHasAreas}
                             expanded={zExpanded}
                             onExpandToggle={() => toggleZoneExpanded(z.id)}
-                            checked={selectedGeoIds.has(z.id)}
-                            onCheckedChange={() =>
-                              toggleNode({
-                                kind: "zone",
-                                node: z,
-                                cityId: c.id,
-                              })
-                            }
+                            state={zState}
+                            onCheckedChange={() => toggleZone(z)}
                             label={z.name}
                             badge="zone"
                           />
@@ -339,15 +432,12 @@ export default function CityKindContent({
                                   key={a.id}
                                   level={2}
                                   hasChildren={false}
-                                  checked={selectedGeoIds.has(a.id)}
-                                  onCheckedChange={() =>
-                                    toggleNode({
-                                      kind: "area",
-                                      node: a,
-                                      cityId: c.id,
-                                      zoneId: z.id,
-                                    })
+                                  state={
+                                    selectedIdsThisCountry.has(a.id)
+                                      ? "checked"
+                                      : "unchecked"
                                   }
+                                  onCheckedChange={() => toggleArea(a)}
                                   label={a.name}
                                   badge="area"
                                 />
@@ -370,7 +460,7 @@ interface RowProps {
   hasChildren: boolean;
   expanded?: boolean;
   onExpandToggle?: () => void;
-  checked: boolean;
+  state: "checked" | "indeterminate" | "unchecked";
   onCheckedChange: () => void;
   label: string;
   badge: "city" | "zone" | "area";
@@ -381,16 +471,14 @@ function Row({
   hasChildren,
   expanded,
   onExpandToggle,
-  checked,
+  state,
   onCheckedChange,
   label,
   badge,
 }: RowProps) {
   return (
     <div
-      className={cn(
-        "flex items-center gap-2 rounded-md py-1.5 pr-2 hover:bg-accent/50",
-      )}
+      className="flex items-center gap-2 rounded-md py-1.5 pr-2 hover:bg-accent/50"
       style={{ paddingLeft: 8 + level * 20 }}
     >
       <button
@@ -411,11 +499,7 @@ function Row({
           <ChevronRight className="h-3.5 w-3.5" />
         )}
       </button>
-      <Checkbox
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        className="h-4 w-4"
-      />
+      <TriCheckbox state={state} onChange={onCheckedChange} />
       <button
         type="button"
         onClick={onCheckedChange}
@@ -434,5 +518,42 @@ function Row({
         {badge}
       </span>
     </div>
+  );
+}
+
+// Local checkbox that supports the indeterminate state. The shared UI
+// Checkbox forces a CheckIcon in its Indicator so we use the Radix
+// primitive directly to swap in a Minus icon when partial.
+function TriCheckbox({
+  state,
+  onChange,
+}: {
+  state: "checked" | "indeterminate" | "unchecked";
+  onChange: () => void;
+}) {
+  const checked: boolean | "indeterminate" =
+    state === "checked"
+      ? true
+      : state === "indeterminate"
+        ? "indeterminate"
+        : false;
+  return (
+    <CheckboxPrimitive.Root
+      checked={checked}
+      onCheckedChange={() => onChange()}
+      className={cn(
+        "peer border-2 size-4 shrink-0 rounded-[4px] shadow-xs outline-none transition-shadow",
+        "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:border-primary",
+        "data-[state=indeterminate]:bg-primary data-[state=indeterminate]:text-primary-foreground data-[state=indeterminate]:border-primary",
+      )}
+    >
+      <CheckboxPrimitive.Indicator className="flex items-center justify-center text-current">
+        {state === "indeterminate" ? (
+          <Minus className="size-3.5" />
+        ) : (
+          <Check className="size-3.5" />
+        )}
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
   );
 }

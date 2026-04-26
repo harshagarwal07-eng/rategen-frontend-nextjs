@@ -8,22 +8,32 @@ import type { ComponentType } from "react";
 // Discriminated union of selection kinds. Mirrors the backend's
 // `transfer_package_stop_locations` row shape: `kind: 'geo'` writes to
 // `geo_id`, `kind: 'dmc_custom'` writes to `dmc_custom_location_id`.
+//
+// `country_id` / `country_name` are display-only metadata so chips can
+// show a country prefix when a selection is from a country other than
+// the transfer's primary one. Cross-country selections are persisted
+// through the picker by id alone — country ancestry is implicit in the
+// geo node's hierarchy on the backend.
 export type GeoSelection =
   | {
       kind: "geo";
       id: string;
-      // Display-only — the leaf node's name plus a breadcrumb to its top
-      // city. Hydrated from the tree on selection or via /api/geo/entity/:id
-      // when re-opening saved selections.
+      // Breadcrumb relative to the country (e.g. "Dubai › Marina"). The
+      // chip renderer prepends a country prefix when needed; storing it
+      // raw here keeps the same selection useful in both modal contexts.
       label?: string;
-      // Type from the cities table — useful to show in chips ("Marina (zone)")
-      // and to filter when searching.
       nodeType?: "city" | "zone" | "area";
+      country_id?: string;
+      country_name?: string;
     }
   | {
       kind: "dmc_custom";
       id: string;
       label?: string;
+      // Country of the anchor (custom locations themselves don't have a
+      // country column — it's derived from `parent_geo_id` → cities).
+      country_id?: string;
+      country_name?: string;
     };
 
 export function selectionKey(s: GeoSelection): string {
@@ -31,7 +41,10 @@ export function selectionKey(s: GeoSelection): string {
 }
 
 export interface GeoPickerKindContentProps {
-  countryId: string;
+  // The country whose data this kind should currently render. May differ
+  // from the transfer's primary country when the user switches countries
+  // inside the modal.
+  activeCountryId: string;
   selections: GeoSelection[];
   onChange: (next: GeoSelection[]) => void;
   search: string;

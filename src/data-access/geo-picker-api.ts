@@ -1,6 +1,7 @@
 "use client";
 
 import http from "@/lib/api";
+import type { TransferCountryOption } from "@/types/transfers";
 
 // ── Tree types (mirrors backend dto) ─────────────────────────────
 
@@ -95,6 +96,11 @@ export async function fetchCountryTree(
     `/api/geo/countries/${countryId}/tree`,
   );
   return unwrap<CountryTreeResponse>(raw);
+}
+
+export async function listCountries(): Promise<Result<TransferCountryOption[]>> {
+  const raw = await http.get<TransferCountryOption[]>("/api/geo/countries");
+  return unwrap<TransferCountryOption[]>(raw);
 }
 
 export async function fetchEntity(id: string): Promise<Result<EntityResponse>> {

@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import {
   createCustomLocation,
   fetchCountryTree,
+  fetchEntity,
   listCustomLocations,
   type CountryTreeResponse,
   type DmcCustomLocation,
@@ -21,39 +22,30 @@ import type {
   GeoSelection,
 } from "../types";
 
-// Reuse the tree cache from city-kind via re-fetching once per modal open.
-// Anchor selection is single-select.
+// Module-scoped caches survive remounts within the same session.
 const customListCache = { value: null as DmcCustomLocation[] | null };
 const treeCache = new Map<string, CountryTreeResponse>();
+// `parent_geo_id` → `{ country_id, country_name }`. Resolved on demand via
+// /api/geo/entity/:id. Custom locations may anchor outside the active
+// country, so the breadcrumb has to come from the entity endpoint, not
+// the currently-loaded tree.
+const anchorCountryCache = new Map<
+  string,
+  { country_id: string; country_name: string } | null
+>();
 
-type AnchorPick = { id: string; label: string; type: "city" | "zone" | "area" };
+type AnchorPick = {
+  id: string;
+  label: string;
+  type: "city" | "zone" | "area";
+};
 
-function locationLabel(
-  loc: DmcCustomLocation,
-  anchorLabelById: Record<string, string>,
-): string {
-  const anchor = loc.parent_geo_id ? anchorLabelById[loc.parent_geo_id] : null;
-  return anchor ? `${loc.name} • ${anchor}` : loc.name;
-}
-
-// Walk the tree once and return an id→breadcrumb map. Used to label
-// anchored custom locations in the list.
-function buildAnchorLabelMap(tree: CountryTreeResponse | null): Record<string, string> {
-  const m: Record<string, string> = {};
-  if (!tree) return m;
-  for (const c of tree.cities) {
-    m[c.id] = c.name;
-    for (const a of c.areas) m[a.id] = `${c.name} › ${a.name}`;
-    for (const z of c.zones) {
-      m[z.id] = `${c.name} › ${z.name}`;
-      for (const a of z.areas) m[a.id] = `${c.name} › ${z.name} › ${a.name}`;
-    }
-  }
-  return m;
+function locationLabel(loc: DmcCustomLocation): string {
+  return loc.name;
 }
 
 export default function CustomPointKindContent({
-  countryId,
+  activeCountryId,
   selections,
   onChange,
   search,
@@ -65,9 +57,11 @@ export default function CustomPointKindContent({
   const [loadingItems, setLoadingItems] = useState<boolean>(
     customListCache.value === null,
   );
-  const [tree, setTree] = useState<CountryTreeResponse | null>(
-    treeCache.get(countryId) ?? null,
-  );
+  // Anchor country resolutions — tracked in state so re-renders pick up
+  // newly-resolved entries from the cache.
+  const [anchorCountries, setAnchorCountries] = useState<
+    Record<string, { country_id: string; country_name: string } | null>
+  >(() => Object.fromEntries(anchorCountryCache.entries()));
 
   // Create form state
   const [name, setName] = useState("");
@@ -96,24 +90,42 @@ export default function CustomPointKindContent({
     };
   }, []);
 
+  // Resolve anchor → country for any custom location whose anchor we
+  // haven't seen yet. Run in parallel; one entity call per unique anchor.
   useEffect(() => {
-    if (!countryId) return;
-    if (treeCache.has(countryId)) {
-      setTree(treeCache.get(countryId) ?? null);
-      return;
-    }
+    if (!items || items.length === 0) return;
+    const unresolved = Array.from(
+      new Set(
+        items
+          .map((i) => i.parent_geo_id)
+          .filter((id): id is string => typeof id === "string" && id.length > 0)
+          .filter((id) => !anchorCountryCache.has(id)),
+      ),
+    );
+    if (unresolved.length === 0) return;
     let cancelled = false;
-    fetchCountryTree(countryId).then((r) => {
-      if (cancelled || !r.data) return;
-      treeCache.set(countryId, r.data);
-      setTree(r.data);
+    Promise.all(
+      unresolved.map(async (id) => {
+        const r = await fetchEntity(id);
+        const c = r.data?.ancestors.country ?? null;
+        const resolved = c
+          ? { country_id: c.id, country_name: c.name }
+          : null;
+        anchorCountryCache.set(id, resolved);
+        return [id, resolved] as const;
+      }),
+    ).then((rows) => {
+      if (cancelled) return;
+      setAnchorCountries((prev) => {
+        const next = { ...prev };
+        for (const [id, val] of rows) next[id] = val;
+        return next;
+      });
     });
     return () => {
       cancelled = true;
     };
-  }, [countryId]);
-
-  const anchorLabelById = useMemo(() => buildAnchorLabelMap(tree), [tree]);
+  }, [items]);
 
   const selectedCustomIds = useMemo(() => {
     const s = new Set<string>();
@@ -126,10 +138,13 @@ export default function CustomPointKindContent({
     const q = search.trim().toLowerCase();
     if (!q) return items;
     return items.filter((it) => {
-      const label = locationLabel(it, anchorLabelById).toLowerCase();
-      return label.includes(q);
+      const country = it.parent_geo_id
+        ? anchorCountries[it.parent_geo_id]?.country_name ?? ""
+        : "";
+      const haystack = `${it.name} ${country}`.toLowerCase();
+      return haystack.includes(q);
     });
-  }, [items, search, anchorLabelById]);
+  }, [items, search, anchorCountries]);
 
   function toggleCustom(loc: DmcCustomLocation) {
     const exists = selectedCustomIds.has(loc.id);
@@ -140,10 +155,15 @@ export default function CustomPointKindContent({
       onChange(others);
       return;
     }
+    const country = loc.parent_geo_id
+      ? anchorCountries[loc.parent_geo_id] ?? null
+      : null;
     const next: GeoSelection = {
       kind: "dmc_custom",
       id: loc.id,
-      label: locationLabel(loc, anchorLabelById),
+      label: locationLabel(loc),
+      country_id: country?.country_id,
+      country_name: country?.country_name,
     };
     onChange([...others, next]);
   }
@@ -172,14 +192,21 @@ export default function CustomPointKindContent({
     const nextItems = [...(items ?? []), created];
     customListCache.value = nextItems;
     setItems(nextItems);
-    // Auto-select the new entry.
-    const sel: GeoSelection = {
-      kind: "dmc_custom",
-      id: created.id,
-      label: locationLabel(created, anchorLabelById),
-    };
-    onChange([...selections, sel]);
-    // Reset & flip back to list.
+    // Reuse the resolved country from the anchor we just picked.
+    if (created.parent_geo_id) {
+      const cached = anchorCountryCache.get(created.parent_geo_id);
+      // Auto-select the new entry. The country is whichever country the
+      // anchor came from — known via cache or via a fresh resolution
+      // (kicked off by the items effect).
+      const sel: GeoSelection = {
+        kind: "dmc_custom",
+        id: created.id,
+        label: created.name,
+        country_id: cached?.country_id,
+        country_name: cached?.country_name,
+      };
+      onChange([...selections, sel]);
+    }
     setName("");
     setAnchor(null);
     setType("venue");
@@ -226,8 +253,8 @@ export default function CustomPointKindContent({
             ) : (
               filteredItems.map((loc) => {
                 const checked = selectedCustomIds.has(loc.id);
-                const anchorLabel = loc.parent_geo_id
-                  ? anchorLabelById[loc.parent_geo_id] ?? null
+                const country = loc.parent_geo_id
+                  ? anchorCountries[loc.parent_geo_id] ?? null
                   : null;
                 return (
                   <div
@@ -253,9 +280,9 @@ export default function CustomPointKindContent({
                           </span>
                         ) : null}
                       </div>
-                      {anchorLabel ? (
+                      {country ? (
                         <div className="text-xs text-muted-foreground pl-5">
-                          {anchorLabel}
+                          {country.country_name}
                         </div>
                       ) : null}
                     </button>
@@ -267,7 +294,7 @@ export default function CustomPointKindContent({
         </ScrollArea>
       ) : (
         <CreateForm
-          tree={tree}
+          activeCountryId={activeCountryId}
           name={name}
           setName={setName}
           type={type}
@@ -284,7 +311,7 @@ export default function CustomPointKindContent({
 }
 
 interface CreateFormProps {
-  tree: CountryTreeResponse | null;
+  activeCountryId: string;
   name: string;
   setName: (s: string) => void;
   type: "city" | "zone" | "area" | "venue";
@@ -297,7 +324,7 @@ interface CreateFormProps {
 }
 
 function CreateForm({
-  tree,
+  activeCountryId,
   name,
   setName,
   type,
@@ -308,7 +335,36 @@ function CreateForm({
   onSubmit,
   onCancel,
 }: CreateFormProps) {
+  const [tree, setTree] = useState<CountryTreeResponse | null>(
+    treeCache.get(activeCountryId) ?? null,
+  );
   const [anchorSearch, setAnchorSearch] = useState("");
+
+  useEffect(() => {
+    if (!activeCountryId) return;
+    if (treeCache.has(activeCountryId)) {
+      setTree(treeCache.get(activeCountryId) ?? null);
+      return;
+    }
+    let cancelled = false;
+    setTree(null);
+    fetchCountryTree(activeCountryId).then((r) => {
+      if (cancelled || !r.data) return;
+      treeCache.set(activeCountryId, r.data);
+      setTree(r.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeCountryId]);
+
+  // Switching country in the modal clears any anchor that came from a
+  // previous country to avoid mismatched-country submissions.
+  useEffect(() => {
+    setAnchor(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCountryId]);
+
   const flat = useMemo(() => {
     if (!tree) return [] as Array<AnchorPick>;
     const out: Array<AnchorPick> = [];
@@ -369,7 +425,9 @@ function CreateForm({
       </div>
 
       <div className="space-y-1">
-        <Label className="text-xs">Anchor (city / zone / area)</Label>
+        <Label className="text-xs">
+          Anchor (city / zone / area in {tree?.country_name ?? "current country"})
+        </Label>
         {anchor ? (
           <div className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
             <span className="truncate">
@@ -418,6 +476,10 @@ function CreateForm({
             </ScrollArea>
           </>
         )}
+        <p className="text-[11px] text-muted-foreground">
+          Switch the country in the modal header to anchor to a different
+          country.
+        </p>
       </div>
 
       <div className="flex items-center justify-end gap-2 pt-1">

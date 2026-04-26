@@ -167,31 +167,43 @@ export function buildStopsPayload(state: StopsState) {
   return rows;
 }
 
-// ── Label hydration cache (module-scoped, keyed by `${kind}:${id}`).
+// ── Label & country hydration cache (module-scoped, keyed by `${kind}:${id}`).
 // Keeps re-fetches bounded across multiple stops sections on the page.
-const labelCache = new Map<string, string>();
+type HydratedMeta = {
+  label?: string;
+  country_id?: string;
+  country_name?: string;
+};
+const metaCache = new Map<string, HydratedMeta>();
 const customListCache = { fetched: false };
 
 function selKey(s: GeoSelection): string {
   return `${s.kind}:${s.id}`;
 }
 
-async function hydrateLabels(
+async function hydrateMeta(
   selections: GeoSelection[],
-): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
+): Promise<Record<string, HydratedMeta>> {
+  const out: Record<string, HydratedMeta> = {};
   const needGeo: string[] = [];
   const needCustom: string[] = [];
 
   for (const s of selections) {
     const key = selKey(s);
-    if (s.label) {
-      labelCache.set(key, s.label);
-      out[key] = s.label;
+    // Selections coming back from the modal carry their own label +
+    // country fields; cache them and skip the network round-trip.
+    if (s.label || s.country_id) {
+      const meta: HydratedMeta = {
+        label: s.label,
+        country_id: s.country_id,
+        country_name: s.country_name,
+      };
+      metaCache.set(key, { ...metaCache.get(key), ...meta });
+      out[key] = metaCache.get(key)!;
       continue;
     }
-    const cached = labelCache.get(key);
-    if (cached) {
+    const cached = metaCache.get(key);
+    if (cached?.label) {
       out[key] = cached;
       continue;
     }
@@ -199,44 +211,79 @@ async function hydrateLabels(
     else if (s.kind === "dmc_custom") needCustom.push(s.id);
   }
 
-  // Fetch geo entities (with ancestors) one by one. Tree endpoint is fast
-  // and these are typically few (just the saved selections per package).
+  // Fetch geo entities (with ancestors) in parallel. Each returns the leaf
+  // breadcrumb plus a country ancestor we use for cross-country chips.
   if (needGeo.length > 0) {
     const fetched = await Promise.all(
       needGeo.map(async (id) => {
         const r = await fetchEntity(id);
-        if (!r.data) return [id, null] as const;
+        if (!r.data) return [id, null as HydratedMeta | null] as const;
         const a = r.data.ancestors;
         const parts = [r.data.name];
         if (a.zone) parts.unshift(a.zone.name);
         if (a.city) parts.unshift(a.city.name);
-        return [id, parts.join(" › ")] as const;
+        const meta: HydratedMeta = {
+          label: parts.join(" › "),
+          country_id: a.country?.id,
+          country_name: a.country?.name,
+        };
+        return [id, meta] as const;
       }),
     );
-    for (const [id, label] of fetched) {
+    for (const [id, meta] of fetched) {
+      if (!meta) continue;
       const key = `geo:${id}`;
-      if (label) {
-        labelCache.set(key, label);
-        out[key] = label;
-      }
+      metaCache.set(key, { ...metaCache.get(key), ...meta });
+      out[key] = metaCache.get(key)!;
     }
   }
 
-  // Custom locations come from a single list fetch (DMC-scoped). Cache
-  // module-wide so re-opens are free.
+  // Custom locations: fetch the DMC list once for the name, then resolve
+  // each anchor's country via the entity endpoint (in parallel).
   if (needCustom.length > 0) {
     if (!customListCache.fetched) {
       const r = await listCustomLocations();
       customListCache.fetched = true;
       if (r.data) {
         for (const loc of r.data) {
-          labelCache.set(`dmc_custom:${loc.id}`, loc.name);
+          const key = `dmc_custom:${loc.id}`;
+          const prior = metaCache.get(key) ?? {};
+          metaCache.set(key, { ...prior, label: loc.name });
         }
       }
     }
+    // Resolve each custom location's anchor country once, in parallel.
+    // Re-fetching the list to read parent_geo_id keeps this scoped here.
+    const list = (await listCustomLocations()).data ?? [];
+    const byId = new Map(list.map((l) => [l.id, l] as const));
+    const anchorIds = Array.from(
+      new Set(
+        needCustom
+          .map((id) => byId.get(id)?.parent_geo_id)
+          .filter((v): v is string => Boolean(v)),
+      ),
+    );
+    const resolved = await Promise.all(
+      anchorIds.map(async (anchorId) => {
+        const r = await fetchEntity(anchorId);
+        const c = r.data?.ancestors.country ?? null;
+        return [anchorId, c] as const;
+      }),
+    );
+    const anchorCountry = new Map(resolved);
     for (const id of needCustom) {
-      const cached = labelCache.get(`dmc_custom:${id}`);
-      if (cached) out[`dmc_custom:${id}`] = cached;
+      const key = `dmc_custom:${id}`;
+      const loc = byId.get(id);
+      const c = loc?.parent_geo_id
+        ? anchorCountry.get(loc.parent_geo_id) ?? null
+        : null;
+      const meta: HydratedMeta = {
+        label: metaCache.get(key)?.label ?? loc?.name,
+        country_id: c?.id,
+        country_name: c?.name,
+      };
+      metaCache.set(key, { ...metaCache.get(key), ...meta });
+      out[key] = metaCache.get(key)!;
     }
   }
 
@@ -246,16 +293,28 @@ async function hydrateLabels(
 interface FieldProps {
   label: string;
   selections: GeoSelection[];
-  labelMap: Record<string, string>;
+  metaMap: Record<string, HydratedMeta>;
   onChange: (next: GeoSelection[]) => void;
   countryId: string | null;
   placeholder: string;
 }
 
+function chipText(s: GeoSelection, meta: HydratedMeta | undefined, primaryCountryId: string | null): string {
+  const base = s.label ?? meta?.label ?? "Loading…";
+  const countryId = s.country_id ?? meta?.country_id;
+  const countryName = s.country_name ?? meta?.country_name;
+  // Show country prefix only when the selection is from a country other
+  // than the transfer's primary one. Same-country chips stay short.
+  if (countryName && countryId && primaryCountryId && countryId !== primaryCountryId) {
+    return `${countryName} › ${base}`;
+  }
+  return base;
+}
+
 function GeoSelectionField({
   label,
   selections,
-  labelMap,
+  metaMap,
   onChange,
   countryId,
   placeholder,
@@ -280,7 +339,7 @@ function GeoSelectionField({
           <div className="flex flex-wrap gap-1">
             {selections.map((s) => {
               const key = selKey(s);
-              const text = s.label ?? labelMap[key] ?? "Loading…";
+              const text = chipText(s, metaMap[key], countryId);
               return (
                 <Badge
                   key={key}
@@ -322,7 +381,14 @@ function GeoSelectionField({
           // Carry resolved labels from the picker forward so the chip can
           // render without an extra fetch.
           for (const s of next) {
-            if (s.label) labelCache.set(selKey(s), s.label);
+            const key = selKey(s);
+            const prior = metaCache.get(key) ?? {};
+            metaCache.set(key, {
+              ...prior,
+              label: s.label ?? prior.label,
+              country_id: s.country_id ?? prior.country_id,
+              country_name: s.country_name ?? prior.country_name,
+            });
           }
           onChange(next);
         }}
@@ -337,17 +403,17 @@ export default function StopsSection({
   onChange,
   countryId,
 }: StopsSectionProps) {
-  const [labelMap, setLabelMap] = useState<StopsLabelMap>({});
+  const [metaMap, setMetaMap] = useState<Record<string, HydratedMeta>>({});
 
-  // Hydrate labels for any pre-selected items missing labels in cache.
+  // Hydrate labels + country metadata for pre-selected items.
   useEffect(() => {
     const all: GeoSelection[] = [...value.origin, ...value.destination];
     if (all.length === 0) return;
     let cancelled = false;
     (async () => {
-      const fetched = await hydrateLabels(all);
+      const fetched = await hydrateMeta(all);
       if (cancelled) return;
-      setLabelMap((prev) => ({ ...prev, ...fetched }));
+      setMetaMap((prev) => ({ ...prev, ...fetched }));
     })();
     return () => {
       cancelled = true;
@@ -419,7 +485,7 @@ export default function StopsSection({
         <GeoSelectionField
           label="Origin"
           selections={value.origin}
-          labelMap={labelMap}
+          metaMap={metaMap}
           onChange={setOrigin}
           countryId={countryId}
           placeholder="Click to pick origin…"
@@ -427,7 +493,7 @@ export default function StopsSection({
         <GeoSelectionField
           label="Destination"
           selections={value.destination}
-          labelMap={labelMap}
+          metaMap={metaMap}
           onChange={setDestination}
           countryId={countryId}
           placeholder="Click to pick destination…"
