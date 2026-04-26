@@ -18,6 +18,7 @@ export interface AgePoliciesResponse {
 export interface ContractRoom {
   id?: string | null;
   name: string;
+  rate_type?: string | null; // 'PRPN' | 'PPPN' (free-form on the wire)
   min_occupancy?: number | null;
   normal_occupancy?: number | null;
   max_total_occupancy?: number | null;
@@ -25,6 +26,7 @@ export interface ContractRoom {
   max_adults_with_children?: number | null;
   allow_children: boolean;
   max_children?: number | null;
+  max_children_sharing_bed_per_bedroom?: number | null;
   allow_teens: boolean;
   max_teens?: number | null;
   allow_infants: boolean;

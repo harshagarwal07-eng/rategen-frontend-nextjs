@@ -50,6 +50,7 @@ import SeasonsSection, {
   wrapSeasons,
 } from "./sections/seasons-section";
 import RoomCategoriesSection, {
+  RoomScopeLabels,
   RoomsErrors,
   RoomsLocalState,
   stripRooms,
@@ -327,6 +328,30 @@ function ContractEditor({
     [roomsState]
   );
 
+  // Which Children/Teens/Infants subsections to render on a room card.
+  // Driven by Rooms-scope age bands that have data set (issue 6).
+  const scopeLabels: RoomScopeLabels = useMemo(() => {
+    const filledLabels = new Set<string>(
+      ageState
+        .filter((b) => !!b.rooms)
+        .map((b) => b.label.trim().toLowerCase())
+    );
+    return {
+      hasAny: filledLabels.size > 0,
+      children: filledLabels.has("child") || filledLabels.has("children"),
+      teens: filledLabels.has("teenager") || filledLabels.has("teen"),
+      infants: filledLabels.has("infant") || filledLabels.has("infants"),
+    };
+  }, [ageState]);
+
+  const agePoliciesAnchorRef = useRef<HTMLDivElement>(null);
+  const jumpToAgePolicies = useCallback(() => {
+    agePoliciesAnchorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, []);
+
   // Roll-up dirty across all sections.
   useEffect(() => {
     onDirtyChange(ageDirty || seasonsDirty || roomsDirty || taxesDirty);
@@ -522,18 +547,20 @@ function ContractEditor({
       )}
 
       <div className="space-y-3">
-        <FDCard
-          title="AGE POLICY"
-          count={`${ageState.filter((b) => b.rooms || b.meals).length} bands`}
-          defaultOpen
-        >
-          <AgePoliciesSection
-            state={ageState}
-            onChange={setAgeState}
-            disabled={isArchived}
-            onErrorsChange={setAgeErrors}
-          />
-        </FDCard>
+        <div ref={agePoliciesAnchorRef}>
+          <FDCard
+            title="AGE POLICY"
+            count={`${ageState.filter((b) => b.rooms || b.meals).length} bands`}
+            defaultOpen
+          >
+            <AgePoliciesSection
+              state={ageState}
+              onChange={setAgeState}
+              disabled={isArchived}
+              onErrorsChange={setAgeErrors}
+            />
+          </FDCard>
+        </div>
 
         <FDCard
           title="SEASONS"
@@ -558,6 +585,8 @@ function ContractEditor({
             onChange={setRoomsState}
             disabled={isArchived}
             onErrorsChange={setRoomsErrors}
+            scopeLabels={scopeLabels}
+            onJumpToAgePolicies={jumpToAgePolicies}
           />
         </FDCard>
 
