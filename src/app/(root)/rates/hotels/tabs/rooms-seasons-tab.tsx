@@ -22,6 +22,7 @@ import {
 import { listContracts } from "@/data-access/dmc-contracts";
 import {
   getAgePolicies,
+  listContractRooms,
   listContractSeasons,
 } from "@/data-access/contract-tab2";
 import { DmcContract } from "@/types/dmc-contracts";
@@ -37,6 +38,12 @@ import SeasonsSection, {
   stripSeasons,
   wrapSeasons,
 } from "./sections/seasons-section";
+import RoomCategoriesSection, {
+  RoomsErrors,
+  RoomsLocalState,
+  stripRooms,
+  wrapRooms,
+} from "./sections/room-categories-section";
 
 export interface RoomsSeasonsTabHandle {
   saveAll: () => Promise<void>;
@@ -196,10 +203,36 @@ function ContractEditor({
     return !seasonsStatesEqual(seasonsState, seasonsSnapshot);
   }, [seasonsLoaded, seasonsState, seasonsSnapshot]);
 
+  // ─── Room Categories ────────────────────────────────────────────────
+  const [roomsState, setRoomsState] = useState<RoomsLocalState>([]);
+  const [roomsSnapshot, setRoomsSnapshot] = useState<RoomsLocalState>([]);
+  const [, setRoomsErrors] = useState<RoomsErrors>({});
+  const [roomsLoaded, setRoomsLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRoomsLoaded(false);
+    listContractRooms(selectedContractId).then((res) => {
+      if (cancelled) return;
+      const initial = wrapRooms(res.data ?? []);
+      setRoomsState(initial);
+      setRoomsSnapshot(initial);
+      setRoomsLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedContractId]);
+
+  const roomsDirty = useMemo(() => {
+    if (!roomsLoaded) return false;
+    return !roomsStatesEqual(roomsState, roomsSnapshot);
+  }, [roomsLoaded, roomsState, roomsSnapshot]);
+
   // Roll-up dirty across all sections wired so far.
   useEffect(() => {
-    onDirtyChange(ageDirty || seasonsDirty);
-  }, [ageDirty, seasonsDirty, onDirtyChange]);
+    onDirtyChange(ageDirty || seasonsDirty || roomsDirty);
+  }, [ageDirty, seasonsDirty, roomsDirty, onDirtyChange]);
 
   return (
     <div className="space-y-6">
@@ -245,11 +278,16 @@ function ContractEditor({
         </BorderedCard>
 
         <BorderedCard
-          title={`ROOM CATEGORIES   0 rooms`}
+          title={`ROOM CATEGORIES   ${roomsState.length} room${roomsState.length === 1 ? "" : "s"}`}
           collapsible
           defaultOpen
         >
-          <div className="text-sm text-muted-foreground">Coming in Stage 4.</div>
+          <RoomCategoriesSection
+            state={roomsState}
+            onChange={setRoomsState}
+            disabled={isArchived}
+            onErrorsChange={setRoomsErrors}
+          />
         </BorderedCard>
 
         <BorderedCard
@@ -273,6 +311,10 @@ function ageStatesEqual(a: AgePoliciesLocalState, b: AgePoliciesLocalState): boo
 
 function seasonsStatesEqual(a: SeasonsLocalState, b: SeasonsLocalState): boolean {
   return JSON.stringify(stripSeasons(a)) === JSON.stringify(stripSeasons(b));
+}
+
+function roomsStatesEqual(a: RoomsLocalState, b: RoomsLocalState): boolean {
+  return JSON.stringify(stripRooms(a)) === JSON.stringify(stripRooms(b));
 }
 
 function ContractSelectorRow({
