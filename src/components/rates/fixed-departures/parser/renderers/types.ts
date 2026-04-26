@@ -8,7 +8,7 @@ export interface ItineraryDay {
   title: string | null;
   country: string | null;
   overnight_city: string | null;
-  meals_included: string | null;
+  meals_included: string[] | null;
   includes: string | null;
   description: string | null;
   accommodation_note: string | null;
@@ -24,22 +24,22 @@ export interface ItineraryOutput {
 }
 
 export interface InclusionsExclusionsOutput {
-  inc_hotels?: string | null;
-  inc_meals?: string | null;
-  inc_guide?: string | null;
-  inc_tours?: string | null;
-  inc_transfers?: string | null;
-  inc_taxes?: string | null;
-  inc_visa?: string | null;
-  inc_other?: string | null;
-  exc_hotels?: string | null;
-  exc_meals?: string | null;
-  exc_guide?: string | null;
-  exc_tours?: string | null;
-  exc_transfers?: string | null;
-  exc_taxes?: string | null;
-  exc_visa?: string | null;
-  exc_other?: string | null;
+  inc_hotels?: string[] | null;
+  inc_meals?: string[] | null;
+  inc_guide?: string[] | null;
+  inc_tours?: string[] | null;
+  inc_transfers?: string[] | null;
+  inc_taxes?: string[] | null;
+  inc_visa?: string[] | null;
+  inc_other?: string[] | null;
+  exc_hotels?: string[] | null;
+  exc_meals?: string[] | null;
+  exc_guide?: string[] | null;
+  exc_tours?: string[] | null;
+  exc_transfers?: string[] | null;
+  exc_taxes?: string[] | null;
+  exc_visa?: string[] | null;
+  exc_other?: string[] | null;
 }
 
 export interface DeparturePricing {
@@ -84,8 +84,8 @@ export interface Addon {
   price_child?: number | null;
   price_teen?: number | null;
   price_infant?: number | null;
-  inclusions?: string | null;
-  exclusions?: string | null;
+  inclusions?: string[] | null;
+  exclusions?: string[] | null;
   itinerary_days?: Array<Record<string, unknown>> | null;
   departure_pricing?: Array<Record<string, unknown>> | null;
 }

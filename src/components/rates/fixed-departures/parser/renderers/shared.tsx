@@ -25,9 +25,11 @@ export function fmtValue(
   return valueType === "percentage" ? `${v}%` : v.toLocaleString();
 }
 
-export function splitList(s: string | null | undefined): string[] {
+export function splitList(s: string | string[] | null | undefined): string[] {
   if (!s) return [];
-  return s.split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
+  if (Array.isArray(s)) return s.map((x) => x.trim()).filter(Boolean);
+  if (typeof s === "string") return s.split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
+  return [];
 }
 
 export function EmptyState({ children }: { children: React.ReactNode }) {

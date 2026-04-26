@@ -24,7 +24,7 @@ export function InclusionsExclusionsRenderer({
     ...c,
     items: splitList(
       data[`inc_${c.key}` as keyof InclusionsExclusionsOutput] as
-        | string
+        | string[]
         | null,
     ),
   })).filter((c) => c.items.length > 0);
@@ -32,7 +32,7 @@ export function InclusionsExclusionsRenderer({
     ...c,
     items: splitList(
       data[`exc_${c.key}` as keyof InclusionsExclusionsOutput] as
-        | string
+        | string[]
         | null,
     ),
   })).filter((c) => c.items.length > 0);
