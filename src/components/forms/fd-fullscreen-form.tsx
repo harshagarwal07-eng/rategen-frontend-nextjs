@@ -94,6 +94,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   const mode: "create" | "edit" = packageId ? "edit" : "create";
 
   useEffect(() => {
+    console.count("[FD-DEBUG] Dialog:open-reset-effect");
     if (open) {
       setActiveTab("general");
       setCreatedId(null);
@@ -155,6 +156,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   // level so it doesn't depend on Tab 5 being mounted; Tab 5 just re-reads
   // departures on next mount.
   useEffect(() => {
+    console.count("[FD-DEBUG] Dialog:duration-recalc-effect");
     if (!effectiveId || !open) return;
     const current = (pkg?.duration_nights as number | null | undefined) ?? null;
     if (current == null) return;

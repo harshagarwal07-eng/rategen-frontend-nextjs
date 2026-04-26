@@ -148,6 +148,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
   const baselineRef = useRef<IFDGeneralInfo | null>(null);
 
   useEffect(() => {
+    console.count("[FD-DEBUG] Tab1:hydrate-effect");
     if (!initialData) return;
     const next: IFDGeneralInfo = {
       id: initialData.id,
@@ -204,6 +205,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
   // country_ids starts as [] and was never non-empty.
   const prevCountriesLenRef = useRef(0);
   useEffect(() => {
+    console.count("[FD-DEBUG] Tab1:country-clear-effect");
     const prev = prevCountriesLenRef.current;
     prevCountriesLenRef.current = selectedCountries.length;
     if (selectedCountries.length === 0 && prev > 0) {
@@ -345,6 +347,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
   onDirtyChangeRef.current = onDirtyChange;
   const lastReportedDirty = useRef<boolean | undefined>(undefined);
   useEffect(() => {
+    console.count("[FD-DEBUG] Tab1:dirty-report-effect");
     if (lastReportedDirty.current !== isDirty) {
       lastReportedDirty.current = isDirty;
       onDirtyChangeRef.current?.(isDirty);
