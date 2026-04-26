@@ -20,7 +20,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { listContracts } from "@/data-access/dmc-contracts";
-import { getAgePolicies } from "@/data-access/contract-tab2";
+import {
+  getAgePolicies,
+  listContractSeasons,
+} from "@/data-access/contract-tab2";
 import { DmcContract } from "@/types/dmc-contracts";
 import AgePoliciesSection, {
   AgePoliciesErrors,
@@ -28,6 +31,12 @@ import AgePoliciesSection, {
   stripBands,
   wrapBands,
 } from "./sections/age-policies-section";
+import SeasonsSection, {
+  SeasonsErrors,
+  SeasonsLocalState,
+  stripSeasons,
+  wrapSeasons,
+} from "./sections/seasons-section";
 
 export interface RoomsSeasonsTabHandle {
   saveAll: () => Promise<void>;
@@ -161,10 +170,36 @@ function ContractEditor({
     return !ageStatesEqual(ageState, ageSnapshot);
   }, [ageLoaded, ageState, ageSnapshot]);
 
-  // Roll-up dirty across all sections (only age policies wired so far).
+  // ─── Seasons ─────────────────────────────────────────────────────────
+  const [seasonsState, setSeasonsState] = useState<SeasonsLocalState>([]);
+  const [seasonsSnapshot, setSeasonsSnapshot] = useState<SeasonsLocalState>([]);
+  const [, setSeasonsErrors] = useState<SeasonsErrors>({});
+  const [seasonsLoaded, setSeasonsLoaded] = useState(false);
+
   useEffect(() => {
-    onDirtyChange(ageDirty);
-  }, [ageDirty, onDirtyChange]);
+    let cancelled = false;
+    setSeasonsLoaded(false);
+    listContractSeasons(selectedContractId).then((res) => {
+      if (cancelled) return;
+      const initial = wrapSeasons(res.data ?? []);
+      setSeasonsState(initial);
+      setSeasonsSnapshot(initial);
+      setSeasonsLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedContractId]);
+
+  const seasonsDirty = useMemo(() => {
+    if (!seasonsLoaded) return false;
+    return !seasonsStatesEqual(seasonsState, seasonsSnapshot);
+  }, [seasonsLoaded, seasonsState, seasonsSnapshot]);
+
+  // Roll-up dirty across all sections wired so far.
+  useEffect(() => {
+    onDirtyChange(ageDirty || seasonsDirty);
+  }, [ageDirty, seasonsDirty, onDirtyChange]);
 
   return (
     <div className="space-y-6">
@@ -197,11 +232,16 @@ function ContractEditor({
         </BorderedCard>
 
         <BorderedCard
-          title={`SEASONS   0 seasons`}
+          title={`SEASONS   ${seasonsState.length} season${seasonsState.length === 1 ? "" : "s"}`}
           collapsible
           defaultOpen={false}
         >
-          <div className="text-sm text-muted-foreground">Coming in Stage 3.</div>
+          <SeasonsSection
+            state={seasonsState}
+            onChange={setSeasonsState}
+            disabled={isArchived}
+            onErrorsChange={setSeasonsErrors}
+          />
         </BorderedCard>
 
         <BorderedCard
@@ -229,6 +269,10 @@ function ageStatesEqual(a: AgePoliciesLocalState, b: AgePoliciesLocalState): boo
     JSON.stringify(stripBands(a.rooms)) === JSON.stringify(stripBands(b.rooms)) &&
     JSON.stringify(stripBands(a.meals)) === JSON.stringify(stripBands(b.meals))
   );
+}
+
+function seasonsStatesEqual(a: SeasonsLocalState, b: SeasonsLocalState): boolean {
+  return JSON.stringify(stripSeasons(a)) === JSON.stringify(stripSeasons(b));
 }
 
 function ContractSelectorRow({
