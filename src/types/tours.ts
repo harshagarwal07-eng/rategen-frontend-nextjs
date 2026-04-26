@@ -199,6 +199,8 @@ export interface TourListRow {
   geo_id: string | null;
   currency_id: string | null;
   markup_pct: number | null;
+  latitude: number | null;
+  longitude: number | null;
   is_preferred: boolean | null;
   created_at: string;
 }
@@ -250,8 +252,6 @@ export interface TourCurrencyOption {
 export interface TourDetail extends TourListRow {
   description?: string | null;
   website?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
   tour_images?: TourImageRow[];
   tour_addons?: unknown[];
   tour_packages?: unknown[];
