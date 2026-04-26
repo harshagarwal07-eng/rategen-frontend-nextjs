@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -9,11 +11,13 @@ import {
   Search,
   ChevronUp,
   ChevronDown,
+  Sparkles,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ParserSessionsList } from "@/components/rates/fixed-departures/parser/parser-sessions-list";
 import {
   Table,
   TableHeader,
@@ -57,6 +61,8 @@ const PAGE_SIZE = 25;
 
 export function FDList() {
   const qc = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [countryFilter, setCountryFilter] = useState<string>("all");
   const [cityFilter, setCityFilter] = useState<string>("all");
@@ -66,10 +72,27 @@ export function FDList() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedPackageId, setExpandedPackageId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FDPackageListRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Handoff from the FD parser save flow: /rates/fixed-departures?edit=<id>
+  // auto-opens the edit overlay for that package. We strip ?edit= from the
+  // URL with router.replace so refreshing doesn't re-open the overlay.
+  useEffect(() => {
+    const editId = searchParams.get("edit");
+    if (!editId) return;
+    setEditingId(editId);
+    setOverlayOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("edit");
+    const qs = next.toString();
+    router.replace(qs ? `/rates/fixed-departures?${qs}` : "/rates/fixed-departures", {
+      scroll: false,
+    });
+  }, [searchParams, router]);
 
   const { data: packages = [], isLoading } = useQuery({
     queryKey: ["fd-packages"],
@@ -248,7 +271,13 @@ export function FDList() {
               </SelectContent>
             </Select>
 
-            <div className="ml-auto">
+            <div className="ml-auto flex items-center gap-2">
+              <Button asChild size="sm" variant="outline">
+                <Link href="/rates/fixed-departures/parser">
+                  <Sparkles className="h-4 w-4" />
+                  Add Using AI
+                </Link>
+              </Button>
               <Button onClick={openCreate} size="sm">
                 <Plus className="h-4 w-4" />
                 New Package
@@ -288,7 +317,7 @@ export function FDList() {
               <TableHead>Next Departure</TableHead>
               <TableHead>Departures</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-[60px]"></TableHead>
+              <TableHead className="w-[100px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -299,54 +328,94 @@ export function FDList() {
                 </TableCell>
               </TableRow>
             ) : (
-              pageRows.map((pkg) => (
-                <TableRow
-                  key={pkg.id}
-                  className="cursor-pointer hover:bg-muted/40"
-                  onClick={() => openEdit(pkg.id)}
-                >
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      checked={selectedIds.has(pkg.id)}
-                      onCheckedChange={() => toggleSelect(pkg.id)}
-                      aria-label="Select row"
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{pkg.name}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">
-                    {(pkg.country_names ?? []).join(", ") || "—"}
-                  </TableCell>
-                  <TableCell className="max-w-[200px] truncate">
-                    {(pkg.city_names ?? []).join(", ") || "—"}
-                  </TableCell>
-                  <TableCell>{pkg.duration_nights ? `${pkg.duration_nights} nights` : "—"}</TableCell>
-                  <TableCell>{pkg.next_departure ?? "—"}</TableCell>
-                  <TableCell>{pkg.departure_count ?? 0}</TableCell>
-                  <TableCell>
-                    <Badge variant={pkg.status === "active" ? "default" : "secondary"}>
-                      {pkg.status ?? "—"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEdit(pkg.id)}>Edit</DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setDeleteTarget(pkg)}
-                          className="text-destructive"
-                        >
-                          Deactivate
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
+              pageRows.map((pkg) => {
+                const isExpanded = expandedPackageId === pkg.id;
+                return (
+                  <Fragment key={pkg.id}>
+                    <TableRow
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() => openEdit(pkg.id)}
+                    >
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedIds.has(pkg.id)}
+                          onCheckedChange={() => toggleSelect(pkg.id)}
+                          aria-label="Select row"
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{pkg.name}</TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        {(pkg.country_names ?? []).join(", ") || "—"}
+                      </TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        {(pkg.city_names ?? []).join(", ") || "—"}
+                      </TableCell>
+                      <TableCell>{pkg.duration_nights ? `${pkg.duration_nights} nights` : "—"}</TableCell>
+                      <TableCell>{pkg.next_departure ?? "—"}</TableCell>
+                      <TableCell>{pkg.departure_count ?? 0}</TableCell>
+                      <TableCell>
+                        <Badge variant={pkg.status === "active" ? "default" : "secondary"}>
+                          {pkg.status ?? "—"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell
+                        className="w-[100px]"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 ${isExpanded ? "bg-blue-100 text-blue-700" : ""}`}
+                            onClick={() =>
+                              setExpandedPackageId((curr) =>
+                                curr === pkg.id ? null : pkg.id,
+                              )
+                            }
+                            aria-label="View AI parse sessions"
+                            title="View AI parse sessions"
+                          >
+                            <Sparkles className="h-4 w-4" />
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEdit(pkg.id)}>Edit</DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setDeleteTarget(pkg)}
+                                className="text-destructive"
+                              >
+                                Deactivate
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && (
+                      <TableRow className="bg-blue-50/50 hover:bg-blue-50/50">
+                        <TableCell colSpan={9} className="p-4">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              <Sparkles className="h-3.5 w-3.5 text-primary" />
+                              AI Parse Sessions
+                            </div>
+                            <ParserSessionsList
+                              packageId={pkg.id}
+                              limit={50}
+                              emptyMessage="No parse sessions for this package."
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })
             )}
           </TableBody>
         </Table>
