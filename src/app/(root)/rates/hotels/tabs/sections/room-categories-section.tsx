@@ -11,11 +11,10 @@
 // - Max Children split into Max Children + Max Children (Sharing bed)
 // - Empty state in the kids block when no Rooms-scope bands exist at all
 
-import { useEffect, useMemo } from "react";
-import { ArrowUpRight, Copy, Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowUpRight, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -24,8 +23,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FDCard } from "@/components/ui/fd-card";
+import { cn } from "@/lib/utils";
 import { ContractRoom } from "@/types/contract-tab2";
+
+const SECTION_LABEL_CLS =
+  "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground";
 
 export interface LocalRoom extends ContractRoom {
   _localId: string;
@@ -152,68 +154,76 @@ export default function RoomCategoriesSection({
     onErrorsChange?.(errors);
   }, [errors, onErrorsChange]);
 
-  const addRoom = () => onChange([...state, newRoom()]);
+  // Per-room open state lives at the section level; new rooms auto-open.
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const toggleOpen = (id: string) =>
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const handleAddRoom = () => {
+    const r = newRoom();
+    onChange([...state, r]);
+    setOpenIds((prev) => new Set(prev).add(r._localId));
+  };
   const removeRoom = (id: string) =>
     onChange(state.filter((r) => r._localId !== id));
   const duplicateRoom = (id: string) => {
     const src = state.find((r) => r._localId === id);
     if (!src) return;
+    const copyId = newLocalId();
     onChange([
       ...state,
-      { ...src, _localId: newLocalId(), id: null, name: `${src.name} (Copy)`.trim() },
+      { ...src, _localId: copyId, id: null, name: `${src.name} (Copy)`.trim() },
     ]);
+    setOpenIds((prev) => new Set(prev).add(copyId));
   };
   const updateRoom = (id: string, patch: Partial<LocalRoom>) =>
     onChange(state.map((r) => (r._localId === id ? { ...r, ...patch } : r)));
 
-  if (state.length === 0) {
-    return (
-      <div className="space-y-3">
-        <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No room categories defined. Click &ldquo;+ Add Room&rdquo; to start.
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addRoom}
-          disabled={disabled}
-        >
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add Room
-        </Button>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex items-start justify-between">
+        <p className="text-[11px] text-muted-foreground/80">
+          One card per saleable room category on this contract.
+        </p>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={addRoom}
+          onClick={handleAddRoom}
           disabled={disabled}
         >
           <Plus className="h-3.5 w-3.5 mr-1" /> Add Room
         </Button>
       </div>
 
-      <div className="space-y-2">
-        {state.map((r) => (
-          <RoomCard
-            key={r._localId}
-            room={r}
-            errors={errors[r._localId] ?? {}}
-            disabled={disabled}
-            scopeLabels={scopeLabels}
-            onJumpToAgePolicies={onJumpToAgePolicies}
-            onPatch={(patch) => updateRoom(r._localId, patch)}
-            onDuplicate={() => duplicateRoom(r._localId)}
-            onDelete={() => removeRoom(r._localId)}
-          />
-        ))}
-      </div>
+      {state.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground border border-dashed rounded-md">
+          <p className="text-sm">No rooms yet. Click &ldquo;Add Room&rdquo;.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {state.map((r) => (
+            <RoomCard
+              key={r._localId}
+              room={r}
+              errors={errors[r._localId] ?? {}}
+              disabled={disabled}
+              scopeLabels={scopeLabels}
+              onJumpToAgePolicies={onJumpToAgePolicies}
+              isOpen={openIds.has(r._localId)}
+              onToggle={() => toggleOpen(r._localId)}
+              onPatch={(patch) => updateRoom(r._localId, patch)}
+              onDuplicate={() => duplicateRoom(r._localId)}
+              onDelete={() => removeRoom(r._localId)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -224,6 +234,8 @@ function RoomCard({
   disabled,
   scopeLabels,
   onJumpToAgePolicies,
+  isOpen,
+  onToggle,
   onPatch,
   onDuplicate,
   onDelete,
@@ -233,84 +245,108 @@ function RoomCard({
   disabled: boolean;
   scopeLabels: RoomScopeLabels;
   onJumpToAgePolicies?: () => void;
+  isOpen: boolean;
+  onToggle: () => void;
   onPatch: (patch: Partial<LocalRoom>) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
-  const titleText = room.name.trim() || "(unnamed room)";
+  const titleText = room.name.trim() || "Unnamed Room";
   const summary = room.max_total_occupancy != null
     ? `max occupancy ${room.max_total_occupancy}`
     : "occupancy not set";
 
   return (
-    <FDCard
-      title={
-        <span className="flex items-center gap-2">
-          <span className="font-medium">{titleText}</span>
+    <div className="rounded-md border bg-muted/20">
+      <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
+        <button
+          type="button"
+          className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted shrink-0"
+          onClick={onToggle}
+          aria-label={isOpen ? "Collapse room" : "Expand room"}
+        >
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 transition-transform duration-200",
+              isOpen && "rotate-180"
+            )}
+          />
+        </button>
+
+        <button
+          type="button"
+          className="flex flex-1 items-center gap-2 min-w-0 text-left"
+          onClick={onToggle}
+        >
+          <span
+            className={cn(
+              "text-xs font-semibold truncate",
+              !room.name.trim() && "text-muted-foreground italic"
+            )}
+          >
+            {titleText}
+          </span>
           {room.rate_type && (
-            <span className="rounded bg-primary/10 text-primary text-[10px] font-semibold px-1.5 py-0.5">
+            <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
               {room.rate_type}
             </span>
           )}
-          <span className="text-[11px] text-muted-foreground font-normal">
+          <span className="text-xs text-muted-foreground truncate">
             {summary}
           </span>
-        </span>
-      }
-      defaultOpen
-      rightSlot={
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            onClick={onDuplicate}
-            disabled={disabled}
-            aria-label="Duplicate room"
-            title="Duplicate room"
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={onDelete}
-            disabled={disabled}
-            aria-label="Delete room"
-            title="Delete room"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-5">
+        </button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={onDuplicate}
+          disabled={disabled}
+          aria-label="Duplicate room"
+          title="Duplicate room"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={onDelete}
+          disabled={disabled}
+          aria-label="Delete room"
+          title="Delete room"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {isOpen && (
+        <div className="px-3 pb-3 pt-2 border-t flex flex-col gap-5">
         {/* Identity row: Name + Rate Type (issue 9) */}
         <div className="grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
-          <div>
-            <Label className="text-xs">Name</Label>
+          <div className="space-y-1">
+            <label className={SECTION_LABEL_CLS}>Name</label>
             <Input
               value={room.name}
               disabled={disabled}
               onChange={(e) => onPatch({ name: e.target.value })}
-              className="h-9 mt-1"
+              className="h-8 text-sm"
               placeholder="e.g. Deluxe King"
             />
             {errors.name && (
-              <div className="text-[11px] text-destructive mt-1">{errors.name}</div>
+              <p className="mt-0.5 text-[10px] text-destructive">{errors.name}</p>
             )}
           </div>
-          <div>
-            <Label className="text-xs">Rate Type</Label>
+          <div className="space-y-1">
+            <label className={SECTION_LABEL_CLS}>Rate Type</label>
             <Select
               value={room.rate_type ?? undefined}
               onValueChange={(v) => onPatch({ rate_type: v })}
               disabled={disabled}
             >
-              <SelectTrigger className="h-9 mt-1">
+              <SelectTrigger className="h-8 text-sm">
                 <SelectValue placeholder="Select…" />
               </SelectTrigger>
               <SelectContent>
@@ -327,9 +363,7 @@ function RoomCard({
         {/* Occupancy (issue 7): single row Max + Min(default 1) + Standard,
             with infants_count_towards_occupancy moved into this block. */}
         <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Occupancy
-          </div>
+          <div className={SECTION_LABEL_CLS}>Occupancy</div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <NumField
               label="Max Occupancy"
@@ -363,9 +397,7 @@ function RoomCard({
 
         {/* Adult mix */}
         <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Adult mix
-          </div>
+          <div className={SECTION_LABEL_CLS}>Adult mix</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <NumField
               label="Max Adults (no children)"
@@ -385,9 +417,7 @@ function RoomCard({
         {/* Children / Teens / Infants — gated on age policy bands (issue 6) */}
         {scopeLabels.hasAny ? (
           <div className="space-y-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Children, teens &amp; infants
-            </div>
+            <div className={SECTION_LABEL_CLS}>Children, teens &amp; infants</div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-3">
               {scopeLabels.children && (
                 <div className="space-y-2">
@@ -475,9 +505,7 @@ function RoomCard({
 
         {/* Extra beds */}
         <div className="space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Extra beds
-          </div>
+          <div className={SECTION_LABEL_CLS}>Extra beds</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <NumField
               label="Max Extra Beds"
@@ -495,8 +523,9 @@ function RoomCard({
             )}
           </div>
         </div>
-      </div>
-    </FDCard>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -515,7 +544,7 @@ function NumField({
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
+      <label className={SECTION_LABEL_CLS}>{label}</label>
       <Input
         type="number"
         min={min}
@@ -544,7 +573,7 @@ function ToggleRow({
 }) {
   return (
     <div className="flex items-center justify-between">
-      <Label className="text-sm">{label}</Label>
+      <span className="text-xs">{label}</span>
       <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
     </div>
   );
