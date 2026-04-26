@@ -586,7 +586,7 @@ function ContractEditor({
         </div>
       )}
 
-      <div className="space-y-3 mt-6">
+      <div className="space-y-3 mt-10">
         <div ref={agePoliciesAnchorRef}>
           <FDCard
             title="Age Policy"
