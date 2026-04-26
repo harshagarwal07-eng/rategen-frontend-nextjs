@@ -20,7 +20,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { listContracts } from "@/data-access/dmc-contracts";
+import { getAgePolicies } from "@/data-access/contract-tab2";
 import { DmcContract } from "@/types/dmc-contracts";
+import AgePoliciesSection, {
+  AgePoliciesErrors,
+  AgePoliciesLocalState,
+  stripBands,
+  wrapBands,
+} from "./sections/age-policies-section";
 
 export interface RoomsSeasonsTabHandle {
   saveAll: () => Promise<void>;
@@ -31,6 +38,8 @@ interface Props {
   onDirtyChange: (dirty: boolean) => void;
   onSavingChange?: (saving: boolean) => void;
 }
+
+const EMPTY_AGE_STATE: AgePoliciesLocalState = { rooms: [], meals: [] };
 
 const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsSeasonsTab(
   { hotelId, onDirtyChange, onSavingChange: _onSavingChange },
@@ -45,8 +54,6 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
     enabled: !!hotelId,
   });
 
-  // Default to the contract marked is_default; fall back to first non-archived;
-  // fall back to first row.
   useEffect(() => {
     if (!contracts.length) {
       setSelectedContractId(null);
@@ -65,17 +72,10 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
     () => contracts.find((c) => c.id === selectedContractId) ?? null,
     [contracts, selectedContractId]
   );
-  const isArchived = selected?.status === "archived";
-
-  // Stage 1 has no dirty state yet. Always report clean and provide a no-op
-  // saveAll. Subsequent stages will replace this with real dirty tracking.
-  useEffect(() => {
-    onDirtyChange(false);
-  }, [onDirtyChange, selectedContractId]);
 
   useImperativeHandle(ref, () => ({
     saveAll: async () => {
-      // No-op until Stage 6 wires the global save coordinator.
+      // Wired in Stage 6.
     },
   }));
 
@@ -99,12 +99,79 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
     );
   }
 
+  if (!selectedContractId) {
+    return null;
+  }
+
   return (
-    <div className="space-y-6" key={selectedContractId ?? "no-contract"}>
+    <ContractEditor
+      key={selectedContractId}
+      contracts={contracts}
+      selectedContractId={selectedContractId}
+      onSelect={setSelectedContractId}
+      selected={selected}
+      onDirtyChange={onDirtyChange}
+    />
+  );
+});
+
+export default RoomsSeasonsTab;
+
+function ContractEditor({
+  contracts,
+  selectedContractId,
+  onSelect,
+  selected,
+  onDirtyChange,
+}: {
+  contracts: DmcContract[];
+  selectedContractId: string;
+  onSelect: (id: string) => void;
+  selected: DmcContract | null;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  const isArchived = selected?.status === "archived";
+
+  // ─── Age Policies ───────────────────────────────────────────────────
+  const [ageState, setAgeState] = useState<AgePoliciesLocalState>(EMPTY_AGE_STATE);
+  const [ageSnapshot, setAgeSnapshot] = useState<AgePoliciesLocalState>(EMPTY_AGE_STATE);
+  const [, setAgeErrors] = useState<AgePoliciesErrors>({ rooms: {}, meals: {} });
+  const [ageLoaded, setAgeLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAgeLoaded(false);
+    getAgePolicies(selectedContractId).then((res) => {
+      if (cancelled) return;
+      const initial: AgePoliciesLocalState = {
+        rooms: wrapBands(res.data?.rooms ?? []),
+        meals: wrapBands(res.data?.meals ?? []),
+      };
+      setAgeState(initial);
+      setAgeSnapshot(initial);
+      setAgeLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedContractId]);
+
+  const ageDirty = useMemo(() => {
+    if (!ageLoaded) return false;
+    return !ageStatesEqual(ageState, ageSnapshot);
+  }, [ageLoaded, ageState, ageSnapshot]);
+
+  // Roll-up dirty across all sections (only age policies wired so far).
+  useEffect(() => {
+    onDirtyChange(ageDirty);
+  }, [ageDirty, onDirtyChange]);
+
+  return (
+    <div className="space-y-6">
       <ContractSelectorRow
         contracts={contracts}
         selectedContractId={selectedContractId}
-        onSelect={setSelectedContractId}
+        onSelect={onSelect}
         selected={selected}
       />
 
@@ -117,13 +184,16 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
 
       <div className="space-y-8">
         <BorderedCard
-          title={`ROOM AGE POLICIES   0 bands`}
+          title={`ROOM AGE POLICIES   ${ageState.rooms.length + ageState.meals.length} bands`}
           collapsible
           defaultOpen
         >
-          <div className="text-sm text-muted-foreground">
-            Coming in Stage 2.
-          </div>
+          <AgePoliciesSection
+            state={ageState}
+            onChange={setAgeState}
+            disabled={isArchived}
+            onErrorsChange={setAgeErrors}
+          />
         </BorderedCard>
 
         <BorderedCard
@@ -131,9 +201,7 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
           collapsible
           defaultOpen={false}
         >
-          <div className="text-sm text-muted-foreground">
-            Coming in Stage 3.
-          </div>
+          <div className="text-sm text-muted-foreground">Coming in Stage 3.</div>
         </BorderedCard>
 
         <BorderedCard
@@ -141,9 +209,7 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
           collapsible
           defaultOpen
         >
-          <div className="text-sm text-muted-foreground">
-            Coming in Stage 4.
-          </div>
+          <div className="text-sm text-muted-foreground">Coming in Stage 4.</div>
         </BorderedCard>
 
         <BorderedCard
@@ -151,16 +217,19 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
           collapsible
           defaultOpen={false}
         >
-          <div className="text-sm text-muted-foreground">
-            Coming in Stage 5.
-          </div>
+          <div className="text-sm text-muted-foreground">Coming in Stage 5.</div>
         </BorderedCard>
       </div>
     </div>
   );
-});
+}
 
-export default RoomsSeasonsTab;
+function ageStatesEqual(a: AgePoliciesLocalState, b: AgePoliciesLocalState): boolean {
+  return (
+    JSON.stringify(stripBands(a.rooms)) === JSON.stringify(stripBands(b.rooms)) &&
+    JSON.stringify(stripBands(a.meals)) === JSON.stringify(stripBands(b.meals))
+  );
+}
 
 function ContractSelectorRow({
   contracts,
@@ -217,14 +286,10 @@ function ContractSelectorRow({
         </Select>
       </div>
 
-      {selected && (
-        <div className="flex items-center gap-2">
-          {selected.market?.name && (
-            <span className="text-xs text-muted-foreground">
-              Market: <span className="text-foreground">{selected.market.name}</span>
-            </span>
-          )}
-        </div>
+      {selected?.market?.name && (
+        <span className="text-xs text-muted-foreground">
+          Market: <span className="text-foreground">{selected.market.name}</span>
+        </span>
       )}
 
       <Button
