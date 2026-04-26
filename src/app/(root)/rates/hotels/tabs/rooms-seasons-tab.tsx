@@ -578,6 +578,14 @@ function ContractEditor({
             onChange={setSeasonsState}
             disabled={isArchived}
             onErrorsChange={setSeasonsErrors}
+            contractStay={
+              selected
+                ? {
+                    stay_valid_from: selected.stay_valid_from,
+                    stay_valid_till: selected.stay_valid_till,
+                  }
+                : null
+            }
           />
         </FDCard>
 

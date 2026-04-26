@@ -1,13 +1,24 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import {
+  addYears,
+  endOfYear,
+  format,
+  isValid,
+  parse,
+  startOfYear,
+} from "date-fns";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DateRangePicker,
+  type DateRangePreset,
+} from "@/components/ui/date-range-picker";
 import { FDCard } from "@/components/ui/fd-card";
 import { ContractSeason, ContractSeasonRow } from "@/types/contract-tab2";
-import { MultiRangeDatePicker } from "./multi-range-date-picker";
 
 export interface LocalSeason {
   _localId: string;
@@ -27,6 +38,99 @@ export interface SeasonErrors {
 export type SeasonsErrors = Record<string, SeasonErrors>;
 
 const newLocalId = () => `season-${crypto.randomUUID()}`;
+
+// ─── Date <-> picker-string conversion ────────────────────────────────
+//
+// The shared DateRangePicker stores ranges as a comma-separated string of
+// "dd MMM yyyy - dd MMM yyyy" segments. Mirrors transfers' season-card
+// helpers so behaviour is identical across modules.
+
+const PICKER_FMT = "dd MMM yyyy";
+
+const parseIsoLocal = (iso: string): Date => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+const dateToIso = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+export function rangesToPickerValue(ranges: { date_from: string; date_to: string }[]): string {
+  return ranges
+    .map(
+      (r) =>
+        `${format(parseIsoLocal(r.date_from), PICKER_FMT)} - ${format(parseIsoLocal(r.date_to), PICKER_FMT)}`
+    )
+    .join(", ");
+}
+
+export function pickerValueToRanges(value: string): { date_from: string; date_to: string }[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [from, to] = part.split(/\s+-\s+/).map((s) => s.trim());
+      const fromDate = parse(from, PICKER_FMT, new Date());
+      const toDate = parse(to ?? from, PICKER_FMT, new Date());
+      if (!isValid(fromDate) || !isValid(toDate)) return null;
+      return { date_from: dateToIso(fromDate), date_to: dateToIso(toDate) };
+    })
+    .filter((r): r is { date_from: string; date_to: string } => r !== null);
+}
+
+// FY/CY presets matching transfers' SEASON_PRESETS, with "All Season"
+// dynamically resolving to the contract's stay period when present.
+function buildSeasonPresets(
+  contractStay: { stay_valid_from: string | null; stay_valid_till: string | null } | null
+): DateRangePreset[] {
+  return [
+    {
+      label: "All Season",
+      getRange: () => {
+        if (contractStay?.stay_valid_from && contractStay?.stay_valid_till) {
+          return {
+            from: parseIsoLocal(contractStay.stay_valid_from),
+            to: parseIsoLocal(contractStay.stay_valid_till),
+          };
+        }
+        const today = new Date();
+        return { from: today, to: addYears(today, 2) };
+      },
+    },
+    {
+      label: "Current CY",
+      getRange: () => {
+        const now = new Date();
+        return { from: startOfYear(now), to: endOfYear(now) };
+      },
+    },
+    {
+      label: "Next CY",
+      getRange: () => {
+        const next = addYears(new Date(), 1);
+        return { from: startOfYear(next), to: endOfYear(next) };
+      },
+    },
+    {
+      label: "Current FY",
+      getRange: () => {
+        const now = new Date();
+        const y = now.getMonth() < 3 ? now.getFullYear() - 1 : now.getFullYear();
+        return { from: new Date(y, 3, 1), to: new Date(y + 1, 2, 31) };
+      },
+    },
+    {
+      label: "Next FY",
+      getRange: () => {
+        const now = new Date();
+        const y = now.getMonth() < 3 ? now.getFullYear() : now.getFullYear() + 1;
+        return { from: new Date(y, 3, 1), to: new Date(y + 1, 2, 31) };
+      },
+    },
+  ];
+}
 
 export const wrapSeasons = (rows: ContractSeasonRow[]): SeasonsLocalState =>
   rows.map((s) => ({
@@ -115,6 +219,7 @@ interface Props {
   onChange: (next: SeasonsLocalState) => void;
   disabled?: boolean;
   onErrorsChange?: (errors: SeasonsErrors) => void;
+  contractStay?: { stay_valid_from: string | null; stay_valid_till: string | null } | null;
 }
 
 export default function SeasonsSection({
@@ -122,11 +227,13 @@ export default function SeasonsSection({
   onChange,
   disabled = false,
   onErrorsChange,
+  contractStay = null,
 }: Props) {
   const errors = useMemo(() => validateSeasons(state), [state]);
   useEffect(() => {
     onErrorsChange?.(errors);
   }, [errors, onErrorsChange]);
+  const presets = useMemo(() => buildSeasonPresets(contractStay), [contractStay]);
 
   const updateSeason = (id: string, patch: Partial<LocalSeason>) =>
     onChange(state.map((s) => (s._localId === id ? { ...s, ...patch } : s)));
@@ -194,6 +301,7 @@ export default function SeasonsSection({
             season={s}
             errors={errors[s._localId] ?? {}}
             disabled={disabled}
+            presets={presets}
             onPatch={(patch) => updateSeason(s._localId, patch)}
             onDuplicate={() => duplicateSeason(s._localId)}
             onDelete={() => removeSeason(s._localId)}
@@ -208,6 +316,7 @@ function SeasonCard({
   season,
   errors,
   disabled,
+  presets,
   onPatch,
   onDuplicate,
   onDelete,
@@ -215,6 +324,7 @@ function SeasonCard({
   season: LocalSeason;
   errors: SeasonErrors;
   disabled: boolean;
+  presets: DateRangePreset[];
   onPatch: (patch: Partial<LocalSeason>) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -283,11 +393,14 @@ function SeasonCard({
         <div>
           <Label className="text-xs">Date ranges</Label>
           <div className="mt-1 max-w-md">
-            <MultiRangeDatePicker
-              value={season.date_ranges}
-              onChange={(next) => onPatch({ date_ranges: next })}
+            <DateRangePicker
+              value={rangesToPickerValue(season.date_ranges)}
+              onChange={(next) =>
+                onPatch({ date_ranges: pickerValueToRanges(next) })
+              }
               disabled={disabled}
-              placeholder="Pick date ranges"
+              presets={presets}
+              placeholder="Pick dates or apply a preset…"
             />
           </div>
           {(errors.rangeOrder || errors.overlapWithin || errors.overlapAcross) && (
