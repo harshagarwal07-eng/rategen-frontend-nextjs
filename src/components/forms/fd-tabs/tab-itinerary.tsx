@@ -28,6 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Autocomplete } from "@/components/ui/autocomplete";
+import { ImagePicker } from "@/components/ui/image-picker";
 import TiptapEditor from "@/components/editor/TiptapEditor";
 import {
   fdGetPackage,
@@ -502,6 +503,7 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
                     overnightCitySearchFn={overnightCitySearchFn}
                     overnightCityFetchByValue={overnightCityFetchByValue}
                     countriesSelected={pkgCountries.length > 0}
+                    packageId={packageId}
                   />
                 </div>
               )}
@@ -718,6 +720,7 @@ interface DayBodyProps {
   overnightCitySearchFn: (search: string) => Promise<IOption[]>;
   overnightCityFetchByValue: (id: string) => Promise<IOption | null>;
   countriesSelected: boolean;
+  packageId: string | null;
 }
 
 function DayBody({
@@ -727,6 +730,7 @@ function DayBody({
   overnightCitySearchFn,
   overnightCityFetchByValue,
   countriesSelected,
+  packageId,
 }: DayBodyProps) {
   const description = form.watch(`days.${idx}.description`) ?? "";
   const meals: string[] = form.watch(`days.${idx}.meals_included`) ?? [];
@@ -855,24 +859,16 @@ function DayBody({
         </div>
 
         <div className="flex flex-col gap-1.5 md:col-span-2">
-          <Label>Image URL</Label>
-          <Input
-            placeholder="https://..."
-            {...form.register(`days.${idx}.image_url`)}
+          <ImagePicker
+            label="Day Image"
+            value={imageUrl || null}
+            onChange={(url) =>
+              form.setValue(`days.${idx}.image_url`, url ?? "", { shouldDirty: true })
+            }
+            aspectRatio="4/3"
+            size="md"
+            packageId={packageId}
           />
-          {imageUrl && /^https?:\/\//i.test(imageUrl) && (
-            <div className="mt-1 h-32 w-full overflow-hidden rounded-md border bg-muted">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imageUrl}
-                alt="Day preview"
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).style.display = "none";
-                }}
-              />
-            </div>
-          )}
         </div>
       </div>
     </>

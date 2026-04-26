@@ -57,6 +57,7 @@ import {
 } from "@/components/ui/popover";
 import { Autocomplete } from "@/components/ui/autocomplete";
 import { BulletListInput } from "@/components/ui/bullet-list-input";
+import { ImagePicker } from "@/components/ui/image-picker";
 import {
   fdListAddons,
   fdCreateAddon,
@@ -1404,6 +1405,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(function AddonCard
                     overnightCitySearchFn={overnightCitySearchFn}
                     overnightCityFetchByValue={overnightCityFetchByValue}
                     countriesSelected={countriesSelected}
+                    packageId={packageId}
                   />
                 ))}
               </div>
@@ -1602,6 +1604,7 @@ interface AddonDayCardProps {
   overnightCitySearchFn: (search: string) => Promise<IOption[]>;
   overnightCityFetchByValue: (id: string) => Promise<IOption | null>;
   countriesSelected: boolean;
+  packageId: string;
 }
 
 function AddonDayCard({
@@ -1615,6 +1618,7 @@ function AddonDayCard({
   overnightCitySearchFn,
   overnightCityFetchByValue,
   countriesSelected,
+  packageId,
 }: AddonDayCardProps) {
   const [isOpen, setIsOpen] = useState(day.day_number === 1);
   const [clearOpen, setClearOpen] = useState(false);
@@ -1862,25 +1866,14 @@ function AddonDayCard({
             </div>
 
             <div className="flex flex-col gap-1.5 md:col-span-2">
-              <Label>Image URL</Label>
-              <Input
-                placeholder="https://..."
-                value={day.image_url}
-                onChange={(e) => onChange({ image_url: e.target.value })}
+              <ImagePicker
+                label="Day Image"
+                value={day.image_url || null}
+                onChange={(url) => onChange({ image_url: url ?? "" })}
+                aspectRatio="4/3"
+                size="md"
+                packageId={packageId}
               />
-              {day.image_url && /^https?:\/\//i.test(day.image_url) && (
-                <div className="mt-1 h-32 w-full overflow-hidden rounded-md border bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={day.image_url}
-                    alt="Day preview"
-                    className="h-full w-full object-cover"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = "none";
-                    }}
-                  />
-                </div>
-              )}
             </div>
           </div>
         </div>

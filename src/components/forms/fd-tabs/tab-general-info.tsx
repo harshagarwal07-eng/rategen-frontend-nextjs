@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/accordion";
 import { MultiSelectSearch } from "@/components/ui/multi-select-search";
 import { Autocomplete } from "@/components/ui/autocomplete";
+import { ImagePicker } from "@/components/ui/image-picker";
 import {
   fdGetCountries,
   fdGetCitiesByCountry,
@@ -555,26 +556,17 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
       <div className="space-y-3">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground block">Media &amp; Description</span>
         <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <Label>Banner Image URL</Label>
-            <Input placeholder="https://..." {...form.register("banner_image_url")} />
-            {form.formState.errors.banner_image_url && (
-              <p className="text-xs text-destructive">{form.formState.errors.banner_image_url.message}</p>
-            )}
-            {bannerUrl && /^https?:\/\//i.test(bannerUrl) && (
-              <div className="mt-2 h-32 w-full overflow-hidden rounded-md border bg-muted">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={bannerUrl}
-                  alt="Banner preview"
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = "none";
-                  }}
-                />
-              </div>
-            )}
-          </div>
+          <ImagePicker
+            label="Banner Image"
+            value={bannerUrl || null}
+            onChange={(url) => form.setValue("banner_image_url", url ?? "", { shouldDirty: true })}
+            aspectRatio="16/9"
+            size="lg"
+            packageId={packageId}
+          />
+          {form.formState.errors.banner_image_url && (
+            <p className="text-xs text-destructive">{form.formState.errors.banner_image_url.message}</p>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <Label>Description</Label>
