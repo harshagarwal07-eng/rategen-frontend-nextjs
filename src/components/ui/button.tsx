@@ -64,10 +64,12 @@ function Button({
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     >
-      <Show when={loading}>
-        <Loader2 className="size-4 animate-spin" />
-      </Show>
-      {loading && loadingText ? loadingText : props.children}
+      {!asChild && (
+        <Show when={loading}>
+          <Loader2 className="size-4 animate-spin" />
+        </Show>
+      )}
+      {!asChild && loading && loadingText ? loadingText : props.children}
     </Comp>
   );
 }
