@@ -126,7 +126,7 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
   if (!hotelId) {
     return (
       <TabFrame>
-        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-md">
+        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
           <p className="text-sm">
             Save the hotel first to manage rooms and seasons.
           </p>
@@ -148,7 +148,7 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
   if (contracts.length === 0) {
     return (
       <TabFrame>
-        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-md">
+        <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
           <p className="text-sm">
             No contracts yet. Add a contract on the General Info tab first.
           </p>
@@ -586,7 +586,7 @@ function ContractEditor({
         </div>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-3 mt-6">
         <div ref={agePoliciesAnchorRef}>
           <FDCard
             title="Age Policy"

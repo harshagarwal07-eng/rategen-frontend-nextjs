@@ -6,7 +6,7 @@
 // for visual parity.
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,14 +17,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -219,11 +215,12 @@ export default function TaxesSection({
       },
     ]);
 
-  // Grid columns. Without tier mode: Name | Rate | Type | Inclusive | Applies | delete.
-  // With tier mode: insert From + To after Inclusive.
+  // Grid columns. Without tier mode: Name | Rate | Type | Inclusive | delete.
+  // With tier mode: insert From + To after Inclusive. Applies-to is no
+  // longer in this row — it renders as a sub-block underneath each row.
   const cols = tieredMode
-    ? "minmax(140px,1fr) 80px 100px 130px 90px 90px 160px 32px"
-    : "minmax(140px,1fr) 80px 100px 140px 180px 32px";
+    ? "minmax(140px,1fr) 80px 100px 130px 90px 90px 32px"
+    : "minmax(140px,1fr) 80px 100px 140px 32px";
 
   return (
     <div className="space-y-3">
@@ -280,7 +277,6 @@ export default function TaxesSection({
                 <span className={SECTION_LABEL_CLS}>To</span>
               </>
             )}
-            <span className={SECTION_LABEL_CLS}>Applies to</span>
             <span />
           </div>
           <div className="divide-y">
@@ -378,14 +374,6 @@ export default function TaxesSection({
                         />
                       </>
                     )}
-                    <AppliesToPicker
-                      value={t.applies_to_room_category_ids}
-                      options={roomOptions}
-                      disabled={disabled}
-                      onChange={(ids) =>
-                        updateRow(t._localId, { applies_to_room_category_ids: ids })
-                      }
-                    />
                     <button
                       type="button"
                       onClick={() => removeRow(t._localId)}
@@ -404,6 +392,14 @@ export default function TaxesSection({
                         .join(" · ")}
                     </p>
                   )}
+                  <AppliesToChips
+                    value={t.applies_to_room_category_ids}
+                    options={roomOptions}
+                    disabled={disabled}
+                    onChange={(ids) =>
+                      updateRow(t._localId, { applies_to_room_category_ids: ids })
+                    }
+                  />
                 </div>
               );
             })}
@@ -434,7 +430,10 @@ export default function TaxesSection({
   );
 }
 
-function AppliesToPicker({
+// Chip-grid scope picker. Empty selection = "applies to all rooms" (the
+// backend treats zero rows in the join table as universal scope; the
+// amber hint surfaces this contract to the user).
+function AppliesToChips({
   value,
   options,
   disabled,
@@ -445,88 +444,91 @@ function AppliesToPicker({
   disabled: boolean;
   onChange: (next: string[]) => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   const validIds = useMemo(() => {
     const known = new Set(options.map((o) => o.id));
     return value.filter((v) => known.has(v));
   }, [value, options]);
 
-  const display = useMemo(() => {
-    if (validIds.length === 0) return "All rooms";
-    if (validIds.length === options.length) return "All rooms";
-    if (validIds.length === 1) {
-      const o = options.find((opt) => opt.id === validIds[0]);
-      return o?.label ?? "1 room";
-    }
-    return `${validIds.length} rooms`;
-  }, [validIds, options]);
-
   const toggle = (id: string) => {
     onChange(
-      validIds.includes(id) ? validIds.filter((v) => v !== id) : [...validIds, id]
+      validIds.includes(id) ? validIds.filter((v) => v !== id) : [...validIds, id],
     );
   };
-  const clearAll = () => onChange([]);
+  const selectAll = () => onChange(options.map((o) => o.id));
+  const deselectAll = () => onChange([]);
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={disabled}
-          className={cn(
-            "h-7 w-full justify-between font-normal text-xs",
-            validIds.length === 0 && "text-muted-foreground"
-          )}
-        >
-          <span className="truncate">{display}</span>
-          <ChevronDown className="h-3 w-3 ml-2 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-64 p-2" align="start">
-        {options.length === 0 ? (
-          <div className="text-xs text-muted-foreground p-2">
-            Add a room category first.
-          </div>
-        ) : (
-          <>
+    <div className="mt-2.5 pt-2 border-t border-border/40">
+      <div className="mb-1.5 flex items-center gap-2 flex-wrap">
+        <span className={SECTION_LABEL_CLS}>Applies to:</span>
+        <Badge variant="secondary" className="text-[10px]">
+          {validIds.length === 0
+            ? "All"
+            : `${validIds.length} ${validIds.length === 1 ? "room" : "rooms"}`}
+        </Badge>
+        {options.length > 0 && (
+          <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
-              className="w-full text-left text-xs px-2 py-1.5 hover:bg-muted rounded"
-              onClick={() => {
-                clearAll();
-                setOpen(false);
-              }}
+              disabled={disabled}
+              onClick={selectAll}
+              className={cn(
+                "text-xs font-medium text-primary hover:underline",
+                disabled && "opacity-50 pointer-events-none",
+              )}
             >
-              All rooms
+              Select All
             </button>
-            <div className="h-px bg-border my-1" />
-            <div className="max-h-64 overflow-y-auto">
-              {options.map((o) => {
-                const checked = validIds.includes(o.id);
-                return (
-                  <label
-                    key={o.id}
-                    className="flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded cursor-pointer text-xs"
-                  >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => toggle(o.id)}
-                    />
-                    <span className="flex-1 truncate">{o.label}</span>
-                    {o.isUnsaved && (
-                      <span className="text-[10px] text-muted-foreground">unsaved</span>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          </>
+            <span className="text-muted-foreground/40">|</span>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={deselectAll}
+              className={cn(
+                "text-xs font-medium text-muted-foreground hover:underline",
+                disabled && "opacity-50 pointer-events-none",
+              )}
+            >
+              Deselect All
+            </button>
+          </div>
         )}
-      </PopoverContent>
-    </Popover>
+      </div>
+      {options.length === 0 ? (
+        <p className="text-xs text-muted-foreground/70">
+          No room categories defined for this contract.
+        </p>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+          {options.map((o) => {
+            const checked = validIds.includes(o.id);
+            return (
+              <label
+                key={o.id}
+                className={cn(
+                  "flex items-center gap-2 rounded border bg-background px-2 py-1.5 text-xs cursor-pointer hover:bg-muted/30",
+                  disabled && "opacity-60 cursor-not-allowed",
+                )}
+              >
+                <Checkbox
+                  checked={checked}
+                  disabled={disabled}
+                  onCheckedChange={() => toggle(o.id)}
+                />
+                <span className="flex-1 truncate">{o.label}</span>
+                {o.isUnsaved && (
+                  <span className="text-[10px] text-muted-foreground">unsaved</span>
+                )}
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {validIds.length === 0 && options.length > 0 && (
+        <p className="mt-1.5 text-[11px] text-amber-600">
+          No rooms selected — applies to all rooms.
+        </p>
+      )}
+    </div>
   );
 }

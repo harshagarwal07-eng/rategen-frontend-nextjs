@@ -1,10 +1,10 @@
 "use client";
 
-// Age Policies — single table per band, two scope sub-pairs per row.
-// Mirrors transfers' age-policy-section.tsx structure (compact <Table>,
-// preset name dropdown, ghost Add button) but with Hotels' Rooms+Meals
-// scope split represented as two pairs of From/To columns rather than
-// each band being its own collapsible card.
+// Two parallel tables (Rooms | Meals) sharing one LocalAgeBand[] state.
+// A band that has only its rooms scope set appears on the left only; a
+// band that carries both scopes appears on both sides. Add/Delete on one
+// side mutates only that scope; the band drops entirely when both
+// scopes are cleared.
 
 import { useEffect, useMemo } from "react";
 import { Plus, Trash2 } from "lucide-react";
@@ -36,8 +36,6 @@ const DEFAULT_LABEL_ORDER = ["Adult", "Teenager", "Child", "Infant"] as const;
 
 const PRESET_NAMES = ["Adult", "Teenager", "Child", "Infant", "Senior", "Youth"] as const;
 
-// Sensible age-pair defaults used when a scope materialises (user types
-// into an empty cell). Matches the previous brief's defaults.
 const DEFAULT_AGES: Record<string, { age_from: number; age_to: number }> = {
   adult: { age_from: 18, age_to: 99 },
   teenager: { age_from: 13, age_to: 17 },
@@ -50,6 +48,9 @@ const DEFAULT_AGES: Record<string, { age_from: number; age_to: number }> = {
 
 const defaultAgesFor = (label: string) =>
   DEFAULT_AGES[label.trim().toLowerCase()] ?? { age_from: 0, age_to: 0 };
+
+const SCOPE_LABEL_CLS =
+  "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground";
 
 // ─── Local state shape ─────────────────────────────────────────────────
 
@@ -101,9 +102,7 @@ export function wrapAgePolicies(res: AgePoliciesResponse | null): AgePoliciesLoc
   });
 }
 
-// Emit only fully-populated scopes. A scope with either bound null is
-// treated as absent — same as undefined — so blanking both cells in a
-// scope drops it from the payload (per brief's "empty cells = absent").
+// Emit only fully-populated scopes — empty cells = absent.
 export function stripAgePolicies(state: AgePoliciesLocalState): {
   rooms: AgePolicyBand[];
   meals: AgePolicyBand[];
@@ -151,18 +150,22 @@ export function validateAgePolicies(state: AgePoliciesLocalState): AgePoliciesEr
   const errs: AgePoliciesErrors = {};
   for (const b of state) errs[b._localId] = {};
 
-  // Duplicate label across bands.
-  const counts = new Map<string, string[]>();
-  for (const b of state) {
-    const k = b.label.trim().toLowerCase();
-    if (!k) continue;
-    const arr = counts.get(k) ?? [];
-    arr.push(b._localId);
-    counts.set(k, arr);
-  }
-  for (const [, ids] of counts) {
-    if (ids.length < 2) continue;
-    for (const id of ids) errs[id].duplicate = "Duplicate label";
+  // Duplicate label per scope side. A "Senior" band on rooms only and a
+  // "Senior" band on meals only is OK — they merge at payload level.
+  for (const scope of ["rooms", "meals"] as const) {
+    const counts = new Map<string, string[]>();
+    for (const b of state) {
+      if (!b[scope]) continue;
+      const k = b.label.trim().toLowerCase();
+      if (!k) continue;
+      const arr = counts.get(k) ?? [];
+      arr.push(b._localId);
+      counts.set(k, arr);
+    }
+    for (const [, ids] of counts) {
+      if (ids.length < 2) continue;
+      for (const id of ids) errs[id].duplicate = "Duplicate label";
+    }
   }
 
   for (const scope of ["rooms", "meals"] as const) {
@@ -231,26 +234,40 @@ export default function AgePoliciesSection({
   const updateBand = (id: string, patch: Partial<LocalAgeBand>) =>
     onChange(state.map((b) => (b._localId === id ? { ...b, ...patch } : b)));
 
-  const removeBand = (id: string) =>
-    onChange(state.filter((b) => b._localId !== id));
+  // Remove the row from one scope. If the other scope still has data the
+  // band stays around with that scope only; otherwise the band drops.
+  const removeFromScope = (id: string, scope: AgeBandScope) => {
+    const band = state.find((b) => b._localId === id);
+    if (!band) return;
+    const other: AgeBandScope = scope === "rooms" ? "meals" : "rooms";
+    if (band[other]) {
+      onChange(
+        state.map((b) =>
+          b._localId === id ? { ...b, [scope]: undefined } : b,
+        ),
+      );
+    } else {
+      onChange(state.filter((b) => b._localId !== id));
+    }
+  };
 
-  const addBand = () =>
+  const addBandToScope = (scope: AgeBandScope) => {
     onChange([
       ...state,
-      { _localId: newLocalId(), label: "", rooms: undefined, meals: undefined },
+      {
+        _localId: newLocalId(),
+        label: "",
+        rooms: scope === "rooms" ? { id: null, age_from: null, age_to: null } : undefined,
+        meals: scope === "meals" ? { id: null, age_from: null, age_to: null } : undefined,
+      },
     ]);
+  };
 
-  // Update one cell of a scope. Rules:
-  //  - Empty scope + non-empty cell → materialise scope, fill the other
-  //    cell with the per-label default so the user sees a complete pair.
-  //  - Defined scope, both cells emptied → drop scope back to undefined.
-  //  - Defined scope, one cell edited → update that field (other may be null
-  //    transiently; flagged by validation).
   const updateScopeField = (
     bandId: string,
     scope: AgeBandScope,
     field: "age_from" | "age_to",
-    raw: string
+    raw: string,
   ) => {
     const band = state.find((b) => b._localId === bandId);
     if (!band) return;
@@ -271,76 +288,124 @@ export default function AgePoliciesSection({
 
     const next: ScopeData = { ...current, [field]: num };
     if (next.age_from == null && next.age_to == null) {
-      updateBand(bandId, { [scope]: undefined } as Partial<LocalAgeBand>);
+      removeFromScope(bandId, scope);
       return;
     }
     updateBand(bandId, { [scope]: next } as Partial<LocalAgeBand>);
   };
 
+  const roomsBands = useMemo(
+    () => state.filter((b) => b.rooms !== undefined),
+    [state],
+  );
+  const mealsBands = useMemo(
+    () => state.filter((b) => b.meals !== undefined),
+    [state],
+  );
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <p className="text-[11px] text-muted-foreground/80">
-        These age bands apply to room rates and meal supplements. Leave a
-        scope&apos;s cells empty to skip that scope for a band.
+        Age bands for room rates (left) and meal supplements (right). Set
+        ages independently per scope.
       </p>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <ScopePane
+          scope="rooms"
+          title="Rooms"
+          bands={roomsBands}
+          errors={errors}
+          disabled={disabled}
+          onLabelChange={(id, label) => updateBand(id, { label })}
+          onCellChange={(id, field, value) =>
+            updateScopeField(id, "rooms", field, value)
+          }
+          onDelete={(id) => removeFromScope(id, "rooms")}
+          onAdd={() => addBandToScope("rooms")}
+        />
+        <ScopePane
+          scope="meals"
+          title="Meals"
+          bands={mealsBands}
+          errors={errors}
+          disabled={disabled}
+          onLabelChange={(id, label) => updateBand(id, { label })}
+          onCellChange={(id, field, value) =>
+            updateScopeField(id, "meals", field, value)
+          }
+          onDelete={(id) => removeFromScope(id, "meals")}
+          onAdd={() => addBandToScope("meals")}
+        />
+      </div>
+    </div>
+  );
+}
+
+interface ScopePaneProps {
+  scope: AgeBandScope;
+  title: string;
+  bands: LocalAgeBand[];
+  errors: AgePoliciesErrors;
+  disabled: boolean;
+  onLabelChange: (id: string, label: string) => void;
+  onCellChange: (
+    id: string,
+    field: "age_from" | "age_to",
+    value: string,
+  ) => void;
+  onDelete: (id: string) => void;
+  onAdd: () => void;
+}
+
+function ScopePane({
+  scope,
+  title,
+  bands,
+  errors,
+  disabled,
+  onLabelChange,
+  onCellChange,
+  onDelete,
+  onAdd,
+}: ScopePaneProps) {
+  return (
+    <div className="space-y-2">
+      <p className={SCOPE_LABEL_CLS}>{title}</p>
       <Table>
         <TableHeader>
           <TableRow className="text-[10px] uppercase tracking-wide text-muted-foreground hover:bg-transparent">
-            <TableHead rowSpan={2} className="w-44 align-bottom">
-              Band name
-            </TableHead>
-            <TableHead
-              colSpan={2}
-              className="text-center border-l border-border/60 bg-muted/30"
-            >
-              Rooms
-            </TableHead>
-            <TableHead
-              colSpan={2}
-              className="text-center border-l border-border/60 bg-muted/30"
-            >
-              Meals
-            </TableHead>
-            <TableHead rowSpan={2} className="w-8" />
-          </TableRow>
-          <TableRow className="text-[10px] uppercase tracking-wide text-muted-foreground hover:bg-transparent">
-            <TableHead className="w-20 text-center border-l border-border/60">
-              From
-            </TableHead>
+            <TableHead className="w-44">Band name</TableHead>
+            <TableHead className="w-20 text-center">From</TableHead>
             <TableHead className="w-20 text-center">To</TableHead>
-            <TableHead className="w-20 text-center border-l border-border/60">
-              From
-            </TableHead>
-            <TableHead className="w-20 text-center">To</TableHead>
+            <TableHead className="w-8" />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {state.length === 0 && (
+          {bands.length === 0 && (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={4}
                 className="py-4 text-center text-xs text-muted-foreground"
               >
-                No age bands. Click &ldquo;Add Band&rdquo; to define one.
+                No {title.toLowerCase()} bands. Click &ldquo;Add Band&rdquo;.
               </TableCell>
             </TableRow>
           )}
-          {state.map((b, idx) => {
+          {bands.map((b, idx) => {
             const e = errors[b._localId] ?? {};
+            const sub = b[scope];
+            const subErr = e[scope];
             return (
               <TableRow
                 key={b._localId}
-                className={cn(
-                  idx % 2 === 1 && "bg-muted/30",
-                  "align-top"
-                )}
+                className={cn(idx % 2 === 1 && "bg-muted/30", "align-top")}
               >
                 <TableCell className="py-1.5 pr-2">
                   <BandNameField
                     value={b.label}
                     disabled={disabled}
-                    onChange={(label) => updateBand(b._localId, { label })}
+                    onChange={(label) => onLabelChange(b._localId, label)}
                   />
                   {e.duplicate && (
                     <p className="mt-0.5 text-[10px] text-destructive">
@@ -348,16 +413,15 @@ export default function AgePoliciesSection({
                     </p>
                   )}
                 </TableCell>
-
-                <TableCell className="py-1.5 px-1 border-l border-border/60">
+                <TableCell className="py-1.5 px-1">
                   <Input
                     type="number"
                     min={0}
                     max={150}
-                    value={b.rooms?.age_from ?? ""}
+                    value={sub?.age_from ?? ""}
                     disabled={disabled}
                     onChange={(ev) =>
-                      updateScopeField(b._localId, "rooms", "age_from", ev.target.value)
+                      onCellChange(b._localId, "age_from", ev.target.value)
                     }
                     className="h-7 text-center text-xs"
                   />
@@ -367,52 +431,19 @@ export default function AgePoliciesSection({
                     type="number"
                     min={0}
                     max={150}
-                    value={b.rooms?.age_to ?? ""}
+                    value={sub?.age_to ?? ""}
                     disabled={disabled}
                     onChange={(ev) =>
-                      updateScopeField(b._localId, "rooms", "age_to", ev.target.value)
+                      onCellChange(b._localId, "age_to", ev.target.value)
                     }
                     className="h-7 text-center text-xs"
                   />
-                  {e.rooms && (e.rooms.age || e.rooms.overlap || e.rooms.partial) && (
+                  {subErr && (subErr.age || subErr.overlap || subErr.partial) && (
                     <p className="mt-0.5 text-[10px] text-destructive whitespace-nowrap">
-                      {e.rooms.partial || e.rooms.age || e.rooms.overlap}
+                      {subErr.partial || subErr.age || subErr.overlap}
                     </p>
                   )}
                 </TableCell>
-
-                <TableCell className="py-1.5 px-1 border-l border-border/60">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={150}
-                    value={b.meals?.age_from ?? ""}
-                    disabled={disabled}
-                    onChange={(ev) =>
-                      updateScopeField(b._localId, "meals", "age_from", ev.target.value)
-                    }
-                    className="h-7 text-center text-xs"
-                  />
-                </TableCell>
-                <TableCell className="py-1.5 px-1">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={150}
-                    value={b.meals?.age_to ?? ""}
-                    disabled={disabled}
-                    onChange={(ev) =>
-                      updateScopeField(b._localId, "meals", "age_to", ev.target.value)
-                    }
-                    className="h-7 text-center text-xs"
-                  />
-                  {e.meals && (e.meals.age || e.meals.overlap || e.meals.partial) && (
-                    <p className="mt-0.5 text-[10px] text-destructive whitespace-nowrap">
-                      {e.meals.partial || e.meals.age || e.meals.overlap}
-                    </p>
-                  )}
-                </TableCell>
-
                 <TableCell className="py-1.5 pl-1">
                   <Button
                     type="button"
@@ -420,9 +451,9 @@ export default function AgePoliciesSection({
                     size="icon"
                     className="h-6 w-6 text-muted-foreground hover:text-destructive"
                     disabled={disabled}
-                    onClick={() => removeBand(b._localId)}
-                    aria-label={`Delete ${b.label || "band"}`}
-                    title="Delete band"
+                    onClick={() => onDelete(b._localId)}
+                    aria-label={`Delete ${b.label || "band"} from ${title}`}
+                    title={`Delete from ${title}`}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>
@@ -440,7 +471,7 @@ export default function AgePoliciesSection({
             variant="ghost"
             size="sm"
             className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
-            onClick={addBand}
+            onClick={onAdd}
           >
             <Plus className="h-3 w-3" /> Add Band
           </Button>
@@ -450,10 +481,9 @@ export default function AgePoliciesSection({
   );
 }
 
-// Band-name field: preset Select with "Custom…" escape hatch matching
-// transfers' age-policy-section. If the current value is non-empty and
-// not a preset, render a freeform text input so legacy/custom labels
-// survive load → edit → save unchanged.
+// Band-name field: preset Select with a "Custom…" escape hatch. When the
+// current value isn't a preset, render a freeform Input so legacy/custom
+// labels survive load → edit → save.
 function BandNameField({
   value,
   disabled,
@@ -488,7 +518,7 @@ function BandNameField({
       value={canonical || "__placeholder__"}
       onValueChange={(v) => {
         if (v === "__placeholder__") return;
-        if (v === "__custom__") onChange(" "); // trigger custom-input branch
+        if (v === "__custom__") onChange(" ");
         else onChange(v);
       }}
       disabled={disabled}

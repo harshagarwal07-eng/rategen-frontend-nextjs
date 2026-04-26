@@ -392,7 +392,7 @@ function SeasonCard({
             {summary}
           </span>
           {isPending && (
-            <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="shrink-0 rounded-full bg-blue-100 text-blue-800 px-2 py-0.5 text-[10px] uppercase tracking-wide">
               Unsaved
             </span>
           )}

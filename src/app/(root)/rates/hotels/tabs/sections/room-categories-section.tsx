@@ -347,7 +347,7 @@ function RoomCard({
             with infants_count_towards_occupancy moved into this block. */}
         <div className="space-y-2">
           <div className={SECTION_LABEL_CLS}>Occupancy</div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <NumField
               label="Max Occupancy"
               value={room.max_total_occupancy}
@@ -381,7 +381,7 @@ function RoomCard({
         {/* Adult mix */}
         <div className="space-y-2">
           <div className={SECTION_LABEL_CLS}>Adult mix</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <NumField
               label="Max Adults (no children)"
               value={room.max_adults_without_children}
@@ -489,7 +489,7 @@ function RoomCard({
         {/* Extra beds */}
         <div className="space-y-2">
           <div className={SECTION_LABEL_CLS}>Extra beds</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <NumField
               label="Max Extra Beds"
               value={room.max_extra_beds}
@@ -527,7 +527,7 @@ function RateTypeToggleGroup({
   return (
     <div
       className={cn(
-        "inline-flex rounded-md border border-input bg-background p-0.5",
+        "inline-flex rounded-md border bg-muted/40 p-0.5",
         disabled && "opacity-60 cursor-not-allowed"
       )}
       role="radiogroup"
@@ -548,7 +548,7 @@ function RateTypeToggleGroup({
               "h-7 px-3 text-xs font-semibold uppercase tracking-wide rounded-sm transition-colors",
               active
                 ? "bg-primary text-primary-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                : "text-muted-foreground hover:text-foreground",
               disabled && "pointer-events-none"
             )}
           >

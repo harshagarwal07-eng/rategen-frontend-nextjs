@@ -49,11 +49,11 @@ export function FDCard({
           onClick={toggle}
           aria-expanded={open}
           className={cn(
-            "flex flex-1 items-center gap-2 px-4 py-3 text-left text-sm font-medium min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded",
+            "flex flex-1 items-center gap-2 px-4 py-3 text-left text-sm min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded",
             triggerClassName
           )}
         >
-          <span className="truncate">{title}</span>
+          <span className="truncate font-semibold text-primary">{title}</span>
           {count !== undefined && count !== null && (
             <span className="rounded-full bg-muted-foreground/20 text-muted-foreground px-2 py-0.5 text-xs shrink-0">
               {count}
@@ -78,7 +78,7 @@ export function FDCard({
         </button>
       </div>
       {open && (
-        <div className={cn("px-4 pb-4 pt-3 border-t", contentClassName)}>
+        <div className={cn("px-4 pb-4 pt-3 border-t flex flex-col gap-4", contentClassName)}>
           {children}
         </div>
       )}
