@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles } from "lucide-react";
+import { Sparkles, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { FDPublicAddon } from "@/types/fd-search";
@@ -21,8 +21,11 @@ export function PackageAddons({ addons, currency }: PackageAddonsProps) {
   if (addons.length === 0) return null;
 
   return (
-    <section id="addons" className="space-y-4 scroll-mt-24">
-      <h2 className="text-xl font-semibold">Add-ons</h2>
+    <section id="addons" className="space-y-4 scroll-mt-32">
+      <h2 className="text-xl font-semibold flex items-center gap-2">
+        <Plus className="size-4 text-success" />
+        Add-ons
+      </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {addons.map((addon) => (
           <Card key={addon.id} className="p-4 border-border/60 shadow-sm space-y-2">

@@ -26,8 +26,11 @@ export function PackageFlights({ pkg }: PackageFlightsProps) {
   Object.values(grouped).forEach((arr) => arr.sort((a, b) => a.sort_order - b.sort_order));
 
   return (
-    <section id="flights" className="space-y-4 scroll-mt-24">
-      <h2 className="text-xl font-semibold">Flights</h2>
+    <section id="flights" className="space-y-4 scroll-mt-32">
+      <h2 className="text-xl font-semibold flex items-center gap-2">
+        <Plane className="size-4 text-success" />
+        Flights
+      </h2>
 
       {pkg.flights_inclusion && (
         <p className="text-sm text-muted-foreground">{pkg.flights_inclusion}</p>

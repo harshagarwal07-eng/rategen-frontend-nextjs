@@ -13,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { fdSearchPackages } from "@/data-access/fixed-departures";
+import { fdSearchPackages, fdGetSearchFilterOptions } from "@/data-access/fixed-departures";
 import type { FDSortKey } from "@/types/fd-search";
 import { FDSearchBar } from "../search/fd-search-bar";
 import { FDResultCard } from "./fd-result-card";
@@ -44,6 +44,11 @@ export function FDResultsWrapper() {
     { history: "push" },
   );
 
+  const { data: filterOptions } = useQuery({
+    queryKey: ["fd-search-filter-options"],
+    queryFn: fdGetSearchFilterOptions,
+  });
+
   const filterValues: FDFilterValues = {
     countries: params.countries,
     cities: params.cities,
@@ -55,16 +60,29 @@ export function FDResultsWrapper() {
 
   const sort = (params.sort || "price-asc") as FDSortKey;
 
+  // Resolve city IDs for the backend: selected cities ∪ all cities in selected countries.
+  const resolvedCityIds = useMemo(() => {
+    const all = filterOptions?.cities_with_packages ?? [];
+    const ids = new Set<string>(params.cities);
+    if (params.countries.length > 0) {
+      const countrySet = new Set(params.countries);
+      for (const c of all) {
+        if (countrySet.has(c.country_name)) ids.add(c.id);
+      }
+    }
+    return Array.from(ids);
+  }, [filterOptions, params.cities, params.countries]);
+
   const queryArgs = useMemo(
     () => ({
-      cities: params.cities.join(",") || undefined,
+      cities: resolvedCityIds.length > 0 ? resolvedCityIds.join(",") : undefined,
       months: params.months.join(",") || undefined,
       departureCity: params.departureCity || undefined,
       ageGroups: params.ageGroups.join(",") || undefined,
       durations: params.durations.join(",") || undefined,
       sort,
     }),
-    [params, sort],
+    [resolvedCityIds, params, sort],
   );
 
   const { data, isLoading, isError } = useQuery({
@@ -139,9 +157,9 @@ export function FDResultsWrapper() {
           </div>
 
           {isLoading && (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-44 w-full rounded-xl" />
+                <Skeleton key={i} className="h-80 w-full rounded-xl" />
               ))}
             </div>
           )}
@@ -168,7 +186,7 @@ export function FDResultsWrapper() {
           )}
 
           {!isLoading && !isError && packages.length > 0 && (
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {packages.map((pkg) => (
                 <FDResultCard key={pkg.id} pkg={pkg} detailHref={detailHrefFor(pkg.id)} />
               ))}

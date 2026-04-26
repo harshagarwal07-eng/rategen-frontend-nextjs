@@ -3,11 +3,20 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import { MapPin, Clock, Calendar, ImageIcon } from "lucide-react";
+import {
+  Calendar,
+  Clock,
+  ImageIcon,
+  MapPin,
+  Plane,
+  StickyNote,
+  Users,
+} from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { FDSearchPackage } from "@/types/fd-search";
 
@@ -23,111 +32,146 @@ function formatPrice(amount: number, currency: string | null): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export function FDResultCard({ pkg, detailHref }: FDResultCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
 
-  const visibleCities = pkg.cities.slice(0, 3);
-  const extraCities = pkg.cities.length - visibleCities.length;
-
   const upcoming = [...pkg.matching_departures].sort((a, b) =>
     a.departure_date.localeCompare(b.departure_date),
   );
   const nextDep = upcoming[0];
-  const moreDeps = pkg.total_matching_departures - 1;
+  const cityNames = pkg.cities.map((c) => c.name).join(", ");
+  const countryNames = pkg.countries.map((c) => c.name).join(" · ");
 
   return (
-    <Card className="w-full overflow-hidden p-0 bg-card border-border/60 shadow-sm hover:shadow-md hover:border-border/80 transition-all duration-300 group">
-      <div className="grid grid-cols-12 gap-4 p-4">
-        <div className="col-span-3">
-          <div className="relative w-full h-full rounded-lg overflow-hidden bg-muted min-h-[160px]">
-            {!imageLoaded && pkg.main_image_url && <Skeleton className="w-full h-full absolute" />}
-            {pkg.main_image_url ? (
-              <Image
-                src={pkg.main_image_url}
-                alt={pkg.name}
-                fill
-                sizes="(max-width: 768px) 100vw, 25vw"
-                onLoad={() => setImageLoaded(true)}
-                className={cn(
-                  "object-cover transition-all duration-500 group-hover:scale-105",
-                  imageLoaded ? "opacity-100" : "opacity-0",
-                )}
-              />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
-                <ImageIcon className="size-8" />
-              </div>
+    <Card className="overflow-hidden p-0 bg-card border-border/60 shadow-sm hover:shadow-md hover:border-border/80 transition-all duration-300 group flex flex-col">
+      <div className="relative w-full aspect-video bg-muted overflow-hidden">
+        {!imageLoaded && pkg.main_image_url && <Skeleton className="w-full h-full absolute" />}
+        {pkg.main_image_url ? (
+          <Image
+            src={pkg.main_image_url}
+            alt={pkg.name}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+            onLoad={() => setImageLoaded(true)}
+            className={cn(
+              "object-cover transition-all duration-500 group-hover:scale-105",
+              imageLoaded ? "opacity-100" : "opacity-0",
             )}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+            <ImageIcon className="size-8" />
           </div>
+        )}
+        <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+          {pkg.flights_included && (
+            <Badge className="bg-success text-success-foreground border-0 gap-1 text-[10px] px-1.5 py-0.5">
+              <Plane className="size-2.5" />
+              Flights
+            </Badge>
+          )}
+          {pkg.visa_included && (
+            <Badge className="bg-success text-success-foreground border-0 gap-1 text-[10px] px-1.5 py-0.5">
+              <StickyNote className="size-2.5" />
+              Visa
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4 flex flex-col flex-1 gap-2.5">
+        <div className="space-y-1">
+          {countryNames && (
+            <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground truncate">
+              {countryNames}
+            </div>
+          )}
+          <h3 className="text-base font-semibold leading-snug line-clamp-2">{pkg.name}</h3>
+          {cityNames && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <p className="text-xs text-muted-foreground truncate cursor-default">
+                    {cityNames}
+                  </p>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  {cityNames}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
 
-        <div className="col-span-7 flex flex-col gap-2">
-          <div className="space-y-1.5">
-            <h3 className="text-base font-semibold leading-tight line-clamp-2">{pkg.name}</h3>
-            {pkg.tour_code && (
-              <p className="text-xs text-muted-foreground">Tour code · {pkg.tour_code}</p>
-            )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Clock className="size-3.5" />
+            <span>
+              {pkg.duration_nights}N / {pkg.duration_nights + 1}D
+            </span>
           </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {visibleCities.map((c) => (
-              <Badge key={c.id} variant="secondary" className="font-normal">
-                {c.name}
-              </Badge>
-            ))}
-            {extraCities > 0 && (
-              <Badge variant="outline" className="font-normal">
-                +{extraCities} more
-              </Badge>
-            )}
-          </div>
-
-          <div className="flex items-center gap-4 text-xs text-muted-foreground mt-auto pt-2">
-            <div className="flex items-center gap-1.5">
-              <Clock className="size-3.5" />
+          {pkg.total_matching_departures > 0 && (
+            <div className="flex items-center gap-1">
+              <Calendar className="size-3.5" />
               <span>
-                {pkg.duration_nights}N / {pkg.duration_nights + 1}D
+                {pkg.total_matching_departures} departure
+                {pkg.total_matching_departures === 1 ? "" : "s"}
               </span>
             </div>
-            {pkg.countries[0] && (
-              <div className="flex items-center gap-1.5">
-                <MapPin className="size-3.5" />
-                <span>{pkg.countries.map((c) => c.name).join(", ")}</span>
-              </div>
-            )}
-          </div>
-
-          {nextDep && (
-            <div className="flex items-center gap-1.5 text-xs text-foreground font-medium">
-              <Calendar className="size-3.5 text-primary" />
-              <span>Next: {formatDate(nextDep.departure_date)}</span>
-              {moreDeps > 0 && (
-                <span className="text-muted-foreground font-normal">+{moreDeps} more</span>
-              )}
+          )}
+          {pkg.max_group_size != null && (
+            <div className="flex items-center gap-1">
+              <Users className="size-3.5" />
+              <span>Max {pkg.max_group_size}</span>
             </div>
           )}
         </div>
 
-        <div className="col-span-2 flex flex-col justify-between items-end gap-3">
-          <div className="text-right space-y-0.5">
+        {pkg.departure_city && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <MapPin className="size-3.5" />
+            <span>From {pkg.departure_city}</span>
+          </div>
+        )}
+
+        <div className="flex items-end justify-between gap-3 mt-auto pt-2 border-t border-border/60">
+          <div className="min-w-0">
+            {nextDep ? (
+              <>
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                  Next departure
+                </div>
+                <div className="text-xs font-medium truncate">
+                  {formatDate(nextDep.departure_date)}
+                </div>
+              </>
+            ) : (
+              <div className="text-[10px] text-muted-foreground">No upcoming dates</div>
+            )}
+          </div>
+          <div className="text-right shrink-0">
             <div className="text-[10px] text-muted-foreground uppercase tracking-wide">From</div>
-            <div className="text-2xl font-semibold tracking-tight">
+            <div className="text-lg font-semibold tracking-tight leading-none">
               {pkg.from_price != null ? formatPrice(pkg.from_price, pkg.currency) : "—"}
             </div>
             <div className="text-[10px] text-muted-foreground leading-tight">
-              per adult · double occupancy
+              per adult
             </div>
           </div>
-
-          <Link href={detailHref} className="w-full">
-            <Button size="default" className="w-full font-medium">
-              View Details
-            </Button>
-          </Link>
         </div>
+
+        <Link href={detailHref} className="w-full mt-1">
+          <Button size="sm" className="w-full">
+            View Details
+          </Button>
+        </Link>
       </div>
     </Card>
   );

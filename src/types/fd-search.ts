@@ -25,7 +25,11 @@ export interface FDSearchPackage {
   age_restriction: boolean;
   min_age: number | null;
   max_age: number | null;
+  max_group_size: number | null;
   currency: string | null;
+  departure_city: string | null;
+  flights_included: boolean;
+  visa_included: boolean;
   cities: FDSearchCity[];
   countries: FDSearchCountry[];
   supplier: { id: string; name: string; logo_url: string | null };
@@ -121,11 +125,17 @@ export interface FDPublicDeparturePricing {
   rate_infant: number | null;
 }
 
+export type FDPublicDateBasis = "departure_date" | "booking_date";
+export type FDPublicValueType = "percentage" | "fixed";
+
 export interface FDPublicCancellationRule {
   id: string;
-  days_from: number;
-  days_to: number;
+  days_from: number | null;
+  days_to: number | null;
+  date_basis: FDPublicDateBasis | null;
+  value_type: FDPublicValueType | null;
   penalty_pct: number | null;
+  penalty_adult: number | null;
   sort_order: number;
 }
 
@@ -134,7 +144,10 @@ export interface FDPublicPaymentScheduleItem {
   label: string | null;
   days_from: number | null;
   days_to: number | null;
+  date_basis: FDPublicDateBasis | null;
+  value_type: FDPublicValueType | null;
   amount_pct: number | null;
+  amount_adult: number | null;
   sort_order: number;
 }
 

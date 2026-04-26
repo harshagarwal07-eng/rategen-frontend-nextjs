@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fdGetPackagePublic } from "@/data-access/fixed-departures";
 import { PackageBanner } from "./package-banner";
+import { PackageStickyBar } from "./package-sticky-bar";
 import { PackageAnchorMenu, type AnchorSection } from "./package-anchor-menu";
 import { PackageOverview } from "./package-overview";
 import { PackageItinerary } from "./package-itinerary";
@@ -42,6 +43,8 @@ export function FDPackageDetail({ packageId, backHref }: FDPackageDetailProps) {
     if (!effectiveSelectedId) return null;
     return upcomingDepartures.find((d) => d.id === effectiveSelectedId) ?? null;
   }, [upcomingDepartures, effectiveSelectedId]);
+
+  const bannerRef = useRef<HTMLDivElement | null>(null);
 
   if (isLoading) {
     return (
@@ -98,7 +101,11 @@ export function FDPackageDetail({ packageId, backHref }: FDPackageDetailProps) {
 
   return (
     <div className="w-full pr-8 space-y-6">
-      <PackageBanner pkg={pkg} nextDeparture={upcomingDepartures[0] ?? null} backHref={backHref} />
+      <PackageStickyBar pkg={pkg} selectedDeparture={selectedDeparture} bannerRef={bannerRef} />
+
+      <div ref={bannerRef}>
+        <PackageBanner pkg={pkg} nextDeparture={upcomingDepartures[0] ?? null} backHref={backHref} />
+      </div>
 
       <PackageAnchorMenu sections={sections} />
 
@@ -117,7 +124,7 @@ export function FDPackageDetail({ packageId, backHref }: FDPackageDetailProps) {
           <PackagePolicies pkg={pkg} selectedDeparture={selectedDeparture} />
         </div>
 
-        <aside className="lg:sticky lg:top-20 self-start">
+        <aside className="lg:sticky lg:top-32 self-start">
           <DeparturesSidebar
             pkg={pkg}
             departures={upcomingDepartures}

@@ -21,8 +21,11 @@ export function PackageVisa({ pkg }: PackageVisaProps) {
   if (!visa && !pkg.visa_inclusion) return null;
 
   return (
-    <section id="visa" className="space-y-4 scroll-mt-24">
-      <h2 className="text-xl font-semibold">Visa & Insurance</h2>
+    <section id="visa" className="space-y-4 scroll-mt-32">
+      <h2 className="text-xl font-semibold flex items-center gap-2">
+        <FileCheck className="size-4 text-success" />
+        Visa & Insurance
+      </h2>
 
       {pkg.visa_inclusion && (
         <p className="text-sm text-muted-foreground">{pkg.visa_inclusion}</p>

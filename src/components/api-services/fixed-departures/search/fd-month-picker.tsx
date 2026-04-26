@@ -74,7 +74,7 @@ export function FDMonthPicker({
         <button
           type="button"
           className={cn(
-            "flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-muted/50 transition-colors text-left w-full",
+            "flex items-center gap-2.5 px-4 py-2.5 rounded-full hover:bg-muted/50 transition-colors text-left w-full",
             className,
           )}
         >
