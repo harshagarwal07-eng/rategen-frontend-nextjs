@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function FDParserLandingPage() {
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-8 py-2">
+    <div className="mx-auto w-full max-w-4xl flex-1 space-y-8 overflow-y-auto py-2">
       <div className="space-y-3">
         <Button
           asChild
