@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, ArchiveRestore } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,16 +25,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { listContracts, deleteContract, updateContract } from "@/data-access/dmc-contracts";
-import { DmcContract } from "@/types/dmc-contracts";
+import { listMarkets } from "@/data-access/dmc-markets";
+import { DmcContract, PendingContract } from "@/types/dmc-contracts";
 import { toast } from "sonner";
 import ContractFormModal from "./contract-form-modal";
 import { MarketCountriesTooltip } from "./market-countries-tooltip";
 
 interface ContractsSectionProps {
-  hotelId: string;
+  hotelId: string | null;
+  pendingContracts: PendingContract[];
+  setPendingContracts: React.Dispatch<React.SetStateAction<PendingContract[]>>;
 }
 
-export default function ContractsSection({ hotelId }: ContractsSectionProps) {
+export default function ContractsSection({
+  hotelId,
+  pendingContracts,
+  setPendingContracts,
+}: ContractsSectionProps) {
+  const isCreateMode = !hotelId;
   const qc = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const [inlineEditId, setInlineEditId] = useState<string | null>(null);
@@ -43,12 +51,54 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editContract, setEditContract] = useState<DmcContract | null>(null);
+  const [editingTempId, setEditingTempId] = useState<string | null>(null);
 
   const { data: contracts = [], isLoading } = useQuery({
     queryKey: ["dmc-contracts", hotelId, showArchived],
-    queryFn: () => listContracts(hotelId, showArchived),
+    queryFn: () => listContracts(hotelId as string, showArchived),
     select: (result) => result.data || [],
+    enabled: !!hotelId,
   });
+
+  // Markets are needed in create mode to seed the default contract with
+  // the system "All Markets" market id.
+  const { data: marketsResult } = useQuery({
+    queryKey: ["markets"],
+    queryFn: listMarkets,
+    enabled: isCreateMode,
+  });
+  const markets = marketsResult?.data || [];
+
+  const hasSeededRef = useRef(false);
+  useEffect(() => {
+    if (!isCreateMode) return;
+    if (hasSeededRef.current) return;
+    if (markets.length === 0) return;
+    hasSeededRef.current = true;
+    const allMarkets = markets.find((m) => m.is_system) || null;
+    const today = new Date();
+    const twoYears = new Date(today);
+    twoYears.setFullYear(today.getFullYear() + 2);
+    const toStr = (d: Date) => d.toISOString().split("T")[0];
+    setPendingContracts((prev) => {
+      if (prev.length > 0) return prev;
+      return [
+        {
+          tempId: `temp-default-${crypto.randomUUID()}`,
+          name: "Default",
+          market_id: allMarkets?.id || null,
+          market: allMarkets ? { id: allMarkets.id, name: allMarkets.name } : null,
+          booking_valid_from: toStr(today),
+          booking_valid_till: toStr(twoYears),
+          stay_valid_from: toStr(today),
+          stay_valid_till: toStr(twoYears),
+          rate_type: "net",
+          status: "active",
+          is_default: true,
+        },
+      ];
+    });
+  }, [isCreateMode, markets, setPendingContracts]);
 
   const handleRestore = async (contract: DmcContract) => {
     try {
@@ -154,24 +204,92 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
     });
   };
 
+  const openAddModal = () => {
+    setEditContract(null);
+    setEditingTempId(null);
+    setModalOpen(true);
+  };
+
+  const openEditPending = (pending: PendingContract) => {
+    // Build a synthetic DmcContract so the modal's existing prefill logic works.
+    const synthetic: DmcContract = {
+      id: pending.tempId,
+      dmc_id: "",
+      dmc_hotel_id: "",
+      market_id: pending.market_id,
+      name: pending.name,
+      stay_valid_from: pending.stay_valid_from,
+      stay_valid_till: pending.stay_valid_till,
+      booking_valid_from: pending.booking_valid_from,
+      booking_valid_till: pending.booking_valid_till,
+      status: pending.status,
+      rate_type: pending.rate_type,
+      default_availability: null,
+      created_at: "",
+      market: pending.market,
+    };
+    setEditContract(synthetic);
+    setEditingTempId(pending.tempId);
+    setModalOpen(true);
+  };
+
+  const handleDeletePending = (tempId: string) => {
+    setPendingContracts((prev) => prev.filter((p) => p.tempId !== tempId));
+  };
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditContract(null);
+    setEditingTempId(null);
+  };
+
+  const handleLocalSubmit = (
+    values: Omit<PendingContract, "tempId" | "is_default">
+  ) => {
+    if (editingTempId) {
+      setPendingContracts((prev) =>
+        prev.map((p) =>
+          p.tempId === editingTempId
+            ? { ...p, ...values, is_default: p.is_default }
+            : p
+        )
+      );
+    } else {
+      setPendingContracts((prev) => [
+        ...prev,
+        {
+          ...values,
+          tempId: `temp-${crypto.randomUUID()}`,
+          is_default: false,
+        },
+      ]);
+    }
+  };
+
+  const showEmptyState = isCreateMode
+    ? pendingContracts.length === 0
+    : contracts.length === 0 && pendingContracts.length === 0;
+
   return (
     <div className="space-y-4">
       <BorderedCard collapsible defaultOpen>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <h3 className="font-semibold">Contracts</h3>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Switch
-                checked={showArchived}
-                onCheckedChange={setShowArchived}
-                id="show-archived"
-              />
-              <label htmlFor="show-archived" className="cursor-pointer">
-                Show archived
-              </label>
-            </div>
+            {!isCreateMode && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Switch
+                  checked={showArchived}
+                  onCheckedChange={setShowArchived}
+                  id="show-archived"
+                />
+                <label htmlFor="show-archived" className="cursor-pointer">
+                  Show archived
+                </label>
+              </div>
+            )}
           </div>
-          <Button size="sm" onClick={() => { setEditContract(null); setModalOpen(true); }}>
+          <Button size="sm" onClick={openAddModal}>
             <Plus className="h-4 w-4" />
             Add Contract
           </Button>
@@ -192,113 +310,174 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
+              {!isCreateMode && isLoading ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     Loading contracts…
                   </TableCell>
                 </TableRow>
-              ) : contracts.length === 0 ? (
+              ) : showEmptyState ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No contracts yet. Click "Add Contract" to create one.
                   </TableCell>
                 </TableRow>
               ) : (
-                contracts.map((contract) => {
-                  const isArchived = contract.status === "archived";
-                  return (
-                  <TableRow key={contract.id}>
-                    <TableCell>
-                      {!isArchived && inlineEditId === contract.id ? (
-                        <Input
-                          autoFocus
-                          value={inlineEditName}
-                          onChange={(e) => setInlineEditName(e.target.value)}
-                          onBlur={handleInlineSave}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleInlineSave();
-                            if (e.key === "Escape") setInlineEditId(null);
-                          }}
-                          className="h-8"
-                        />
-                      ) : isArchived ? (
-                        <span className="text-muted-foreground">{contract.name}</span>
-                      ) : (
+                <>
+                  {pendingContracts.map((pending) => (
+                    <TableRow key={pending.tempId}>
+                      <TableCell>
                         <button
                           className="text-left hover:underline"
-                          onClick={() => {
-                            setInlineEditId(contract.id);
-                            setInlineEditName(contract.name);
-                          }}
+                          onClick={() => openEditPending(pending)}
                         >
-                          {contract.name}
+                          {pending.name}
                         </button>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {contract.market ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="text-foreground">{contract.market.name}</span>
-                          <MarketCountriesTooltip marketId={contract.market.id} />
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(contract.stay_valid_from)}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(contract.stay_valid_till)}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(contract.booking_valid_from)}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDate(contract.booking_valid_till)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={statusBadgeVariant(contract.status)}>
-                        {contract.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {isArchived ? (
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {pending.market ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="text-foreground">{pending.market.name}</span>
+                            <MarketCountriesTooltip marketId={pending.market.id} />
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(pending.stay_valid_from)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(pending.stay_valid_till)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(pending.booking_valid_from)}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(pending.booking_valid_till)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusBadgeVariant(pending.status)}>
+                          {pending.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
                           <button
                             className="p-1 hover:bg-muted rounded"
-                            onClick={() => handleRestore(contract)}
-                            title="Restore contract"
+                            onClick={() => openEditPending(pending)}
+                            title="Edit contract"
                           >
-                            <ArchiveRestore className="h-4 w-4 text-muted-foreground" />
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
                           </button>
-                        ) : (
-                          <>
-                            <button
-                              className="p-1 hover:bg-muted rounded"
-                              onClick={() => {
-                                setEditContract(contract);
-                                setModalOpen(true);
-                              }}
-                              title="Edit contract"
-                            >
-                              <Pencil className="h-4 w-4 text-muted-foreground" />
-                            </button>
-                            <button
-                              className="p-1 hover:bg-destructive/10 rounded"
-                              onClick={() => setDeleteTarget(contract)}
-                              title="Archive contract"
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                  );
-                })
+                          <button
+                            className="p-1 hover:bg-destructive/10 rounded"
+                            onClick={() => handleDeletePending(pending.tempId)}
+                            title="Remove contract"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {!isCreateMode &&
+                    contracts.map((contract) => {
+                      const isArchived = contract.status === "archived";
+                      return (
+                        <TableRow key={contract.id}>
+                          <TableCell>
+                            {!isArchived && inlineEditId === contract.id ? (
+                              <Input
+                                autoFocus
+                                value={inlineEditName}
+                                onChange={(e) => setInlineEditName(e.target.value)}
+                                onBlur={handleInlineSave}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") handleInlineSave();
+                                  if (e.key === "Escape") setInlineEditId(null);
+                                }}
+                                className="h-8"
+                              />
+                            ) : isArchived ? (
+                              <span className="text-muted-foreground">{contract.name}</span>
+                            ) : (
+                              <button
+                                className="text-left hover:underline"
+                                onClick={() => {
+                                  setInlineEditId(contract.id);
+                                  setInlineEditName(contract.name);
+                                }}
+                              >
+                                {contract.name}
+                              </button>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {contract.market ? (
+                              <span className="inline-flex items-center gap-1.5">
+                                <span className="text-foreground">{contract.market.name}</span>
+                                <MarketCountriesTooltip marketId={contract.market.id} />
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(contract.stay_valid_from)}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(contract.stay_valid_till)}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(contract.booking_valid_from)}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {formatDate(contract.booking_valid_till)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={statusBadgeVariant(contract.status)}>
+                              {contract.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {isArchived ? (
+                                <button
+                                  className="p-1 hover:bg-muted rounded"
+                                  onClick={() => handleRestore(contract)}
+                                  title="Restore contract"
+                                >
+                                  <ArchiveRestore className="h-4 w-4 text-muted-foreground" />
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    className="p-1 hover:bg-muted rounded"
+                                    onClick={() => {
+                                      setEditContract(contract);
+                                      setEditingTempId(null);
+                                      setModalOpen(true);
+                                    }}
+                                    title="Edit contract"
+                                  >
+                                    <Pencil className="h-4 w-4 text-muted-foreground" />
+                                  </button>
+                                  <button
+                                    className="p-1 hover:bg-destructive/10 rounded"
+                                    onClick={() => setDeleteTarget(contract)}
+                                    title="Archive contract"
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </>
               )}
             </TableBody>
           </Table>
@@ -308,14 +487,18 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
       {modalOpen && (
         <ContractFormModal
           isOpen={modalOpen}
-          onClose={() => { setModalOpen(false); setEditContract(null); }}
+          onClose={closeModal}
           onSuccess={() => {
-            qc.invalidateQueries({ queryKey: ["dmc-contracts", hotelId] });
-            setModalOpen(false);
-            setEditContract(null);
+            if (!isCreateMode && !editingTempId) {
+              qc.invalidateQueries({ queryKey: ["dmc-contracts", hotelId] });
+            }
+            closeModal();
           }}
           hotelId={hotelId}
           initialData={editContract}
+          onLocalSubmit={
+            isCreateMode || !!editingTempId ? handleLocalSubmit : undefined
+          }
         />
       )}
 

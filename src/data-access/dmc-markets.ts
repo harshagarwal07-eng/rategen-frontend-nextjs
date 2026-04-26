@@ -7,6 +7,7 @@ export interface Market {
   name: string;
   country_mode?: "specific" | "all";
   country_ids?: string[];
+  is_system?: boolean;
 }
 
 export interface MarketDetail {

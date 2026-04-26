@@ -36,7 +36,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { DateValidityPicker, type DateRangeValue } from "@/components/ui/date-validity-picker";
 import { createContract, updateContract } from "@/data-access/dmc-contracts";
 import { listMarkets } from "@/data-access/dmc-markets";
-import { DmcContract } from "@/types/dmc-contracts";
+import { DmcContract, PendingContract } from "@/types/dmc-contracts";
 import MarketCreateModal from "@/components/forms/dmc-hotel-sections/market-create-modal";
 import { MarketCountriesTooltip } from "@/components/forms/dmc-hotel-sections/market-countries-tooltip";
 import { toast } from "sonner";
@@ -57,12 +57,17 @@ const ContractFormSchema = z.object({
 
 export type ContractFormValues = z.infer<typeof ContractFormSchema>;
 
+type LocalContractValues = Omit<PendingContract, "tempId" | "is_default">;
+
 interface ContractFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  hotelId: string;
+  hotelId: string | null;
   initialData?: DmcContract | null;
+  // When provided, the modal skips API calls and hands the resolved values
+  // back to the parent for local-state management (create-mode flow).
+  onLocalSubmit?: (values: LocalContractValues) => void;
 }
 
 export default function ContractFormModal({
@@ -71,6 +76,7 @@ export default function ContractFormModal({
   onSuccess,
   hotelId,
   initialData,
+  onLocalSubmit,
 }: ContractFormModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [showMarketModal, setShowMarketModal] = useState(false);
@@ -143,16 +149,43 @@ export default function ContractFormModal({
   const onSubmit = async (data: ContractFormValues) => {
     setIsSaving(true);
     try {
-      const toDateStr = (d?: Date) =>
+      const toDateStrOrNull = (d?: Date) =>
+        d ? d.toISOString().split("T")[0] : null;
+      const toDateStrOrUndef = (d?: Date) =>
         d ? d.toISOString().split("T")[0] : undefined;
+
+      if (onLocalSubmit) {
+        const market = data.market_id
+          ? markets.find((m) => m.id === data.market_id) || null
+          : null;
+        onLocalSubmit({
+          name: data.name,
+          market_id: data.market_id || null,
+          market: market ? { id: market.id, name: market.name } : null,
+          stay_valid_from: toDateStrOrNull(data.stay_validity?.from),
+          stay_valid_till: toDateStrOrNull(data.stay_validity?.to),
+          booking_valid_from: toDateStrOrNull(data.booking_validity?.from),
+          booking_valid_till: toDateStrOrNull(data.booking_validity?.to),
+          rate_type: data.rate_type,
+          status: data.status,
+        });
+        toast.success(initialData ? "Contract updated" : "Contract added");
+        onSuccess();
+        return;
+      }
+
+      if (!hotelId) {
+        toast.error("Hotel must be saved before adding contracts");
+        return;
+      }
 
       const payload = {
         name: data.name,
         market_id: data.market_id || undefined,
-        stay_valid_from: toDateStr(data.stay_validity?.from),
-        stay_valid_till: toDateStr(data.stay_validity?.to),
-        booking_valid_from: toDateStr(data.booking_validity?.from),
-        booking_valid_till: toDateStr(data.booking_validity?.to),
+        stay_valid_from: toDateStrOrUndef(data.stay_validity?.from),
+        stay_valid_till: toDateStrOrUndef(data.stay_validity?.to),
+        booking_valid_from: toDateStrOrUndef(data.booking_validity?.from),
+        booking_valid_till: toDateStrOrUndef(data.booking_validity?.to),
         rate_type: data.rate_type,
         status: data.status,
       };
@@ -163,7 +196,6 @@ export default function ContractFormModal({
 
       if (result.error) {
         toast.error(result.error);
-        setIsSaving(false);
         return;
       }
 

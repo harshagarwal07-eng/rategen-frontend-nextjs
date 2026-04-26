@@ -22,6 +22,7 @@ export type CreateContractPayload = {
   booking_valid_till?: string;
   rate_type?: "net" | "bar";
   status?: "draft" | "active";
+  is_default?: boolean;
 };
 
 export async function listContracts(

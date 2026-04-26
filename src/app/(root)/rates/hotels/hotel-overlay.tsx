@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, Save, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getHotel } from "@/data-access/dmc-hotels";
+import { createContract } from "@/data-access/dmc-contracts";
 import { DmcHotel } from "@/types/hotels";
+import { PendingContract } from "@/types/dmc-contracts";
+import { toast } from "sonner";
 import GeneralInfoTab from "./tabs/general-info-tab";
 import RoomsSeasonsTab from "./tabs/rooms-seasons-tab";
 
@@ -28,19 +32,24 @@ const TABS = [
 ];
 
 export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
+  const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState("general-info");
   const [hotel, setHotel] = useState<DmcHotel | null>(null);
   const [loading, setLoading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [formSaving, setFormSaving] = useState(false);
+  const [contractSaving, setContractSaving] = useState(false);
+  const isSaving = formSaving || contractSaving;
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [internalHotelId, setInternalHotelId] = useState<string | null>(null);
+  const [pendingContracts, setPendingContracts] = useState<PendingContract[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       setActiveTab("general-info");
       setInternalHotelId(hotelId);
+      setPendingContracts([]);
       if (hotelId) {
         setLoading(true);
         getHotel(hotelId).then((result) => {
@@ -52,6 +61,7 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
       setHotel(null);
       setIsDirty(false);
       setInternalHotelId(null);
+      setPendingContracts([]);
     }
   }, [isOpen, hotelId]);
 
@@ -61,6 +71,53 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
       return;
     }
     onClose();
+  };
+
+  const handleHotelSaved = async (saved: DmcHotel) => {
+    setHotel(saved);
+
+    if (pendingContracts.length > 0) {
+      setContractSaving(true);
+      const successfulTempIds = new Set<string>();
+      const failures: string[] = [];
+
+      for (const pending of pendingContracts) {
+        const result = await createContract(saved.id, {
+          name: pending.name,
+          market_id: pending.market_id || undefined,
+          stay_valid_from: pending.stay_valid_from || undefined,
+          stay_valid_till: pending.stay_valid_till || undefined,
+          booking_valid_from: pending.booking_valid_from || undefined,
+          booking_valid_till: pending.booking_valid_till || undefined,
+          rate_type: pending.rate_type,
+          status: pending.status,
+          ...(pending.is_default ? { is_default: true } : {}),
+        });
+        if (result.error) {
+          failures.push(pending.name);
+        } else {
+          successfulTempIds.add(pending.tempId);
+        }
+      }
+
+      setPendingContracts((prev) =>
+        prev.filter((p) => !successfulTempIds.has(p.tempId))
+      );
+
+      if (successfulTempIds.size > 0) {
+        await qc.invalidateQueries({ queryKey: ["dmc-contracts", saved.id] });
+      }
+
+      if (failures.length > 0) {
+        toast.error(
+          `Failed to save contract${failures.length === 1 ? "" : "s"}: ${failures.join(", ")}`
+        );
+      }
+
+      setContractSaving(false);
+    }
+
+    setInternalHotelId(saved.id);
   };
 
   const displayName = hotel?.name || "";
@@ -176,13 +233,12 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                 <GeneralInfoTab
                   hotelId={internalHotelId}
                   initialHotel={hotel}
-                  onSaved={(saved) => {
-                    setHotel(saved);
-                    setInternalHotelId(saved.id);
-                  }}
+                  onSaved={handleHotelSaved}
                   onDirtyChange={setIsDirty}
                   formRef={formRef}
-                  onSavingChange={setIsSaving}
+                  onSavingChange={setFormSaving}
+                  pendingContracts={pendingContracts}
+                  setPendingContracts={setPendingContracts}
                 />
               )}
               {activeTab === "rooms-seasons" && <RoomsSeasonsTab />}

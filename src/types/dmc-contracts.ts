@@ -14,3 +14,17 @@ export interface DmcContract {
   created_at: string;
   market?: { id: string; name: string } | null;
 }
+
+export interface PendingContract {
+  tempId: string;
+  name: string;
+  market_id: string | null;
+  market: { id: string; name: string } | null;
+  stay_valid_from: string | null;
+  stay_valid_till: string | null;
+  booking_valid_from: string | null;
+  booking_valid_till: string | null;
+  rate_type: "net" | "bar";
+  status: "draft" | "active";
+  is_default: boolean;
+}

@@ -4,6 +4,7 @@ import { type RefObject } from "react";
 import GeneralInfoForm from "@/components/forms/dmc-hotel-sections/general-info-form";
 import ContractsSection from "@/components/forms/dmc-hotel-sections/contracts-section";
 import { DmcHotel } from "@/types/hotels";
+import { PendingContract } from "@/types/dmc-contracts";
 
 interface Props {
   hotelId: string | null;
@@ -12,6 +13,8 @@ interface Props {
   onDirtyChange: (dirty: boolean) => void;
   formRef?: RefObject<HTMLFormElement>;
   onSavingChange?: (saving: boolean) => void;
+  pendingContracts: PendingContract[];
+  setPendingContracts: React.Dispatch<React.SetStateAction<PendingContract[]>>;
 }
 
 export default function GeneralInfoTab({
@@ -21,6 +24,8 @@ export default function GeneralInfoTab({
   onDirtyChange,
   formRef,
   onSavingChange,
+  pendingContracts,
+  setPendingContracts,
 }: Props) {
   return (
     <div className="space-y-8">
@@ -37,7 +42,11 @@ export default function GeneralInfoTab({
         hideFooter
         onSavingChange={onSavingChange}
       />
-      {hotelId && <ContractsSection hotelId={hotelId} />}
+      <ContractsSection
+        hotelId={hotelId}
+        pendingContracts={pendingContracts}
+        setPendingContracts={setPendingContracts}
+      />
     </div>
   );
 }
