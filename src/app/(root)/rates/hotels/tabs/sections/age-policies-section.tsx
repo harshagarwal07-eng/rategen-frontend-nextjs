@@ -1,17 +1,31 @@
 "use client";
 
-// Age Policies card (issue 2 rebuild). One band per label; inside each band,
-// "For Rooms" + "For Meals" sub-blocks side-by-side. Either sub-block may be
-// absent — in which case it shows a "+ Add" button. Default labels (Adult /
-// Teenager / Child / Infant) are always rendered; Teenager has no server-
-// seeded data and starts empty until the user clicks Add.
+// Age Policies — single table per band, two scope sub-pairs per row.
+// Mirrors transfers' age-policy-section.tsx structure (compact <Table>,
+// preset name dropdown, ghost Add button) but with Hotels' Rooms+Meals
+// scope split represented as two pairs of From/To columns rather than
+// each band being its own collapsible card.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { FDCard } from "@/components/ui/fd-card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import {
   AgePoliciesResponse,
   AgePolicyBand,
@@ -20,9 +34,10 @@ import {
 
 const DEFAULT_LABEL_ORDER = ["Adult", "Teenager", "Child", "Infant"] as const;
 
-// Sensible defaults for "+ Add Rooms / Meals" on an empty band, by label
-// name (case-insensitive). Used so users don't have to type 13 / 17 manually
-// for a new Teenager band on the contract they just opened.
+const PRESET_NAMES = ["Adult", "Teenager", "Child", "Infant", "Senior", "Youth"] as const;
+
+// Sensible age-pair defaults used when a scope materialises (user types
+// into an empty cell). Matches the previous brief's defaults.
 const DEFAULT_AGES: Record<string, { age_from: number; age_to: number }> = {
   adult: { age_from: 18, age_to: 99 },
   teenager: { age_from: 13, age_to: 17 },
@@ -30,15 +45,18 @@ const DEFAULT_AGES: Record<string, { age_from: number; age_to: number }> = {
   child: { age_from: 2, age_to: 12 },
   infant: { age_from: 0, age_to: 1 },
   senior: { age_from: 60, age_to: 99 },
+  youth: { age_from: 18, age_to: 25 },
 };
 
 const defaultAgesFor = (label: string) =>
   DEFAULT_AGES[label.trim().toLowerCase()] ?? { age_from: 0, age_to: 0 };
 
+// ─── Local state shape ─────────────────────────────────────────────────
+
 export interface ScopeData {
   id?: string | null;
-  age_from: number;
-  age_to: number;
+  age_from: number | null;
+  age_to: number | null;
 }
 
 export interface LocalAgeBand {
@@ -58,8 +76,6 @@ export function wrapAgePolicies(res: AgePoliciesResponse | null): AgePoliciesLoc
   const rooms = res?.rooms ?? [];
   const meals = res?.meals ?? [];
 
-  // Preserve canonical case for known labels but key by lowercase so
-  // inconsistent server data ("CHILD" vs "Child") collapses to one band.
   const labels: string[] = [];
   const seen = new Set<string>();
   const addLabel = (l: string) => {
@@ -68,9 +84,7 @@ export function wrapAgePolicies(res: AgePoliciesResponse | null): AgePoliciesLoc
     seen.add(k);
     labels.push(l);
   };
-  // Defaults first (so they always appear in canonical order).
   for (const l of DEFAULT_LABEL_ORDER) addLabel(l);
-  // Then any extras from the response.
   for (const b of rooms) addLabel(b.label);
   for (const b of meals) addLabel(b.label);
 
@@ -80,8 +94,6 @@ export function wrapAgePolicies(res: AgePoliciesResponse | null): AgePoliciesLoc
     const m = meals.find((b) => b.label.trim().toLowerCase() === k);
     return {
       _localId: newLocalId(),
-      // Prefer the server's actual casing for the label if it appears in either
-      // scope's data — otherwise fall back to the canonical default.
       label: r?.label ?? m?.label ?? displayLabel,
       rooms: r ? { id: r.id, age_from: r.age_from, age_to: r.age_to } : undefined,
       meals: m ? { id: m.id, age_from: m.age_from, age_to: m.age_to } : undefined,
@@ -89,6 +101,9 @@ export function wrapAgePolicies(res: AgePoliciesResponse | null): AgePoliciesLoc
   });
 }
 
+// Emit only fully-populated scopes. A scope with either bound null is
+// treated as absent — same as undefined — so blanking both cells in a
+// scope drops it from the payload (per brief's "empty cells = absent").
 export function stripAgePolicies(state: AgePoliciesLocalState): {
   rooms: AgePolicyBand[];
   meals: AgePolicyBand[];
@@ -98,7 +113,7 @@ export function stripAgePolicies(state: AgePoliciesLocalState): {
   for (const b of state) {
     const label = b.label.trim();
     if (!label) continue;
-    if (b.rooms) {
+    if (b.rooms && b.rooms.age_from != null && b.rooms.age_to != null) {
       rooms.push({
         ...(b.rooms.id ? { id: b.rooms.id } : {}),
         label,
@@ -106,7 +121,7 @@ export function stripAgePolicies(state: AgePoliciesLocalState): {
         age_to: b.rooms.age_to,
       });
     }
-    if (b.meals) {
+    if (b.meals && b.meals.age_from != null && b.meals.age_to != null) {
       meals.push({
         ...(b.meals.id ? { id: b.meals.id } : {}),
         label,
@@ -123,21 +138,20 @@ export function stripAgePolicies(state: AgePoliciesLocalState): {
 export interface BandSubError {
   age?: string;
   overlap?: string;
+  partial?: string;
 }
 export interface BandError {
   rooms?: BandSubError;
   meals?: BandSubError;
-  duplicate?: string; // band-level: duplicate label
+  duplicate?: string;
 }
 export type AgePoliciesErrors = Record<string, BandError>;
 
 export function validateAgePolicies(state: AgePoliciesLocalState): AgePoliciesErrors {
   const errs: AgePoliciesErrors = {};
-  for (const b of state) {
-    errs[b._localId] = {};
-  }
+  for (const b of state) errs[b._localId] = {};
 
-  // Duplicate label across bands (case-insensitive). Skip empty labels.
+  // Duplicate label across bands.
   const counts = new Map<string, string[]>();
   for (const b of state) {
     const k = b.label.trim().toLowerCase();
@@ -148,30 +162,36 @@ export function validateAgePolicies(state: AgePoliciesLocalState): AgePoliciesEr
   }
   for (const [, ids] of counts) {
     if (ids.length < 2) continue;
-    for (const id of ids) {
-      errs[id].duplicate = "Duplicate label";
-    }
+    for (const id of ids) errs[id].duplicate = "Duplicate label";
   }
 
-  // Per-scope checks: age_from <= age_to and intra-scope overlap.
   for (const scope of ["rooms", "meals"] as const) {
-    const filled = state
-      .map((b) => ({ band: b, sub: b[scope] }))
-      .filter((x): x is { band: LocalAgeBand; sub: ScopeData } => !!x.sub);
-
-    for (const { band, sub } of filled) {
-      if (sub.age_from > sub.age_to) {
-        errs[band._localId][scope] = { ...(errs[band._localId][scope] ?? {}), age: "From ≤ To" };
+    type Filled = { band: LocalAgeBand; from: number; to: number };
+    const filled: Filled[] = [];
+    for (const b of state) {
+      const sub = b[scope];
+      if (!sub) continue;
+      const oneSet =
+        (sub.age_from != null) !== (sub.age_to != null);
+      if (oneSet) {
+        errs[b._localId][scope] = { partial: "Set both From and To" };
+        continue;
       }
+      if (sub.age_from == null || sub.age_to == null) continue;
+      if (sub.age_from > sub.age_to) {
+        errs[b._localId][scope] = {
+          ...(errs[b._localId][scope] ?? {}),
+          age: "From ≤ To",
+        };
+        continue;
+      }
+      filled.push({ band: b, from: sub.age_from, to: sub.age_to });
     }
-
     for (let i = 0; i < filled.length; i++) {
-      const a = filled[i];
-      if (a.sub.age_from > a.sub.age_to) continue;
       for (let j = i + 1; j < filled.length; j++) {
+        const a = filled[i];
         const b = filled[j];
-        if (b.sub.age_from > b.sub.age_to) continue;
-        if (a.sub.age_from <= b.sub.age_to && b.sub.age_from <= a.sub.age_to) {
+        if (a.from <= b.to && b.from <= a.to) {
           errs[a.band._localId][scope] = {
             ...(errs[a.band._localId][scope] ?? {}),
             overlap: `Overlaps another ${scope} band`,
@@ -214,329 +234,261 @@ export default function AgePoliciesSection({
   const removeBand = (id: string) =>
     onChange(state.filter((b) => b._localId !== id));
 
-  const removeScope = (id: string, scope: AgeBandScope) =>
-    updateBand(id, { [scope]: undefined } as Partial<LocalAgeBand>);
+  const addBand = () =>
+    onChange([
+      ...state,
+      { _localId: newLocalId(), label: "", rooms: undefined, meals: undefined },
+    ]);
 
-  const addScope = (id: string, scope: AgeBandScope) => {
-    const band = state.find((b) => b._localId === id);
+  // Update one cell of a scope. Rules:
+  //  - Empty scope + non-empty cell → materialise scope, fill the other
+  //    cell with the per-label default so the user sees a complete pair.
+  //  - Defined scope, both cells emptied → drop scope back to undefined.
+  //  - Defined scope, one cell edited → update that field (other may be null
+  //    transiently; flagged by validation).
+  const updateScopeField = (
+    bandId: string,
+    scope: AgeBandScope,
+    field: "age_from" | "age_to",
+    raw: string
+  ) => {
+    const band = state.find((b) => b._localId === bandId);
     if (!band) return;
-    updateBand(id, {
-      [scope]: { id: null, ...defaultAgesFor(band.label) },
-    } as Partial<LocalAgeBand>);
-  };
+    const num = raw === "" ? null : Number(raw);
+    const current = band[scope];
 
-  const updateScope = (id: string, scope: AgeBandScope, patch: Partial<ScopeData>) => {
-    const band = state.find((b) => b._localId === id);
-    if (!band || !band[scope]) return;
-    updateBand(id, {
-      [scope]: { ...band[scope]!, ...patch },
-    } as Partial<LocalAgeBand>);
+    if (!current) {
+      if (num == null) return;
+      const def = defaultAgesFor(band.label);
+      const next: ScopeData = {
+        id: null,
+        age_from: field === "age_from" ? num : def.age_from,
+        age_to: field === "age_to" ? num : def.age_to,
+      };
+      updateBand(bandId, { [scope]: next } as Partial<LocalAgeBand>);
+      return;
+    }
+
+    const next: ScopeData = { ...current, [field]: num };
+    if (next.age_from == null && next.age_to == null) {
+      updateBand(bandId, { [scope]: undefined } as Partial<LocalAgeBand>);
+      return;
+    }
+    updateBand(bandId, { [scope]: next } as Partial<LocalAgeBand>);
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        These age bands apply to room rate pricing only. Meal plan and
-        supplement age policies are configured separately.
+    <div className="space-y-2">
+      <p className="text-[11px] text-muted-foreground/80">
+        These age bands apply to room rates and meal supplements. Leave a
+        scope&apos;s cells empty to skip that scope for a band.
       </p>
 
-      <div className="space-y-2">
-        {state.map((b) => (
-          <BandCard
-            key={b._localId}
-            band={b}
-            errors={errors[b._localId] ?? {}}
-            disabled={disabled}
-            onChangeLabel={(label) => updateBand(b._localId, { label })}
-            onDelete={() => removeBand(b._localId)}
-            onDeleteScope={(scope) => removeScope(b._localId, scope)}
-            onAddScope={(scope) => addScope(b._localId, scope)}
-            onUpdateScope={(scope, patch) => updateScope(b._localId, scope, patch)}
-          />
-        ))}
-      </div>
+      <Table>
+        <TableHeader>
+          <TableRow className="text-xs">
+            <TableHead className="w-44">Band name</TableHead>
+            <TableHead className="w-20 text-center">Rooms From</TableHead>
+            <TableHead className="w-20 text-center">Rooms To</TableHead>
+            <TableHead className="w-20 text-center">Meals From</TableHead>
+            <TableHead className="w-20 text-center">Meals To</TableHead>
+            <TableHead className="w-8" />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {state.length === 0 && (
+            <TableRow>
+              <TableCell
+                colSpan={6}
+                className="py-4 text-center text-xs text-muted-foreground"
+              >
+                No age bands. Click &ldquo;Add Band&rdquo; to define one.
+              </TableCell>
+            </TableRow>
+          )}
+          {state.map((b, idx) => {
+            const e = errors[b._localId] ?? {};
+            return (
+              <TableRow
+                key={b._localId}
+                className={cn(
+                  idx % 2 === 1 && "bg-muted/30",
+                  "align-top"
+                )}
+              >
+                <TableCell className="py-1.5 pr-2">
+                  <BandNameField
+                    value={b.label}
+                    disabled={disabled}
+                    onChange={(label) => updateBand(b._localId, { label })}
+                  />
+                  {e.duplicate && (
+                    <p className="mt-0.5 text-[10px] text-destructive">
+                      {e.duplicate}
+                    </p>
+                  )}
+                </TableCell>
+
+                <TableCell className="py-1.5 px-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={150}
+                    value={b.rooms?.age_from ?? ""}
+                    disabled={disabled}
+                    onChange={(ev) =>
+                      updateScopeField(b._localId, "rooms", "age_from", ev.target.value)
+                    }
+                    className="h-7 text-center text-xs"
+                  />
+                </TableCell>
+                <TableCell className="py-1.5 px-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={150}
+                    value={b.rooms?.age_to ?? ""}
+                    disabled={disabled}
+                    onChange={(ev) =>
+                      updateScopeField(b._localId, "rooms", "age_to", ev.target.value)
+                    }
+                    className="h-7 text-center text-xs"
+                  />
+                  {e.rooms && (e.rooms.age || e.rooms.overlap || e.rooms.partial) && (
+                    <p className="mt-0.5 text-[10px] text-destructive whitespace-nowrap">
+                      {e.rooms.partial || e.rooms.age || e.rooms.overlap}
+                    </p>
+                  )}
+                </TableCell>
+
+                <TableCell className="py-1.5 px-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={150}
+                    value={b.meals?.age_from ?? ""}
+                    disabled={disabled}
+                    onChange={(ev) =>
+                      updateScopeField(b._localId, "meals", "age_from", ev.target.value)
+                    }
+                    className="h-7 text-center text-xs"
+                  />
+                </TableCell>
+                <TableCell className="py-1.5 px-1">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={150}
+                    value={b.meals?.age_to ?? ""}
+                    disabled={disabled}
+                    onChange={(ev) =>
+                      updateScopeField(b._localId, "meals", "age_to", ev.target.value)
+                    }
+                    className="h-7 text-center text-xs"
+                  />
+                  {e.meals && (e.meals.age || e.meals.overlap || e.meals.partial) && (
+                    <p className="mt-0.5 text-[10px] text-destructive whitespace-nowrap">
+                      {e.meals.partial || e.meals.age || e.meals.overlap}
+                    </p>
+                  )}
+                </TableCell>
+
+                <TableCell className="py-1.5 pl-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                    disabled={disabled}
+                    onClick={() => removeBand(b._localId)}
+                    aria-label={`Delete ${b.label || "band"}`}
+                    title="Delete band"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
 
       {!disabled && (
-        <AddBandRow
-          existingLabels={state.map((b) => b.label.trim().toLowerCase())}
-          onAdd={(label) =>
-            onChange([
-              ...state,
-              { _localId: newLocalId(), label, rooms: undefined, meals: undefined },
-            ])
-          }
-        />
-      )}
-    </div>
-  );
-}
-
-function BandCard({
-  band,
-  errors,
-  disabled,
-  onChangeLabel,
-  onDelete,
-  onDeleteScope,
-  onAddScope,
-  onUpdateScope,
-}: {
-  band: LocalAgeBand;
-  errors: BandError;
-  disabled: boolean;
-  onChangeLabel: (label: string) => void;
-  onDelete: () => void;
-  onDeleteScope: (scope: AgeBandScope) => void;
-  onAddScope: (scope: AgeBandScope) => void;
-  onUpdateScope: (scope: AgeBandScope, patch: Partial<ScopeData>) => void;
-}) {
-  const titleText = band.label.trim() || "(unnamed)";
-  const summary =
-    band.rooms && band.meals
-      ? `Rooms ${band.rooms.age_from}–${band.rooms.age_to} · Meals ${band.meals.age_from}–${band.meals.age_to}`
-      : band.rooms
-        ? `Rooms ${band.rooms.age_from}–${band.rooms.age_to}`
-        : band.meals
-          ? `Meals ${band.meals.age_from}–${band.meals.age_to}`
-          : "empty";
-
-  return (
-    <FDCard
-      title={
-        <span className="flex items-center gap-2">
-          <span className="font-semibold uppercase tracking-wide text-sm">
-            {titleText}
-          </span>
-          <span className="text-[11px] text-muted-foreground font-normal">
-            {summary}
-          </span>
-          {errors.duplicate && (
-            <span className="text-[11px] text-destructive font-normal">
-              · {errors.duplicate}
-            </span>
-          )}
-        </span>
-      }
-      defaultOpen={false}
-      rightSlot={
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-          disabled={disabled}
-          aria-label={`Delete ${titleText} band`}
-          title="Delete band"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      }
-    >
-      <div className="space-y-3">
-        {/* Label edit input — kept compact, only useful when user wants to
-            rename a custom band. Default labels can also be renamed. */}
-        <div className="flex items-center gap-2">
-          <Label className="text-xs w-16 shrink-0">Label</Label>
-          <Input
-            value={band.label}
-            disabled={disabled}
-            onChange={(e) => onChangeLabel(e.target.value)}
-            className="h-8 max-w-xs"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <ScopePanel
-            scope="rooms"
-            title="For Rooms"
-            data={band.rooms}
-            error={errors.rooms}
-            disabled={disabled}
-            onAdd={() => onAddScope("rooms")}
-            onDelete={() => onDeleteScope("rooms")}
-            onUpdate={(patch) => onUpdateScope("rooms", patch)}
-          />
-          <ScopePanel
-            scope="meals"
-            title="For Meals"
-            data={band.meals}
-            error={errors.meals}
-            disabled={disabled}
-            onAdd={() => onAddScope("meals")}
-            onDelete={() => onDeleteScope("meals")}
-            onUpdate={(patch) => onUpdateScope("meals", patch)}
-          />
-        </div>
-      </div>
-    </FDCard>
-  );
-}
-
-function ScopePanel({
-  scope,
-  title,
-  data,
-  error,
-  disabled,
-  onAdd,
-  onDelete,
-  onUpdate,
-}: {
-  scope: AgeBandScope;
-  title: string;
-  data: ScopeData | undefined;
-  error: BandSubError | undefined;
-  disabled: boolean;
-  onAdd: () => void;
-  onDelete: () => void;
-  onUpdate: (patch: Partial<ScopeData>) => void;
-}) {
-  return (
-    <div className="rounded-md border bg-background p-3">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-        </span>
-        {data && (
-          <button
+        <div>
+          <Button
             type="button"
-            onClick={onDelete}
-            disabled={disabled}
-            className="p-1 hover:bg-destructive/10 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-            title={`Remove ${title}`}
-            aria-label={`Remove ${title}`}
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
+            onClick={addBand}
           >
-            <Trash2 className="h-3.5 w-3.5 text-destructive" />
-          </button>
-        )}
-      </div>
-
-      {data ? (
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-[11px]">From</Label>
-              <Input
-                type="number"
-                min={0}
-                max={120}
-                value={data.age_from}
-                disabled={disabled}
-                onChange={(e) => onUpdate({ age_from: Number(e.target.value || 0) })}
-                className="h-8"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-[11px]">To</Label>
-              <Input
-                type="number"
-                min={0}
-                max={120}
-                value={data.age_to}
-                disabled={disabled}
-                onChange={(e) => onUpdate({ age_to: Number(e.target.value || 0) })}
-                className="h-8"
-              />
-            </div>
-          </div>
-          {error && (error.age || error.overlap) && (
-            <div className="text-[11px] text-destructive space-x-2">
-              {error.age && <span>{error.age}</span>}
-              {error.overlap && <span>{error.overlap}</span>}
-            </div>
-          )}
+            <Plus className="h-3 w-3" /> Add Band
+          </Button>
         </div>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onAdd}
-          disabled={disabled}
-          className="w-full"
-        >
-          <Plus className="h-3.5 w-3.5 mr-1" />
-          Add {scope === "rooms" ? "Rooms" : "Meals"}
-        </Button>
       )}
     </div>
   );
 }
 
-function AddBandRow({
-  existingLabels,
-  onAdd,
+// Band-name field: preset Select with "Custom…" escape hatch matching
+// transfers' age-policy-section. If the current value is non-empty and
+// not a preset, render a freeform text input so legacy/custom labels
+// survive load → edit → save unchanged.
+function BandNameField({
+  value,
+  disabled,
+  onChange,
 }: {
-  existingLabels: string[];
-  onAdd: (label: string) => void;
+  value: string;
+  disabled: boolean;
+  onChange: (next: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const trimmed = name.trim();
-  const dup = trimmed.length > 0 && existingLabels.includes(trimmed.toLowerCase());
-  const valid = trimmed.length > 0 && !dup;
+  const trimmed = value.trim();
+  const isPreset =
+    trimmed === "" ||
+    PRESET_NAMES.some((p) => p.toLowerCase() === trimmed.toLowerCase());
 
-  if (!open) {
+  if (!isPreset) {
     return (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          setOpen(true);
-          setName("");
-        }}
-      >
-        <Plus className="h-3.5 w-3.5 mr-1" /> Add Age Band
-      </Button>
+      <Input
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Band name"
+        className="h-7 text-xs"
+      />
     );
   }
 
-  const commit = () => {
-    if (!valid) return;
-    onAdd(trimmed);
-    setName("");
-    setOpen(false);
-  };
+  const canonical =
+    PRESET_NAMES.find((p) => p.toLowerCase() === trimmed.toLowerCase()) ?? "";
 
   return (
-    <div className="flex items-center gap-2">
-      <Input
-        autoFocus
-        placeholder="Band label (e.g. Senior)"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          if (e.key === "Escape") {
-            setOpen(false);
-            setName("");
-          }
-        }}
-        className="h-8 max-w-xs"
-      />
-      <Button
-        type="button"
-        size="sm"
-        onClick={commit}
-        disabled={!valid}
-        title={dup ? "Label already exists" : undefined}
-      >
-        Add
-      </Button>
-      <Button
-        type="button"
-        size="sm"
-        variant="ghost"
-        onClick={() => {
-          setOpen(false);
-          setName("");
-        }}
-      >
-        Cancel
-      </Button>
-      {dup && <span className="text-[11px] text-destructive">Already exists</span>}
-    </div>
+    <Select
+      value={canonical || "__placeholder__"}
+      onValueChange={(v) => {
+        if (v === "__placeholder__") return;
+        if (v === "__custom__") onChange(" "); // trigger custom-input branch
+        else onChange(v);
+      }}
+      disabled={disabled}
+    >
+      <SelectTrigger className="h-7 text-xs">
+        <SelectValue placeholder="Select band…" />
+      </SelectTrigger>
+      <SelectContent>
+        {PRESET_NAMES.map((n) => (
+          <SelectItem key={n} value={n} className="text-xs">
+            {n}
+          </SelectItem>
+        ))}
+        <SelectItem
+          value="__custom__"
+          className="text-xs italic text-muted-foreground"
+        >
+          Custom…
+        </SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
