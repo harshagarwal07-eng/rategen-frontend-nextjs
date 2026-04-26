@@ -42,9 +42,9 @@ const ASPECT_CLASS: Record<AspectRatio, string> = {
 };
 
 const SIZE_CLASS: Record<Size, string> = {
-  sm: "max-w-xs",
-  md: "max-w-md",
-  lg: "max-w-2xl",
+  sm: "max-w-[140px]",
+  md: "max-w-[200px]",
+  lg: "max-w-[280px]",
 };
 
 export function ImagePicker({
@@ -57,23 +57,31 @@ export function ImagePicker({
 }: ImagePickerProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-2">
       {label && <Label className="text-xs">{label}</Label>}
       <div className={cn("flex flex-col gap-2", SIZE_CLASS[size])}>
         {value ? (
-          <PreviewFrame aspectRatio={aspectRatio}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={value}
-              alt={label ?? "Image"}
-              className="h-full w-full object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = "none";
-              }}
-            />
-          </PreviewFrame>
+          <button
+            type="button"
+            onClick={() => setLightboxOpen(true)}
+            className="block w-full rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
+            aria-label="View full image"
+          >
+            <PreviewFrame aspectRatio={aspectRatio}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={value}
+                alt={label ?? "Image"}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                }}
+              />
+            </PreviewFrame>
+          </button>
         ) : (
           <PreviewFrame aspectRatio={aspectRatio} dashed>
             <div className="flex h-full w-full flex-col items-center justify-center text-muted-foreground gap-1">
@@ -109,6 +117,20 @@ export function ImagePicker({
           setPickerOpen(false);
         }}
       />
+
+      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
+        <DialogContent className="max-w-4xl p-0 gap-0 z-[60] bg-transparent border-none shadow-none">
+          <DialogTitle className="sr-only">{label ?? "Image preview"}</DialogTitle>
+          {value && (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={value}
+              alt={label ?? "Image preview"}
+              className="max-h-[80vh] w-full object-contain rounded-md"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirmRemove} onOpenChange={setConfirmRemove}>
         <AlertDialogContent>
