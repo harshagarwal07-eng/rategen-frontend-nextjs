@@ -510,7 +510,10 @@ export function ParserSessionView({ sessionId }: { sessionId: string }) {
         <div className="mt-4 flex justify-center gap-2">
           <Button variant="outline" size="sm" asChild>
             <Link href="/rates/fixed-departures/parser">
-              <ChevronLeft className="h-4 w-4" /> Back to parser
+              <span className="flex items-center gap-2">
+                <ChevronLeft className="h-4 w-4" />
+                Back to parser
+              </span>
             </Link>
           </Button>
         </div>

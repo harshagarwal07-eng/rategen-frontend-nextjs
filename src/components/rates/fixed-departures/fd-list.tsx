@@ -274,8 +274,10 @@ export function FDList() {
             <div className="ml-auto flex items-center gap-2">
               <Button asChild size="sm" variant="outline">
                 <Link href="/rates/fixed-departures/parser">
-                  <Sparkles className="h-4 w-4" />
-                  Add Using AI
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4" />
+                    Add Using AI
+                  </span>
                 </Link>
               </Button>
               <Button onClick={openCreate} size="sm">
