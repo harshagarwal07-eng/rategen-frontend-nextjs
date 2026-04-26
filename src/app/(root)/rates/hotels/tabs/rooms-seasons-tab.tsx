@@ -24,6 +24,7 @@ import {
   getAgePolicies,
   listContractRooms,
   listContractSeasons,
+  listContractTaxes,
 } from "@/data-access/contract-tab2";
 import { DmcContract } from "@/types/dmc-contracts";
 import AgePoliciesSection, {
@@ -44,6 +45,13 @@ import RoomCategoriesSection, {
   stripRooms,
   wrapRooms,
 } from "./sections/room-categories-section";
+import TaxesSection, {
+  RoomOption,
+  TaxesErrors,
+  TaxesLocalState,
+  stripTaxes,
+  wrapTaxes,
+} from "./sections/taxes-section";
 
 export interface RoomsSeasonsTabHandle {
   saveAll: () => Promise<void>;
@@ -229,10 +237,48 @@ function ContractEditor({
     return !roomsStatesEqual(roomsState, roomsSnapshot);
   }, [roomsLoaded, roomsState, roomsSnapshot]);
 
-  // Roll-up dirty across all sections wired so far.
+  // ─── Taxes & Fees ───────────────────────────────────────────────────
+  const [taxesState, setTaxesState] = useState<TaxesLocalState>([]);
+  const [taxesSnapshot, setTaxesSnapshot] = useState<TaxesLocalState>([]);
+  const [, setTaxesErrors] = useState<TaxesErrors>({});
+  const [taxesLoaded, setTaxesLoaded] = useState(false);
+
   useEffect(() => {
-    onDirtyChange(ageDirty || seasonsDirty || roomsDirty);
-  }, [ageDirty, seasonsDirty, roomsDirty, onDirtyChange]);
+    let cancelled = false;
+    setTaxesLoaded(false);
+    listContractTaxes(selectedContractId).then((res) => {
+      if (cancelled) return;
+      const initial = wrapTaxes(res.data ?? []);
+      setTaxesState(initial);
+      setTaxesSnapshot(initial);
+      setTaxesLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedContractId]);
+
+  const taxesDirty = useMemo(() => {
+    if (!taxesLoaded) return false;
+    return !taxesStatesEqual(taxesState, taxesSnapshot);
+  }, [taxesLoaded, taxesState, taxesSnapshot]);
+
+  // Room options for the Applies-to picker. Includes both saved rooms (real id)
+  // and locally-added unsaved rooms (their _localId is the temporary key).
+  const roomOptions: RoomOption[] = useMemo(
+    () =>
+      roomsState.map((r) => ({
+        id: r.id || r._localId,
+        label: r.id ? r.name.trim() || "(unnamed)" : `${r.name.trim() || "(unnamed)"} (unsaved)`,
+        isUnsaved: !r.id,
+      })),
+    [roomsState]
+  );
+
+  // Roll-up dirty across all sections.
+  useEffect(() => {
+    onDirtyChange(ageDirty || seasonsDirty || roomsDirty || taxesDirty);
+  }, [ageDirty, seasonsDirty, roomsDirty, taxesDirty, onDirtyChange]);
 
   return (
     <div className="space-y-6">
@@ -291,11 +337,17 @@ function ContractEditor({
         </BorderedCard>
 
         <BorderedCard
-          title={`TAXES & FEES   0`}
+          title={`TAXES & FEES   ${taxesState.length}`}
           collapsible
           defaultOpen={false}
         >
-          <div className="text-sm text-muted-foreground">Coming in Stage 5.</div>
+          <TaxesSection
+            state={taxesState}
+            onChange={setTaxesState}
+            roomOptions={roomOptions}
+            disabled={isArchived}
+            onErrorsChange={setTaxesErrors}
+          />
         </BorderedCard>
       </div>
     </div>
@@ -315,6 +367,10 @@ function seasonsStatesEqual(a: SeasonsLocalState, b: SeasonsLocalState): boolean
 
 function roomsStatesEqual(a: RoomsLocalState, b: RoomsLocalState): boolean {
   return JSON.stringify(stripRooms(a)) === JSON.stringify(stripRooms(b));
+}
+
+function taxesStatesEqual(a: TaxesLocalState, b: TaxesLocalState): boolean {
+  return JSON.stringify(stripTaxes(a)) === JSON.stringify(stripTaxes(b));
 }
 
 function ContractSelectorRow({
