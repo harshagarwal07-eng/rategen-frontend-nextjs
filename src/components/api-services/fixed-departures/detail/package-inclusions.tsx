@@ -15,21 +15,31 @@ const CATEGORIES: Array<{ key: string; label: string; incField: keyof FDPublicPa
   { key: "tours", label: "Tours & sightseeing", incField: "inc_tours", excField: "exc_tours" },
   { key: "transfers", label: "Transfers", incField: "inc_transfers", excField: "exc_transfers" },
   { key: "taxes", label: "Taxes", incField: "inc_taxes", excField: "exc_taxes" },
-  { key: "visa", label: "Visa", incField: "inc_visa", excField: "exc_visa" },
   { key: "other", label: "Other", incField: "inc_other", excField: "exc_other" },
 ];
 
-function lines(value: string | null): string[] {
+function lines(value: string[] | string | null | undefined): string[] {
   if (!value) return [];
-  return value
-    .split(/[\n,;]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  if (Array.isArray(value)) return value.map((s) => s.trim()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(/[\n,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function hasContent(value: unknown): boolean {
+  if (!value) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
+  return false;
 }
 
 export function PackageInclusions({ pkg }: PackageInclusionsProps) {
   const visibleCategories = CATEGORIES.filter((cat) => {
-    return (pkg[cat.incField] as string | null) || (pkg[cat.excField] as string | null);
+    return hasContent(pkg[cat.incField]) || hasContent(pkg[cat.excField]);
   });
 
   if (visibleCategories.length === 0) return null;
@@ -39,8 +49,8 @@ export function PackageInclusions({ pkg }: PackageInclusionsProps) {
       <h2 className="text-xl font-semibold">Inclusions & Exclusions</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {visibleCategories.map((cat) => {
-          const incs = lines(pkg[cat.incField] as string | null);
-          const excs = lines(pkg[cat.excField] as string | null);
+          const incs = lines(pkg[cat.incField] as string[] | string | null);
+          const excs = lines(pkg[cat.excField] as string[] | string | null);
           return (
             <Card key={cat.key} className="p-4 border-border/60 shadow-sm space-y-3">
               <h3 className="text-sm font-semibold">{cat.label}</h3>

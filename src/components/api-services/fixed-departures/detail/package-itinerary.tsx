@@ -15,12 +15,16 @@ interface PackageItineraryProps {
 
 const MEAL_LABEL: Record<string, string> = { B: "Breakfast", L: "Lunch", D: "Dinner" };
 
-function parseMeals(meals: string | null): string[] {
+function parseMeals(meals: string[] | string | null | undefined): string[] {
   if (!meals) return [];
-  return meals
-    .split(/[,\s]+/)
-    .map((m) => m.trim().toUpperCase())
-    .filter(Boolean);
+  if (Array.isArray(meals)) return meals.map((m) => m.trim().toUpperCase()).filter(Boolean);
+  if (typeof meals === "string") {
+    return meals
+      .split(/[,\s]+/)
+      .map((m) => m.trim().toUpperCase())
+      .filter(Boolean);
+  }
+  return [];
 }
 
 export function PackageItinerary({ days }: PackageItineraryProps) {
