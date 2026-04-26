@@ -28,6 +28,7 @@ import { Plus, X, Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { CitySelect } from "@/components/shared/city-select";
 import { addTourImage, deleteTourImage } from "@/data-access/tours-api";
+import { fetchEntity } from "@/data-access/geo-picker-api";
 import {
   TourCountryOption,
   TourCurrencyOption,
@@ -160,21 +161,32 @@ export default function TourGeneralInfoForm({
     onContextChangeRef.current?.(name, countryName);
   }, [watchName, countryName]);
 
-  // When country changes, clear the geo_id so it gets re-picked under the
-  // new country context.
-  const lastCountryRef = useRef<string | undefined>(initialData?.country_id ?? "");
-  useEffect(() => {
-    if (lastCountryRef.current === undefined) {
-      lastCountryRef.current = watchCountryId;
-      return;
+  // When user picks a new country, only clear geo_id if the currently
+  // selected city actually belongs to a different country. Avoids the UX
+  // trap of silently dropping a valid pick on every spurious country
+  // re-render (form.reset, parent re-render, etc.).
+  async function handleCountryChange(newCountryId: string) {
+    const prevCountryId = form.getValues("country_id");
+    form.setValue("country_id", newCountryId, { shouldDirty: true });
+    if (!newCountryId || newCountryId === prevCountryId) return;
+
+    const currentGeoId = form.getValues("geo_id");
+    if (!currentGeoId) return;
+
+    const newCountry = countries.find((c) => c.id === newCountryId);
+    if (!newCountry) return;
+
+    const entity = await fetchEntity(currentGeoId);
+    const cityCountryCode = entity.data?.ancestors?.country?.code;
+    if (!cityCountryCode) return;
+
+    if (cityCountryCode !== newCountry.country_code) {
+      form.setValue("geo_id", "", { shouldDirty: true });
+      toast.info(
+        `City cleared — wasn't in ${newCountry.country_name}.`,
+      );
     }
-    if (watchCountryId !== lastCountryRef.current) {
-      lastCountryRef.current = watchCountryId;
-      if (form.getValues("geo_id")) {
-        form.setValue("geo_id", "", { shouldDirty: true });
-      }
-    }
-  }, [watchCountryId, form]);
+  }
 
   useEffect(() => {
     if (initialData?.id) {
@@ -197,7 +209,6 @@ export default function TourGeneralInfoForm({
         status: (initialData.status as TourStatus) ?? "draft",
         is_preferred: initialData.is_preferred ?? false,
       });
-      lastCountryRef.current = initialData.country_id ?? "";
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialData?.id, initialData?.description, initialData?.geo_id]);
@@ -246,7 +257,7 @@ export default function TourGeneralInfoForm({
                   <Autocomplete
                     options={countryOptions}
                     value={field.value}
-                    onChange={field.onChange}
+                    onChange={handleCountryChange}
                     placeholder="Search country..."
                   />
                   <FormMessage />

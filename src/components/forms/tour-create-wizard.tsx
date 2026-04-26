@@ -161,35 +161,11 @@ export default function TourCreateWizard({
           if (result.error) throw new Error(result.error);
           savedId = formData.id;
         } else {
-          // Create with the minimal NestJS-accepted shape (everything goes
-          // through, but a fresh tour doesn't need lat/lng/etc up front).
-          const result = await createTour({
-            name: fullPayload.name,
-            country_id: fullPayload.country_id,
-            currency_id: fullPayload.currency_id,
-            description: fullPayload.description,
-            status: fullPayload.status,
-            is_preferred: fullPayload.is_preferred,
-          });
+          const result = await createTour(fullPayload);
           if (result.error || !result.data?.id) {
             throw new Error(result.error ?? "Create failed");
           }
           savedId = result.data.id;
-          // Apply the rest of the fields (geo_id, website, lat/lng) via PATCH
-          // so the user doesn't have to re-fill them on edit.
-          if (
-            fullPayload.geo_id ||
-            fullPayload.website ||
-            fullPayload.latitude !== null ||
-            fullPayload.longitude !== null
-          ) {
-            await updateTour(savedId, {
-              geo_id: fullPayload.geo_id,
-              website: fullPayload.website,
-              latitude: fullPayload.latitude,
-              longitude: fullPayload.longitude,
-            });
-          }
         }
 
         const full = await getTourById(savedId);

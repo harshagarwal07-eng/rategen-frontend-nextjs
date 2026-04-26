@@ -196,6 +196,7 @@ export interface TourListRow {
   name: string;
   status: TourStatus | string;
   country_id: string | null;
+  geo_id: string | null;
   currency_id: string | null;
   markup_pct: number | null;
   is_preferred: boolean | null;
@@ -209,14 +210,13 @@ export interface TourCreateInput {
   description: string | null;
   status: TourStatus;
   is_preferred?: boolean;
-}
-
-export type TourUpdateInput = Partial<TourCreateInput> & {
   geo_id?: string | null;
   website?: string | null;
   latitude?: number | null;
   longitude?: number | null;
-};
+}
+
+export type TourUpdateInput = Partial<TourCreateInput>;
 
 export interface TourCreated {
   id: string;
@@ -249,7 +249,6 @@ export interface TourCurrencyOption {
 // Shape returned by GET /api/tours/:id — the row plus nested arrays.
 export interface TourDetail extends TourListRow {
   description?: string | null;
-  geo_id?: string | null;
   website?: string | null;
   latitude?: number | null;
   longitude?: number | null;
