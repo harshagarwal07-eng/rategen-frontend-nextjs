@@ -14,7 +14,7 @@ import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BorderedCard } from "@/components/ui/bordered-card";
+import { FDCard } from "@/components/ui/fd-card";
 import {
   Select,
   SelectContent,
@@ -502,10 +502,10 @@ function ContractEditor({
         </div>
       )}
 
-      <div className="space-y-8">
-        <BorderedCard
-          title={`ROOM AGE POLICIES   ${ageState.rooms.length + ageState.meals.length} bands`}
-          collapsible
+      <div className="space-y-3">
+        <FDCard
+          title="AGE POLICY"
+          count={`${ageState.rooms.length + ageState.meals.length} bands`}
           defaultOpen
         >
           <AgePoliciesSection
@@ -514,11 +514,11 @@ function ContractEditor({
             disabled={isArchived}
             onErrorsChange={setAgeErrors}
           />
-        </BorderedCard>
+        </FDCard>
 
-        <BorderedCard
-          title={`SEASONS   ${seasonsState.length} season${seasonsState.length === 1 ? "" : "s"}`}
-          collapsible
+        <FDCard
+          title="SEASONS"
+          count={`${seasonsState.length} season${seasonsState.length === 1 ? "" : "s"}`}
           defaultOpen={false}
         >
           <SeasonsSection
@@ -527,11 +527,11 @@ function ContractEditor({
             disabled={isArchived}
             onErrorsChange={setSeasonsErrors}
           />
-        </BorderedCard>
+        </FDCard>
 
-        <BorderedCard
-          title={`ROOM CATEGORIES   ${roomsState.length} room${roomsState.length === 1 ? "" : "s"}`}
-          collapsible
+        <FDCard
+          title="ROOM CATEGORIES"
+          count={`${roomsState.length} room${roomsState.length === 1 ? "" : "s"}`}
           defaultOpen
         >
           <RoomCategoriesSection
@@ -540,11 +540,11 @@ function ContractEditor({
             disabled={isArchived}
             onErrorsChange={setRoomsErrors}
           />
-        </BorderedCard>
+        </FDCard>
 
-        <BorderedCard
-          title={`TAXES & FEES   ${taxesState.length}`}
-          collapsible
+        <FDCard
+          title="TAXES & FEES"
+          count={taxesState.length}
           defaultOpen={false}
         >
           <TaxesSection
@@ -554,7 +554,7 @@ function ContractEditor({
             disabled={isArchived}
             onErrorsChange={setTaxesErrors}
           />
-        </BorderedCard>
+        </FDCard>
       </div>
     </div>
   );
