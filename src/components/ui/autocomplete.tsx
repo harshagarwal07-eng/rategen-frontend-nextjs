@@ -58,7 +58,6 @@ export function Autocomplete({
 
   /* ---------------- CLIENT MODE ---------------- */
   React.useEffect(() => {
-    console.count("[FD-DEBUG] Autocomplete:client-mode-effect");
     if (mode !== "client") return;
 
     if (!debouncedSearch.trim()) {
@@ -74,7 +73,6 @@ export function Autocomplete({
 
   /* ---------------- SERVER MODE SEARCH ---------------- */
   React.useEffect(() => {
-    console.count("[FD-DEBUG] Autocomplete:server-search-effect");
     if (mode !== "server" || !onSearch || disabled || !open) return;
 
     let cancelled = false;
@@ -98,8 +96,6 @@ export function Autocomplete({
 
   /* ---------------- HYDRATE SELECTED VALUE (EDIT MODE) ---------------- */
   React.useEffect(() => {
-    console.count("[FD-DEBUG] Autocomplete:hydrate-effect (PRIME SUSPECT)");
-    console.log("[FD-DEBUG] hydrate deps:", { value, mode, optionsLen: options.length, optionsRef: options, fetchByValue: !!fetchByValue });
     if (!value) {
       setSelectedOption(null);
       return;
@@ -115,10 +111,7 @@ export function Autocomplete({
     // server mode hydrate (critical)
     if (mode === "server" && fetchByValue) {
       fetchByValue(value).then((opt) => {
-        if (opt) {
-          console.count("[FD-DEBUG] Autocomplete:setSelectedOption-from-fetchByValue");
-          setSelectedOption(opt);
-        }
+        if (opt) setSelectedOption(opt);
       });
     }
   }, [value, mode, options, fetchByValue]);
