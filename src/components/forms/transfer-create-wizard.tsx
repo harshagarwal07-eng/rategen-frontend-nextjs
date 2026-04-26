@@ -326,6 +326,7 @@ export default function TransferFullscreenForm({
                   <Tab2Packages
                     initialData={formData.id ? formData : null}
                     modeOfTransport={formData.mode_of_transport as string | null}
+                    countryId={(formData.country_id as string | null) ?? null}
                     onNext={async () => {
                       setCurrentStep(2);
                       qc.invalidateQueries({ queryKey: ["transfers"] });

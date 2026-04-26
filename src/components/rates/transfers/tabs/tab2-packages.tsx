@@ -164,6 +164,7 @@ interface PackageCardProps {
   transferId: string;
   pkg: PackageStateEntry;
   modeOfTransport: TransferModeOfTransport | string | null;
+  countryId: string | null;
   isOpen: boolean;
   onToggle: () => void;
   onDeleted: () => void;
@@ -181,6 +182,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
       transferId,
       pkg,
       modeOfTransport,
+      countryId,
       isOpen,
       onToggle,
       onDeleted,
@@ -601,6 +603,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
                         setStops(next);
                         setStopsDirty(true);
                       }}
+                      countryId={countryId}
                     />
                   )}
 
@@ -762,6 +765,7 @@ type DoneValues = z.infer<typeof DoneSchema>;
 interface Tab2PackagesProps {
   initialData: { id?: string } | null;
   modeOfTransport: string | null;
+  countryId: string | null;
   onNext: (data: Record<string, unknown>) => void;
   setIsLoading?: (loading: boolean) => void;
   formRef?: React.RefObject<HTMLFormElement>;
@@ -771,6 +775,7 @@ interface Tab2PackagesProps {
 export default function Tab2Packages({
   initialData,
   modeOfTransport,
+  countryId,
   onNext,
   setIsLoading,
   formRef,
@@ -896,13 +901,16 @@ export default function Tab2Packages({
     // hydrates identically when it mounts.
     let stopOrder = 1;
     const dupStopRows: PackageStateEntry["transfer_package_stops"] = [];
-    for (const id of sourceStops.origin) {
+    const encodeSel = (s: { kind: "geo" | "dmc_custom"; id: string }) => ({
+      geo_id: s.kind === "geo" ? s.id : null,
+      dmc_custom_location_id: s.kind === "dmc_custom" ? s.id : null,
+      master_catalog_id: null,
+    });
+    for (const sel of sourceStops.origin) {
       dupStopRows.push({
         stop_order: stopOrder++,
         stop_type: "origin",
-        transfer_package_stop_locations: [
-          { geo_id: id, dmc_custom_location_id: null, master_catalog_id: null },
-        ],
+        transfer_package_stop_locations: [encodeSel(sel)],
       });
     }
     for (const row of sourceStops.via) {
@@ -918,13 +926,11 @@ export default function Tab2Packages({
         });
       }
     }
-    for (const id of sourceStops.destination) {
+    for (const sel of sourceStops.destination) {
       dupStopRows.push({
         stop_order: stopOrder++,
         stop_type: "destination",
-        transfer_package_stop_locations: [
-          { geo_id: id, dmc_custom_location_id: null, master_catalog_id: null },
-        ],
+        transfer_package_stop_locations: [encodeSel(sel)],
       });
     }
 
@@ -1092,6 +1098,7 @@ export default function Tab2Packages({
                 transferId={transferId || ""}
                 pkg={pkg}
                 modeOfTransport={modeOfTransport}
+                countryId={countryId}
                 isOpen={openCards.includes(pkg._localId)}
                 onToggle={() => toggleCard(pkg._localId)}
                 onDeleted={() => handleDeleted(pkg._localId)}
