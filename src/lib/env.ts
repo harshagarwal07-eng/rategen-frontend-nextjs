@@ -20,4 +20,5 @@ export const env = {
   OPENROUTER_LLM_MODEL: process.env.OPENROUTER_LLM_MODEL || "google/gemini-2.0-flash-001",
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID ?? "",
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  WHATSAPP_NUMBER: process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? "",
 };
