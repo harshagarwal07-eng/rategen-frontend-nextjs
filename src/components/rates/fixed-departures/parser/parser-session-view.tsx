@@ -34,6 +34,7 @@ import {
 import {
   readSessionErrors,
   type GeoWarningRecord,
+  type StageErrorRecord,
 } from "@/lib/fd-parser-errors";
 import {
   TERMINAL_STATUSES,
@@ -106,6 +107,7 @@ export function ParserSessionView({ sessionId }: { sessionId: string }) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveWarnings, setSaveWarnings] = useState<GeoWarningRecord[]>([]);
+  const [saveGeoErrors, setSaveGeoErrors] = useState<StageErrorRecord[]>([]);
 
   const esRef = useRef<EventSource | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -433,6 +435,7 @@ export function ParserSessionView({ sessionId }: { sessionId: string }) {
   const handleSave = async () => {
     setSaveState("saving");
     setSaveError(null);
+    setSaveGeoErrors([]);
     try {
       const body = await fdParserSaveSession(sessionId);
       if (Array.isArray(body.warnings) && body.warnings.length > 0) {
@@ -448,13 +451,33 @@ export function ParserSessionView({ sessionId }: { sessionId: string }) {
       setSaveState("saved");
       router.push(`/rates/fixed-departures?edit=${body.package_id}`);
     } catch (err) {
-      const msg =
+      type AxiosLike = {
+        response?: { data?: { message?: string; errors?: unknown[] } };
+      };
+      const axiosResp =
         err && typeof err === "object" && "response" in err
-          ? (err as { response?: { data?: { message?: string } } }).response
-              ?.data?.message
-          : err instanceof Error
-            ? err.message
-            : "Save failed";
+          ? (err as AxiosLike).response
+          : undefined;
+      const msg =
+        axiosResp?.data?.message ??
+        (err instanceof Error ? err.message : null);
+      const rawErrors = axiosResp?.data?.errors;
+      if (Array.isArray(rawErrors) && rawErrors.length > 0) {
+        setSaveGeoErrors(
+          rawErrors.flatMap((e) => {
+            if (!e || typeof e !== "object") return [];
+            const o = e as Record<string, unknown>;
+            const stage = typeof o.stage === "string" ? o.stage : "save";
+            const message =
+              typeof o.message === "string"
+                ? o.message
+                : typeof o.error === "string"
+                  ? o.error
+                  : JSON.stringify(e);
+            return [{ stage, message }];
+          }),
+        );
+      }
       setSaveError(msg ?? "Save failed");
       setSaveState("failed");
       toast.error(msg ?? "Save failed");
@@ -712,6 +735,33 @@ export function ParserSessionView({ sessionId }: { sessionId: string }) {
           >
             <RefreshCw className="h-3 w-3" /> Reconnect
           </Button>
+        </div>
+      )}
+      {saveGeoErrors.length > 0 && saveState === "failed" && (
+        <div className="border-b bg-red-50 px-4 py-3">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+            <div className="space-y-1.5">
+              <p className="text-sm font-semibold text-red-700">
+                Save blocked — geo resolution errors:
+              </p>
+              <ul className="space-y-0.5">
+                {saveGeoErrors.map((e, i) => (
+                  <li key={i} className="text-xs text-red-700">
+                    {e.stage !== "save" && (
+                      <span className="mr-1 font-mono text-[10px] uppercase opacity-70">
+                        [{e.stage}]
+                      </span>
+                    )}
+                    {e.message}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-red-600/80">
+                Add the missing country/city via admin before retrying.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
