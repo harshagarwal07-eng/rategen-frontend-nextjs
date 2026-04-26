@@ -305,17 +305,19 @@ export default function ContractsSection({ hotelId }: ContractsSectionProps) {
         </div>
       </BorderedCard>
 
-      <ContractFormModal
-        isOpen={modalOpen}
-        onClose={() => { setModalOpen(false); setEditContract(null); }}
-        onSuccess={() => {
-          qc.invalidateQueries({ queryKey: ["dmc-contracts", hotelId] });
-          setModalOpen(false);
-          setEditContract(null);
-        }}
-        hotelId={hotelId}
-        initialData={editContract}
-      />
+      {modalOpen && (
+        <ContractFormModal
+          isOpen={modalOpen}
+          onClose={() => { setModalOpen(false); setEditContract(null); }}
+          onSuccess={() => {
+            qc.invalidateQueries({ queryKey: ["dmc-contracts", hotelId] });
+            setModalOpen(false);
+            setEditContract(null);
+          }}
+          hotelId={hotelId}
+          initialData={editContract}
+        />
+      )}
 
       <Dialog
         open={!!deleteTarget}
