@@ -258,21 +258,8 @@ function RoomCard({
 
   return (
     <div className="rounded-md border bg-muted/20">
+      {/* Header — chevron at far right per UI polish brief */}
       <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
-        <button
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted shrink-0"
-          onClick={onToggle}
-          aria-label={isOpen ? "Collapse room" : "Expand room"}
-        >
-          <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 transition-transform duration-200",
-              isOpen && "rotate-180"
-            )}
-          />
-        </button>
-
         <button
           type="button"
           className="flex flex-1 items-center gap-2 min-w-0 text-left"
@@ -287,7 +274,7 @@ function RoomCard({
             {titleText}
           </span>
           {room.rate_type && (
-            <span className="shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
               {room.rate_type}
             </span>
           )}
@@ -320,6 +307,20 @@ function RoomCard({
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
+
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted shrink-0"
+          onClick={onToggle}
+          aria-label={isOpen ? "Collapse room" : "Expand room"}
+        >
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+              isOpen && "rotate-180"
+            )}
+          />
+        </button>
       </div>
 
       {isOpen && (

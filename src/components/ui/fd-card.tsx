@@ -1,18 +1,15 @@
 "use client";
 
-// Collapsible section card matching the fixed-departures look-and-feel
-// (fd-tabs/tab-policies.tsx, tab-general-info.tsx). Wraps a single Radix
-// Accordion item. The optional `rightSlot` renders OUTSIDE the trigger but
-// inside the item shell, so per-card action icons (duplicate, delete) stay
-// independently clickable without breaking Radix's nested-button rule.
+// Collapsible section card matching the fixed-departures look-and-feel.
+// Hand-rolled (not Radix Accordion) so the chevron can sit at the FAR
+// right of the header — after rightSlot action icons — without nesting
+// interactive elements inside a single trigger button.
+//
+// Header order (left → right):
+//   [title + count pill] ... [rightSlot icons] [chevron toggle]
 
 import * as React from "react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface FDCardProps {
@@ -36,47 +33,55 @@ export function FDCard({
   triggerClassName,
   children,
 }: FDCardProps) {
-  // Internal slot value is constant — each FDCard is its own Accordion so
-  // open/close state per card is local and uncoordinated, matching FD's
-  // type="multiple" with each AccordionItem independently expandable.
-  const VALUE = "card";
+  const [open, setOpen] = React.useState(defaultOpen);
+  const toggle = () => setOpen((o) => !o);
+
   return (
-    <Accordion
-      type="single"
-      collapsible
-      defaultValue={defaultOpen ? VALUE : undefined}
+    <div
+      className={cn(
+        "rounded-lg border-2 border-muted bg-accent/30 overflow-hidden",
+        className
+      )}
     >
-      <AccordionItem
-        value={VALUE}
-        className={cn(
-          "rounded-lg border-2 border-muted bg-accent/30 overflow-hidden",
-          className
-        )}
-      >
-        <div className="flex items-center pr-2">
-          <AccordionTrigger
-            className={cn(
-              "flex-1 px-4 py-3 hover:no-underline hover:bg-accent/40 transition-colors",
-              triggerClassName
-            )}
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="truncate">{title}</span>
-              {count !== undefined && count !== null && (
-                <span className="rounded-full bg-muted-foreground/20 text-muted-foreground px-2 py-0.5 text-xs shrink-0">
-                  {count}
-                </span>
-              )}
-            </div>
-          </AccordionTrigger>
-          {rightSlot && (
-            <div className="flex items-center gap-1 shrink-0">{rightSlot}</div>
+      <div className="flex items-center pr-2 hover:bg-accent/40 transition-colors">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-expanded={open}
+          className={cn(
+            "flex flex-1 items-center gap-2 px-4 py-3 text-left text-sm font-medium min-w-0 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded",
+            triggerClassName
           )}
-        </div>
-        <AccordionContent className={cn("px-4 pb-4 pt-0", contentClassName)}>
+        >
+          <span className="truncate">{title}</span>
+          {count !== undefined && count !== null && (
+            <span className="rounded-full bg-muted-foreground/20 text-muted-foreground px-2 py-0.5 text-xs shrink-0">
+              {count}
+            </span>
+          )}
+        </button>
+        {rightSlot && (
+          <div className="flex items-center gap-1 shrink-0">{rightSlot}</div>
+        )}
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={open ? "Collapse section" : "Expand section"}
+          className="flex h-8 w-8 items-center justify-center rounded hover:bg-muted shrink-0 ml-1"
+        >
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform duration-200",
+              open && "rotate-180"
+            )}
+          />
+        </button>
+      </div>
+      {open && (
+        <div className={cn("px-4 pb-4 pt-3 border-t", contentClassName)}>
           {children}
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+        </div>
+      )}
+    </div>
   );
 }

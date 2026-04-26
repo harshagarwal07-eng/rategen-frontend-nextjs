@@ -373,22 +373,8 @@ function SeasonCard({
 
   return (
     <div className="rounded-md border bg-muted/20">
-      {/* Header */}
+      {/* Header — chevron at far right per UI polish brief */}
       <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
-        <button
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted shrink-0"
-          onClick={onToggle}
-          aria-label={isOpen ? "Collapse season" : "Expand season"}
-        >
-          <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 transition-transform duration-200",
-              isOpen && "rotate-180"
-            )}
-          />
-        </button>
-
         <button
           type="button"
           className="flex flex-1 items-center gap-2 min-w-0 text-left"
@@ -436,6 +422,20 @@ function SeasonCard({
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
+
+        <button
+          type="button"
+          className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted shrink-0"
+          onClick={onToggle}
+          aria-label={isOpen ? "Collapse season" : "Expand season"}
+        >
+          <ChevronDown
+            className={cn(
+              "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+              isOpen && "rotate-180"
+            )}
+          />
+        </button>
       </div>
 
       {isOpen && (
