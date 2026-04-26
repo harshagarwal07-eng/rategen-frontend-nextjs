@@ -13,7 +13,7 @@ import { DmcHotel } from "@/types/hotels";
 import { PendingContract } from "@/types/dmc-contracts";
 import { toast } from "sonner";
 import GeneralInfoTab from "./tabs/general-info-tab";
-import RoomsSeasonsTab from "./tabs/rooms-seasons-tab";
+import RoomsSeasonsTab, { RoomsSeasonsTabHandle } from "./tabs/rooms-seasons-tab";
 
 interface HotelOverlayProps {
   hotelId: string | null;
@@ -36,14 +36,19 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
   const [activeTab, setActiveTab] = useState("general-info");
   const [hotel, setHotel] = useState<DmcHotel | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isDirty, setIsDirty] = useState(false);
+  const [tab1Dirty, setTab1Dirty] = useState(false);
+  const [tab2Dirty, setTab2Dirty] = useState(false);
   const [formSaving, setFormSaving] = useState(false);
   const [contractSaving, setContractSaving] = useState(false);
-  const isSaving = formSaving || contractSaving;
+  const [tab2Saving, setTab2Saving] = useState(false);
+  const isSaving = formSaving || contractSaving || tab2Saving;
+  const anyDirty = tab1Dirty || tab2Dirty;
+  const currentTabDirty = activeTab === "general-info" ? tab1Dirty : tab2Dirty;
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [internalHotelId, setInternalHotelId] = useState<string | null>(null);
   const [pendingContracts, setPendingContracts] = useState<PendingContract[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
+  const tab2Ref = useRef<RoomsSeasonsTabHandle>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -59,18 +64,27 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
       }
     } else {
       setHotel(null);
-      setIsDirty(false);
+      setTab1Dirty(false);
+      setTab2Dirty(false);
       setInternalHotelId(null);
       setPendingContracts([]);
     }
   }, [isOpen, hotelId]);
 
   const handleClose = () => {
-    if (isDirty) {
+    if (anyDirty) {
       setShowDiscardDialog(true);
       return;
     }
     onClose();
+  };
+
+  const handleSaveClick = () => {
+    if (activeTab === "rooms-seasons") {
+      void tab2Ref.current?.saveAll();
+      return;
+    }
+    formRef.current?.requestSubmit();
   };
 
   const handleHotelSaved = async (saved: DmcHotel) => {
@@ -200,7 +214,8 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                           {index + 1}
                         </span>
                         <span>{tab.label}</span>
-                        {isActive && isDirty && (
+                        {((tab.id === "general-info" && tab1Dirty) ||
+                          (tab.id === "rooms-seasons" && tab2Dirty)) && (
                           <span
                             className="w-2 h-2 rounded-full bg-yellow-500 shrink-0"
                             aria-label="Unsaved changes"
@@ -234,28 +249,38 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                   hotelId={internalHotelId}
                   initialHotel={hotel}
                   onSaved={handleHotelSaved}
-                  onDirtyChange={setIsDirty}
+                  onDirtyChange={setTab1Dirty}
                   formRef={formRef}
                   onSavingChange={setFormSaving}
                   pendingContracts={pendingContracts}
                   setPendingContracts={setPendingContracts}
                 />
               )}
-              {activeTab === "rooms-seasons" && <RoomsSeasonsTab />}
+              {activeTab === "rooms-seasons" && (
+                <RoomsSeasonsTab
+                  ref={tab2Ref}
+                  hotelId={internalHotelId}
+                  onDirtyChange={setTab2Dirty}
+                  onSavingChange={setTab2Saving}
+                />
+              )}
             </div>
 
             <div className="sticky bottom-0 border-t px-4 py-2 bg-muted">
               <div className="flex items-center justify-between">
                 <div />
                 <div className="flex items-center gap-3">
-                  {isDirty && !isSaving && (
+                  {currentTabDirty && !isSaving && (
                     <span className="text-xs text-yellow-600 font-medium">Unsaved changes</span>
                   )}
                   <Button
                     type="button"
-                    onClick={() => formRef.current?.requestSubmit()}
+                    onClick={handleSaveClick}
                     className="min-w-32"
-                    disabled={isSaving}
+                    disabled={
+                      isSaving ||
+                      (activeTab === "rooms-seasons" && !tab2Dirty)
+                    }
                   >
                     {isSaving ? (
                       <>
@@ -265,7 +290,7 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                     ) : (
                       <>
                         <Save className="mr-2 h-4 w-4" />
-                        Save
+                        {activeTab === "rooms-seasons" ? "Save All Changes" : "Save"}
                       </>
                     )}
                   </Button>
