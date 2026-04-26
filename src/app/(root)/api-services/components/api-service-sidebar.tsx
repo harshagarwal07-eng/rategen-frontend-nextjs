@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2 } from "lucide-react";
+import { Building2, Plane } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +20,12 @@ const apiServiceNavItems = [
     href: "/api-services/hotels",
     icon: Building2,
     matchPath: "/api-services/hotels",
+  },
+  {
+    label: "Fixed Departures",
+    href: "/api-services/fixed-departures",
+    icon: Plane,
+    matchPath: "/api-services/fixed-departures",
   },
 ];
 

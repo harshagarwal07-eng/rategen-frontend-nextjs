@@ -38,6 +38,10 @@ const serviceNavigationConfig: Record<string, ServiceNavItem[]> = {
     { id: "search", label: "Search", href: "/api-services/transfers/search", icon: Car },
     { id: "my-bookings", label: "My Bookings", href: "/api-services/transfers/my-bookings", icon: Calendar },
   ],
+  "fixed-departures": [
+    { id: "search", label: "Search", href: "/api-services/fixed-departures/search", icon: Search },
+    { id: "my-bookings", label: "My Bookings", href: "/api-services/fixed-departures/my-bookings", icon: Calendar },
+  ],
 };
 
 interface ApiServiceSecondarySidebarProps {

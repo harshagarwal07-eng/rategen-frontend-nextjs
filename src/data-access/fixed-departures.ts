@@ -23,6 +23,12 @@ import type {
   FDVisa,
   FDTax,
 } from "@/types/fixed-departures";
+import type {
+  FDSearchResponse,
+  FDSearchFilterOptions,
+  FDPublicPackage,
+  FDSearchQuery,
+} from "@/types/fd-search";
 
 const fdApi = axios.create({
   baseURL: env.API_URL,
@@ -304,5 +310,20 @@ export async function fdReplaceTaxes(
   taxes: Array<Omit<FDTax, "id" | "package_id">>,
 ): Promise<FDTax[]> {
   const { data } = await fdApi.put<FDTax[]>(`${BASE}/packages/${packageId}/taxes`, taxes);
+  return data;
+}
+
+export async function fdSearchPackages(query: FDSearchQuery): Promise<FDSearchResponse> {
+  const { data } = await fdApi.get<FDSearchResponse>(`${BASE}/search`, { params: query });
+  return data;
+}
+
+export async function fdGetSearchFilterOptions(): Promise<FDSearchFilterOptions> {
+  const { data } = await fdApi.get<FDSearchFilterOptions>(`${BASE}/search/filter-options`);
+  return data;
+}
+
+export async function fdGetPackagePublic(id: string): Promise<FDPublicPackage> {
+  const { data } = await fdApi.get<FDPublicPackage>(`${BASE}/packages/${id}/public`);
   return data;
 }
