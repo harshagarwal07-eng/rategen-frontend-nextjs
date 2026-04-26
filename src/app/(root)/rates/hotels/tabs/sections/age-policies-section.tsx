@@ -286,13 +286,33 @@ export default function AgePoliciesSection({
 
       <Table>
         <TableHeader>
-          <TableRow className="text-xs">
-            <TableHead className="w-44">Band name</TableHead>
-            <TableHead className="w-20 text-center">Rooms From</TableHead>
-            <TableHead className="w-20 text-center">Rooms To</TableHead>
-            <TableHead className="w-20 text-center">Meals From</TableHead>
-            <TableHead className="w-20 text-center">Meals To</TableHead>
-            <TableHead className="w-8" />
+          <TableRow className="text-[10px] uppercase tracking-wide text-muted-foreground hover:bg-transparent">
+            <TableHead rowSpan={2} className="w-44 align-bottom">
+              Band name
+            </TableHead>
+            <TableHead
+              colSpan={2}
+              className="text-center border-l border-border/60 bg-muted/30"
+            >
+              Rooms
+            </TableHead>
+            <TableHead
+              colSpan={2}
+              className="text-center border-l border-border/60 bg-muted/30"
+            >
+              Meals
+            </TableHead>
+            <TableHead rowSpan={2} className="w-8" />
+          </TableRow>
+          <TableRow className="text-[10px] uppercase tracking-wide text-muted-foreground hover:bg-transparent">
+            <TableHead className="w-20 text-center border-l border-border/60">
+              From
+            </TableHead>
+            <TableHead className="w-20 text-center">To</TableHead>
+            <TableHead className="w-20 text-center border-l border-border/60">
+              From
+            </TableHead>
+            <TableHead className="w-20 text-center">To</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -329,7 +349,7 @@ export default function AgePoliciesSection({
                   )}
                 </TableCell>
 
-                <TableCell className="py-1.5 px-1">
+                <TableCell className="py-1.5 px-1 border-l border-border/60">
                   <Input
                     type="number"
                     min={0}
@@ -361,7 +381,7 @@ export default function AgePoliciesSection({
                   )}
                 </TableCell>
 
-                <TableCell className="py-1.5 px-1">
+                <TableCell className="py-1.5 px-1 border-l border-border/60">
                   <Input
                     type="number"
                     min={0}
@@ -473,7 +493,7 @@ function BandNameField({
       }}
       disabled={disabled}
     >
-      <SelectTrigger className="h-7 text-xs">
+      <SelectTrigger className="h-8 py-1 pr-8 text-xs [&_[data-slot=select-value]]:truncate">
         <SelectValue placeholder="Select band…" />
       </SelectTrigger>
       <SelectContent>
