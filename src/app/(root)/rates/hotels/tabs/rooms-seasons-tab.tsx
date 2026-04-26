@@ -64,6 +64,9 @@ import TaxesSection, {
   validateTaxes,
   wrapTaxes,
 } from "./sections/taxes-section";
+import CopyFromContractDialog, {
+  CopyPayload,
+} from "./copy-from-contract-dialog";
 
 export interface RoomsSeasonsTabHandle {
   saveAll: () => Promise<void>;
@@ -304,6 +307,15 @@ function ContractEditor({
     onDirtyChange(ageDirty || seasonsDirty || roomsDirty || taxesDirty);
   }, [ageDirty, seasonsDirty, roomsDirty, taxesDirty, onDirtyChange]);
 
+  // ─── Copy from contract ─────────────────────────────────────────────
+  const [copyOpen, setCopyOpen] = useState(false);
+  const applyCopy = useCallback((payload: CopyPayload) => {
+    if (payload.age) setAgeState(payload.age);
+    if (payload.seasons) setSeasonsState(payload.seasons);
+    if (payload.rooms) setRoomsState(payload.rooms);
+    if (payload.taxes) setTaxesState(payload.taxes);
+  }, []);
+
   // ─── Save coordinator ────────────────────────────────────────────────
   const saveAll = useCallback(async () => {
     if (isArchived) {
@@ -471,6 +483,16 @@ function ContractEditor({
         selectedContractId={selectedContractId}
         onSelect={onSelect}
         selected={selected}
+        onOpenCopy={() => setCopyOpen(true)}
+        copyDisabled={isArchived || contracts.length < 2}
+      />
+
+      <CopyFromContractDialog
+        open={copyOpen}
+        onOpenChange={setCopyOpen}
+        contracts={contracts}
+        currentContractId={selectedContractId}
+        onApply={applyCopy}
       />
 
       {isArchived && (
@@ -609,11 +631,15 @@ function ContractSelectorRow({
   selectedContractId,
   onSelect,
   selected,
+  onOpenCopy,
+  copyDisabled,
 }: {
   contracts: DmcContract[];
   selectedContractId: string | null;
   onSelect: (id: string) => void;
   selected: DmcContract | null;
+  onOpenCopy: () => void;
+  copyDisabled: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -669,8 +695,13 @@ function ContractSelectorRow({
         type="button"
         variant="outline"
         size="sm"
-        disabled
-        title="Coming in Stage 7"
+        onClick={onOpenCopy}
+        disabled={copyDisabled}
+        title={
+          copyDisabled
+            ? "Need at least one other contract on this hotel"
+            : "Copy sections from another contract"
+        }
       >
         <Copy className="h-4 w-4 mr-1.5" />
         Copy from contract
