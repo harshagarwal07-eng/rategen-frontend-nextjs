@@ -69,4 +69,9 @@ export interface ContractTax {
   rate_type: TaxRateType;
   is_inclusive: boolean;
   applies_to_room_category_ids: string[]; // empty = applies to all rooms
+  // Tiered rate-amount band (issue 10 / backend migration 088). Inclusive
+  // lower bound + exclusive upper bound on per-night rate. NULL on either
+  // side means "no bound on that side" — both null = applies to any rate.
+  from_amount?: number | null;
+  to_amount?: number | null;
 }

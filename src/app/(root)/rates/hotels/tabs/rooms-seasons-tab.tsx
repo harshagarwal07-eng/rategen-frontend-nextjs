@@ -295,6 +295,9 @@ function ContractEditor({
   const [taxesSnapshot, setTaxesSnapshot] = useState<TaxesLocalState>([]);
   const [, setTaxesErrors] = useState<TaxesErrors>({});
   const [taxesLoaded, setTaxesLoaded] = useState(false);
+  // Section-local toggle, mirrored up so the save coordinator can pass it
+  // into validateTaxes for tier-aware pre-save validation.
+  const [taxesTieredMode, setTaxesTieredMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -398,8 +401,10 @@ function ContractEditor({
       if (hasErr) blockers.push("Room categories");
     }
     if (taxesDirty) {
-      const te = validateTaxes(taxesState);
-      const hasErr = Object.values(te).some((e) => e.name || e.rate);
+      const te = validateTaxes(taxesState, { tieredMode: taxesTieredMode });
+      const hasErr = Object.values(te).some(
+        (e) => e.name || e.rate || e.tier || e.overlap
+      );
       if (hasErr) blockers.push("Taxes & fees");
     }
 
@@ -507,6 +512,7 @@ function ContractEditor({
     seasonsDirty,
     roomsDirty,
     taxesDirty,
+    taxesTieredMode,
     ageState,
     seasonsState,
     roomsState,
@@ -601,6 +607,7 @@ function ContractEditor({
             roomOptions={roomOptions}
             disabled={isArchived}
             onErrorsChange={setTaxesErrors}
+            onTieredModeChange={setTaxesTieredMode}
           />
         </FDCard>
       </div>

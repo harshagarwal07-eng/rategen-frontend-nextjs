@@ -1,10 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+// Taxes & Fees section. Toggle "Enable tiered rates" exposes per-row
+// from_amount / to_amount columns so a single tax can have multiple bands
+// keyed by per-night rate (e.g. India GST 12% below 7500, 18% at 7500+).
+// Backend support: contract_taxes.from_amount / to_amount (migration 088).
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -17,6 +33,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -36,6 +53,8 @@ export type TaxesLocalState = LocalTax[];
 export interface TaxRowError {
   name?: string;
   rate?: string;
+  tier?: string;
+  overlap?: string;
 }
 export type TaxesErrors = Record<string, TaxRowError>;
 
@@ -49,29 +68,83 @@ export const wrapTaxes = (rows: ContractTax[]): TaxesLocalState =>
     rate_type: t.rate_type,
     is_inclusive: !!t.is_inclusive,
     applies_to_room_category_ids: t.applies_to_room_category_ids ?? [],
+    from_amount: t.from_amount ?? null,
+    to_amount: t.to_amount ?? null,
   }));
 
-// Strip drops _localId. The applies_to_room_category_ids array is passed
-// through as-is — temp room ids must be remapped to real ids by the save
-// coordinator BEFORE this is called for the final PUT.
+// Strip drops _localId. Always sends from_amount/to_amount as explicit null
+// when not set (per brief — backend treats null and undefined the same way
+// so this is for wire-format clarity, not behaviour). Temp room ids in
+// applies_to_room_category_ids must be remapped by the save coordinator
+// BEFORE this is called for the final PUT.
 export const stripTaxes = (state: TaxesLocalState): Omit<ContractTax, "id">[] =>
-  state.map(({ _localId: _, ...t }) => ({ ...t, name: t.name.trim() }));
+  state.map(({ _localId: _, ...t }) => ({
+    ...t,
+    name: t.name.trim(),
+    from_amount: t.from_amount ?? null,
+    to_amount: t.to_amount ?? null,
+  }));
 
-export function validateTaxes(state: TaxesLocalState): TaxesErrors {
+export function validateTaxes(
+  state: TaxesLocalState,
+  opts: { tieredMode?: boolean } = {}
+): TaxesErrors {
   const errs: TaxesErrors = {};
   for (const t of state) {
     const e: TaxRowError = {};
     if (!t.name.trim()) e.name = "Name required";
     if (t.rate < 0) e.rate = "Rate must be ≥ 0";
     else if (t.rate_type === "percentage" && t.rate > 100) e.rate = "Percentage must be ≤ 100";
+
+    if (opts.tieredMode) {
+      const f = t.from_amount;
+      const to = t.to_amount;
+      if (f != null && f < 0) e.tier = "From must be ≥ 0";
+      if (to != null && to <= 0) e.tier = "To must be > 0";
+      if (f != null && to != null && f >= to) e.tier = "From must be < To";
+    }
     errs[t._localId] = e;
+  }
+
+  if (opts.tieredMode) {
+    // Group by (lowercased name, sorted room scope key). Within a group the
+    // [from, to) bands must not overlap. Mirrors backend validation.
+    const groups = new Map<string, LocalTax[]>();
+    for (const t of state) {
+      const key = `${t.name.trim().toLowerCase()}::${[...t.applies_to_room_category_ids].sort().join(",")}`;
+      const arr = groups.get(key) ?? [];
+      arr.push(t);
+      groups.set(key, arr);
+    }
+    for (const [, group] of groups) {
+      if (group.length < 2) continue;
+      for (let i = 0; i < group.length; i++) {
+        for (let j = i + 1; j < group.length; j++) {
+          const a = group[i];
+          const b = group[j];
+          const aFrom = a.from_amount ?? Number.NEGATIVE_INFINITY;
+          const aTo = a.to_amount ?? Number.POSITIVE_INFINITY;
+          const bFrom = b.from_amount ?? Number.NEGATIVE_INFINITY;
+          const bTo = b.to_amount ?? Number.POSITIVE_INFINITY;
+          if (aFrom < bTo && bFrom < aTo) {
+            errs[a._localId].overlap =
+              `Tier overlaps another row of "${a.name.trim() || "(unnamed)"}"`;
+            errs[b._localId].overlap =
+              `Tier overlaps another row of "${b.name.trim() || "(unnamed)"}"`;
+          }
+        }
+      }
+    }
   }
   return errs;
 }
 
+const initialTieredFromState = (state: TaxesLocalState): boolean =>
+  state.some((t) => t.from_amount != null || t.to_amount != null);
+
 export interface RoomOption {
-  id: string; // real server id OR temp _localId for unsaved rooms
-  label: string; // "Deluxe" or "Deluxe (unsaved)"
+  id: string;
+  label: string;
   isUnsaved: boolean;
 }
 
@@ -81,6 +154,7 @@ interface Props {
   roomOptions: RoomOption[];
   disabled?: boolean;
   onErrorsChange?: (errors: TaxesErrors) => void;
+  onTieredModeChange?: (tieredMode: boolean) => void;
 }
 
 export default function TaxesSection({
@@ -89,11 +163,55 @@ export default function TaxesSection({
   roomOptions,
   disabled = false,
   onErrorsChange,
+  onTieredModeChange,
 }: Props) {
-  const errors = useMemo(() => validateTaxes(state), [state]);
+  // Lazy init: tiered mode is ON if any row has tier data on first mount.
+  // Section remounts on contract change (parent uses key=contractId), so
+  // this re-derives per contract.
+  const [tieredMode, setTieredMode] = useState<boolean>(() =>
+    initialTieredFromState(state)
+  );
+  // Confirmation dialog state when toggling OFF with tier data present.
+  const [confirmOff, setConfirmOff] = useState(false);
+
+  useEffect(() => {
+    onTieredModeChange?.(tieredMode);
+  }, [tieredMode, onTieredModeChange]);
+
+  // Keep upstream errors in sync. Conditional on tieredMode so the parent's
+  // pre-save guard reflects only the rules the user can actually see.
+  const errors = useMemo(
+    () => validateTaxes(state, { tieredMode }),
+    [state, tieredMode]
+  );
   useEffect(() => {
     onErrorsChange?.(errors);
   }, [errors, onErrorsChange]);
+
+  const tierDataRowCount = useMemo(
+    () => state.filter((t) => t.from_amount != null || t.to_amount != null).length,
+    [state]
+  );
+
+  const handleToggle = (next: boolean) => {
+    if (next) {
+      setTieredMode(true);
+      return;
+    }
+    if (tierDataRowCount > 0) {
+      setConfirmOff(true);
+      return;
+    }
+    setTieredMode(false);
+  };
+
+  const confirmDisableTier = () => {
+    onChange(
+      state.map((t) => ({ ...t, from_amount: null, to_amount: null }))
+    );
+    setTieredMode(false);
+    setConfirmOff(false);
+  };
 
   const updateRow = (id: string, patch: Partial<LocalTax>) =>
     onChange(state.map((t) => (t._localId === id ? { ...t, ...patch } : t)));
@@ -109,12 +227,32 @@ export default function TaxesSection({
         rate_type: "percentage",
         is_inclusive: false,
         applies_to_room_category_ids: [],
+        from_amount: null,
+        to_amount: null,
       },
     ]);
+
+  const TierToggleRow = (
+    <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
+      <div className="flex flex-col">
+        <Label className="text-sm">Enable tiered rates</Label>
+        <span className="text-[11px] text-muted-foreground">
+          Lets one tax (e.g. GST) carry different percentages by per-night rate band.
+        </span>
+      </div>
+      <Switch
+        checked={tieredMode}
+        onCheckedChange={handleToggle}
+        disabled={disabled}
+        aria-label="Enable tiered rates"
+      />
+    </div>
+  );
 
   if (state.length === 0) {
     return (
       <div className="space-y-3">
+        {TierToggleRow}
         <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
           No taxes or fees defined. Click &ldquo;+ Add Tax/Fee&rdquo; to start.
         </div>
@@ -133,6 +271,8 @@ export default function TaxesSection({
 
   return (
     <div className="space-y-3">
+      {TierToggleRow}
+
       <div className="flex justify-end">
         <Button
           type="button"
@@ -149,10 +289,16 @@ export default function TaxesSection({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/40">
-              <TableHead className="w-[28%]">Name</TableHead>
-              <TableHead className="w-[100px]">Rate</TableHead>
-              <TableHead className="w-[120px]">Type</TableHead>
-              <TableHead className="w-[100px]">Inclusive</TableHead>
+              <TableHead className="w-[24%]">Name</TableHead>
+              <TableHead className="w-[90px]">Rate</TableHead>
+              <TableHead className="w-[110px]">Type</TableHead>
+              <TableHead className="w-[80px]">Inclusive</TableHead>
+              {tieredMode && (
+                <>
+                  <TableHead className="w-[110px]">From Rate</TableHead>
+                  <TableHead className="w-[110px]">To Rate</TableHead>
+                </>
+              )}
               <TableHead>Applies to</TableHead>
               <TableHead className="w-[40px]" />
             </TableRow>
@@ -172,6 +318,9 @@ export default function TaxesSection({
                     />
                     {e?.name && (
                       <div className="text-[11px] text-destructive mt-1">{e.name}</div>
+                    )}
+                    {e?.overlap && (
+                      <div className="text-[11px] text-destructive mt-1">{e.overlap}</div>
                     )}
                   </TableCell>
                   <TableCell>
@@ -218,15 +367,52 @@ export default function TaxesSection({
                       }
                     />
                   </TableCell>
+                  {tieredMode && (
+                    <>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={t.from_amount ?? ""}
+                          disabled={disabled}
+                          placeholder="Min"
+                          onChange={(ev) => {
+                            const raw = ev.target.value;
+                            updateRow(t._localId, {
+                              from_amount: raw === "" ? null : Math.max(0, Number(raw)),
+                            });
+                          }}
+                          className="h-8"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={t.to_amount ?? ""}
+                          disabled={disabled}
+                          placeholder="Max"
+                          onChange={(ev) => {
+                            const raw = ev.target.value;
+                            updateRow(t._localId, {
+                              to_amount: raw === "" ? null : Math.max(0, Number(raw)),
+                            });
+                          }}
+                          className="h-8"
+                        />
+                        {e?.tier && (
+                          <div className="text-[11px] text-destructive mt-1">{e.tier}</div>
+                        )}
+                      </TableCell>
+                    </>
+                  )}
                   <TableCell>
                     <AppliesToPicker
                       value={t.applies_to_room_category_ids}
                       options={roomOptions}
                       disabled={disabled}
                       onChange={(ids) =>
-                        updateRow(t._localId, {
-                          applies_to_room_category_ids: ids,
-                        })
+                        updateRow(t._localId, { applies_to_room_category_ids: ids })
                       }
                     />
                   </TableCell>
@@ -247,6 +433,26 @@ export default function TaxesSection({
           </TableBody>
         </Table>
       </div>
+
+      <AlertDialog open={confirmOff} onOpenChange={setConfirmOff}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disable tiered rates?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Disabling tiered rates will clear From/To values on{" "}
+              <strong>{tierDataRowCount}</strong> tax row
+              {tierDataRowCount === 1 ? "" : "s"}. This change is local until
+              you click Save All Changes. Continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDisableTier}>
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -263,9 +469,11 @@ function AppliesToPicker({
   onChange: (next: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Suppress lint on the unused-but-stable ref pattern (avoids re-render on
+  // every popover toggle in callers downstream).
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  void triggerRef;
 
-  // Drop ids that no longer exist in options (e.g. a referenced unsaved room
-  // got deleted) so the displayed selection matches reality.
   const validIds = useMemo(() => {
     const known = new Set(options.map((o) => o.id));
     return value.filter((v) => known.has(v));
@@ -292,6 +500,7 @@ function AppliesToPicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          ref={triggerRef}
           type="button"
           variant="outline"
           size="sm"
