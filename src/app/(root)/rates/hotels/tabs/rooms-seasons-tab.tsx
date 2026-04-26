@@ -2,13 +2,16 @@
 
 import {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Copy } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BorderedCard } from "@/components/ui/bordered-card";
@@ -25,24 +28,32 @@ import {
   listContractRooms,
   listContractSeasons,
   listContractTaxes,
+  putAgePolicies,
+  putContractRooms,
+  putContractSeasons,
+  putContractTaxes,
 } from "@/data-access/contract-tab2";
+import { ContractRoom } from "@/types/contract-tab2";
 import { DmcContract } from "@/types/dmc-contracts";
 import AgePoliciesSection, {
   AgePoliciesErrors,
   AgePoliciesLocalState,
   stripBands,
+  validateScope,
   wrapBands,
 } from "./sections/age-policies-section";
 import SeasonsSection, {
   SeasonsErrors,
   SeasonsLocalState,
   stripSeasons,
+  validateSeasons,
   wrapSeasons,
 } from "./sections/seasons-section";
 import RoomCategoriesSection, {
   RoomsErrors,
   RoomsLocalState,
   stripRooms,
+  validateRooms,
   wrapRooms,
 } from "./sections/room-categories-section";
 import TaxesSection, {
@@ -50,6 +61,7 @@ import TaxesSection, {
   TaxesErrors,
   TaxesLocalState,
   stripTaxes,
+  validateTaxes,
   wrapTaxes,
 } from "./sections/taxes-section";
 
@@ -66,10 +78,13 @@ interface Props {
 const EMPTY_AGE_STATE: AgePoliciesLocalState = { rooms: [], meals: [] };
 
 const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsSeasonsTab(
-  { hotelId, onDirtyChange, onSavingChange: _onSavingChange },
+  { hotelId, onDirtyChange, onSavingChange },
   ref
 ) {
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null);
+  // Mutable bridge: ContractEditor writes its current saveAll into this ref
+  // each render. The imperative handle below reads through it on demand.
+  const innerSaveRef = useRef<(() => Promise<void>) | null>(null);
 
   const { data: contracts = [], isLoading: contractsLoading } = useQuery({
     queryKey: ["dmc-contracts", hotelId, true],
@@ -99,7 +114,8 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
 
   useImperativeHandle(ref, () => ({
     saveAll: async () => {
-      // Wired in Stage 6.
+      if (!innerSaveRef.current) return;
+      await innerSaveRef.current();
     },
   }));
 
@@ -135,6 +151,10 @@ const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsS
       onSelect={setSelectedContractId}
       selected={selected}
       onDirtyChange={onDirtyChange}
+      onSavingChange={onSavingChange}
+      registerSave={(fn) => {
+        innerSaveRef.current = fn;
+      }}
     />
   );
 });
@@ -147,12 +167,16 @@ function ContractEditor({
   onSelect,
   selected,
   onDirtyChange,
+  onSavingChange,
+  registerSave,
 }: {
   contracts: DmcContract[];
   selectedContractId: string;
   onSelect: (id: string) => void;
   selected: DmcContract | null;
   onDirtyChange: (dirty: boolean) => void;
+  onSavingChange?: (saving: boolean) => void;
+  registerSave: (fn: () => Promise<void>) => void;
 }) {
   const isArchived = selected?.status === "archived";
 
@@ -280,6 +304,166 @@ function ContractEditor({
     onDirtyChange(ageDirty || seasonsDirty || roomsDirty || taxesDirty);
   }, [ageDirty, seasonsDirty, roomsDirty, taxesDirty, onDirtyChange]);
 
+  // ─── Save coordinator ────────────────────────────────────────────────
+  const saveAll = useCallback(async () => {
+    if (isArchived) {
+      toast.error("Contract is archived — cannot save.");
+      return;
+    }
+
+    // Pre-check: refuse the request if any DIRTY section has client-side
+    // validation errors. Clean sections won't be PUT'd so their state
+    // doesn't matter for this save.
+    const blockers: string[] = [];
+
+    if (ageDirty) {
+      const re = validateScope(ageState.rooms);
+      const me = validateScope(ageState.meals);
+      if (Object.keys(re).length || Object.keys(me).length) {
+        blockers.push("Age policies");
+      }
+    }
+    if (seasonsDirty) {
+      const se = validateSeasons(seasonsState);
+      const hasErr = Object.values(se).some(
+        (e) => e.name || e.overlapAcross || Object.keys(e.ranges).length > 0
+      );
+      if (hasErr) blockers.push("Seasons");
+    }
+    if (roomsDirty) {
+      const re = validateRooms(roomsState);
+      const hasErr = Object.values(re).some((e) => e.name); // soft warnings don't block
+      if (hasErr) blockers.push("Room categories");
+    }
+    if (taxesDirty) {
+      const te = validateTaxes(taxesState);
+      const hasErr = Object.values(te).some((e) => e.name || e.rate);
+      if (hasErr) blockers.push("Taxes & fees");
+    }
+
+    if (blockers.length > 0) {
+      toast.error(`Fix validation errors first: ${blockers.join(", ")}`);
+      return;
+    }
+
+    onSavingChange?.(true);
+    try {
+      // 1. Age policies
+      if (ageDirty) {
+        const payload = {
+          rooms: stripBands(ageState.rooms),
+          meals: stripBands(ageState.meals),
+        };
+        const res = await putAgePolicies(selectedContractId, payload);
+        if (res.error || !res.data) {
+          throw new SectionError("Age policies", res.error || "Save failed");
+        }
+        const next: AgePoliciesLocalState = {
+          rooms: wrapBands(res.data.rooms ?? []),
+          meals: wrapBands(res.data.meals ?? []),
+        };
+        setAgeState(next);
+        setAgeSnapshot(next);
+      }
+
+      // 2. Rooms — captures real ids so the taxes step can remap.
+      let roomIdRemap = new Map<string, string>(); // _localId -> real id
+      if (roomsDirty) {
+        const payload = stripRooms(roomsState);
+        const res = await putContractRooms(selectedContractId, payload);
+        if (res.error || !res.data) {
+          throw new SectionError("Room categories", res.error || "Save failed");
+        }
+        const responseItems = res.data.items ?? [];
+        roomIdRemap = buildRoomIdRemap(roomsState, responseItems);
+        const remappedLocal: RoomsLocalState = roomsState.map((r) => {
+          const real = roomIdRemap.get(r._localId);
+          return real ? { ...r, id: real } : r;
+        });
+        // Also fold in any backend-normalized fields (e.g. server may default
+        // some null fields). Re-wrap from response items keyed by real id.
+        const byId = new Map<string, ContractRoom>();
+        for (const it of responseItems) {
+          if (it.id) byId.set(it.id, it);
+        }
+        const finalLocal: RoomsLocalState = remappedLocal.map((r) => {
+          const fresh = r.id ? byId.get(r.id) : undefined;
+          if (!fresh) return r;
+          const wrapped = wrapRooms([fresh])[0];
+          return { ...wrapped, _localId: r._localId };
+        });
+        setRoomsState(finalLocal);
+        setRoomsSnapshot(finalLocal);
+      } else {
+        // No rooms PUT this round — the existing real ids on roomsState still
+        // map themselves; surface them for the taxes remap below.
+        for (const r of roomsState) {
+          if (r.id) roomIdRemap.set(r._localId, r.id);
+        }
+      }
+
+      // 3. Taxes — swap any temp room ids in applies_to_room_category_ids
+      //    for the real ids assigned by the rooms PUT.
+      if (taxesDirty) {
+        const remappedTaxes = taxesState.map((t) => ({
+          ...t,
+          applies_to_room_category_ids: t.applies_to_room_category_ids
+            .map((id) => roomIdRemap.get(id) ?? id)
+            // Drop ids that didn't resolve (e.g. an unsaved room got removed
+            // before save) so we don't send stale temp ids to the backend.
+            .filter((id) => !id.startsWith("room-")),
+        }));
+        const payload = stripTaxes(remappedTaxes);
+        const res = await putContractTaxes(selectedContractId, payload);
+        if (res.error) {
+          throw new SectionError("Taxes & fees", res.error || "Save failed");
+        }
+        const fresh = wrapTaxes(res.data ?? []);
+        setTaxesState(fresh);
+        setTaxesSnapshot(fresh);
+      }
+
+      // 4. Seasons — independent of the rest.
+      if (seasonsDirty) {
+        const payload = stripSeasons(seasonsState);
+        const res = await putContractSeasons(selectedContractId, payload);
+        if (res.error || !res.data) {
+          throw new SectionError("Seasons", res.error || "Save failed");
+        }
+        const fresh = wrapSeasons(res.data.items ?? []);
+        setSeasonsState(fresh);
+        setSeasonsSnapshot(fresh);
+      }
+
+      toast.success("Saved");
+    } catch (err) {
+      if (err instanceof SectionError) {
+        toast.error(`Failed to save ${err.section}: ${err.message}`);
+      } else {
+        toast.error(err instanceof Error ? err.message : "Save failed");
+      }
+    } finally {
+      onSavingChange?.(false);
+    }
+  }, [
+    isArchived,
+    ageDirty,
+    seasonsDirty,
+    roomsDirty,
+    taxesDirty,
+    ageState,
+    seasonsState,
+    roomsState,
+    taxesState,
+    selectedContractId,
+    onSavingChange,
+  ]);
+
+  // Refresh the imperative handle whenever saveAll's identity changes.
+  useEffect(() => {
+    registerSave(saveAll);
+  }, [registerSave, saveAll]);
+
   return (
     <div className="space-y-6">
       <ContractSelectorRow
@@ -352,6 +536,53 @@ function ContractEditor({
       </div>
     </div>
   );
+}
+
+class SectionError extends Error {
+  constructor(public section: string, message: string) {
+    super(message);
+  }
+}
+
+// Match new (un-id'd) local rooms to the response's newly-inserted rooms by
+// trimmed name. When the same name appears twice among the new local rooms,
+// align by insertion order (response items are inserted in submitted order).
+function buildRoomIdRemap(
+  prevState: RoomsLocalState,
+  response: ContractRoom[]
+): Map<string, string> {
+  const map = new Map<string, string>();
+
+  // Pre-existing rooms keep their id (no remap needed but keep the key in
+  // the map so callers can resolve _localId → id uniformly).
+  for (const r of prevState) {
+    if (r.id) map.set(r._localId, r.id);
+  }
+
+  const newLocals = prevState.filter((r) => !r.id);
+  if (newLocals.length === 0) return map;
+
+  const prevIds = new Set(prevState.filter((r) => r.id).map((r) => r.id as string));
+  const newResponses = response.filter((r) => r.id && !prevIds.has(r.id));
+
+  const used = new Set<number>();
+  for (const local of newLocals) {
+    const localName = local.name.trim();
+    let matchedIdx = -1;
+    for (let i = 0; i < newResponses.length; i++) {
+      if (used.has(i)) continue;
+      if ((newResponses[i].name ?? "").trim() === localName) {
+        matchedIdx = i;
+        break;
+      }
+    }
+    if (matchedIdx !== -1) {
+      used.add(matchedIdx);
+      map.set(local._localId, newResponses[matchedIdx].id as string);
+    }
+  }
+
+  return map;
 }
 
 function ageStatesEqual(a: AgePoliciesLocalState, b: AgePoliciesLocalState): boolean {
