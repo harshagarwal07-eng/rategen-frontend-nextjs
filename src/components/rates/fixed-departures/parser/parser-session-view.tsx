@@ -445,6 +445,17 @@ export function ParserSessionView({ sessionId }: { sessionId: string }) {
             body.warnings.length === 1 ? "" : "s"
           }`,
         );
+        // Stash warnings so the editor can surface them on open. Toast alone
+        // disappears before the user can read it across the route push.
+        try {
+          sessionStorage.setItem(
+            `parser-warnings-${body.package_id}`,
+            JSON.stringify(body.warnings),
+          );
+        } catch {
+          // sessionStorage unavailable (private mode, quota) — fall through;
+          // toast is the only signal in that case.
+        }
       } else {
         toast.success("Saved to package");
       }

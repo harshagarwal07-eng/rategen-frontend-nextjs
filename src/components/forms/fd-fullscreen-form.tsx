@@ -16,9 +16,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ChevronLeft, ChevronRight, Loader2, Save, X } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Save, X } from "lucide-react";
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { toast } from "sonner";
+import type { GeoWarningRecord } from "@/lib/fd-parser-errors";
+import { Badge } from "@/components/ui/badge";
 import {
   fdGetPackage,
   fdGetPackageCities,
@@ -73,6 +75,9 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
   // gate forward navigation while still allowing free backward navigation to
   // any already-saved tab.
   const [maxSavedTabIdx, setMaxSavedTabIdx] = useState<number>(-1);
+  // Geo warnings handed off from the parser via sessionStorage. Read once when
+  // the dialog opens onto a known package; cleared on dismiss.
+  const [parserWarnings, setParserWarnings] = useState<GeoWarningRecord[]>([]);
   const queryClient = useQueryClient();
 
   const generalRef = useRef<FDTabHandle>(null);
@@ -96,10 +101,34 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
       setTabResetKeys({});
       setPendingTab(null);
       setShowTabSwitchDialog(false);
+      setParserWarnings([]);
       // In edit mode every tab is unlocked; in create mode start with nothing
       // saved.
       setMaxSavedTabIdx(packageId ? TABS.length - 1 : -1);
       prevDurationRef.current = null;
+    }
+  }, [open, packageId]);
+
+  // Pull geo warnings stashed by the parser save flow and clear the entry so
+  // they don't reappear on re-open. Banner stays until the user dismisses it.
+  useEffect(() => {
+    if (!open || !packageId) return;
+    try {
+      const raw = sessionStorage.getItem(`parser-warnings-${packageId}`);
+      if (!raw) return;
+      sessionStorage.removeItem(`parser-warnings-${packageId}`);
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return;
+      const valid = parsed.filter(
+        (w): w is GeoWarningRecord =>
+          !!w && typeof w === "object"
+          && typeof (w as Record<string, unknown>).field === "string"
+          && typeof (w as Record<string, unknown>).value === "string"
+          && typeof (w as Record<string, unknown>).message === "string",
+      );
+      if (valid.length > 0) setParserWarnings(valid);
+    } catch {
+      // ignore — warnings handoff is best-effort
     }
   }, [open, packageId]);
 
@@ -351,6 +380,43 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                 </button>
               </DialogClose>
             </div>
+
+            {parserWarnings.length > 0 && (
+              <div className="border-b bg-amber-50 px-6 py-3">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-amber-900">
+                        Parser saved with {parserWarnings.length} geo warning
+                        {parserWarnings.length === 1 ? "" : "s"} — review the entries below.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setParserWarnings([])}
+                        className="shrink-0 text-xs font-medium text-amber-900 hover:text-amber-950 underline-offset-2 hover:underline"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                    <ul className="mt-2 space-y-1.5">
+                      {parserWarnings.map((w, i) => (
+                        <li key={i} className="flex flex-wrap items-baseline gap-2 text-xs text-amber-900">
+                          <Badge
+                            variant="outline"
+                            className="border-amber-300 bg-amber-100 text-amber-900 text-[10px] uppercase tracking-wide"
+                          >
+                            {w.field}
+                          </Badge>
+                          <span className="font-medium">{w.value}</span>
+                          <span className="text-amber-800">— {w.message}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="border-b bg-muted px-4 py-1">
               <div className="flex justify-center overflow-x-auto">
