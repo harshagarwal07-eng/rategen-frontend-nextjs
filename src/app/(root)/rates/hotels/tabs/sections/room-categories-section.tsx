@@ -16,13 +16,6 @@ import { ArrowUpRight, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ContractRoom } from "@/types/contract-tab2";
 
@@ -325,9 +318,9 @@ function RoomCard({
 
       {isOpen && (
         <div className="px-3 pb-3 pt-2 border-t flex flex-col gap-5">
-        {/* Identity row: Name + Rate Type (issue 9) */}
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_220px] gap-3">
-          <div className="space-y-1">
+        {/* Identity row: Name + Rate Type (toggle group) */}
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
+          <div className="space-y-1 flex-1 max-w-md">
             <label className={SECTION_LABEL_CLS}>Name</label>
             <Input
               value={room.name}
@@ -342,22 +335,11 @@ function RoomCard({
           </div>
           <div className="space-y-1">
             <label className={SECTION_LABEL_CLS}>Rate Type</label>
-            <Select
-              value={room.rate_type ?? undefined}
-              onValueChange={(v) => onPatch({ rate_type: v })}
+            <RateTypeToggleGroup
+              value={room.rate_type ?? null}
               disabled={disabled}
-            >
-              <SelectTrigger className="h-8 text-sm">
-                <SelectValue placeholder="Select…" />
-              </SelectTrigger>
-              <SelectContent>
-                {RATE_TYPE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onChange={(v) => onPatch({ rate_type: v })}
+            />
           </div>
         </div>
 
@@ -530,6 +512,54 @@ function RoomCard({
   );
 }
 
+// Segmented control for Rate Type. Active option uses primary green.
+// Replaces a Select to make the small fixed option set (PRPN / PPPN) more
+// glanceable and to thread the green accent into the room body.
+function RateTypeToggleGroup({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: string | null;
+  disabled: boolean;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "inline-flex rounded-md border border-input bg-background p-0.5",
+        disabled && "opacity-60 cursor-not-allowed"
+      )}
+      role="radiogroup"
+      aria-label="Rate type"
+    >
+      {RATE_TYPE_OPTIONS.map((opt) => {
+        const active = value === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            disabled={disabled}
+            onClick={() => onChange(opt.value)}
+            title={opt.label}
+            className={cn(
+              "h-7 px-3 text-xs font-semibold uppercase tracking-wide rounded-sm transition-colors",
+              active
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              disabled && "pointer-events-none"
+            )}
+          >
+            {opt.value}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function NumField({
   label,
   value,
@@ -573,9 +603,14 @@ function ToggleRow({
   disabled: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-xs">{label}</span>
+    <label
+      className={cn(
+        "inline-flex items-center gap-2 text-xs",
+        disabled && "opacity-60 cursor-not-allowed"
+      )}
+    >
       <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
-    </div>
+      <span>{label}</span>
+    </label>
   );
 }
