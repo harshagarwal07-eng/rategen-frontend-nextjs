@@ -42,7 +42,7 @@ interface FormValues {
 const EMPTY: FormValues = { doc_file_url: "", pdf_file_url: "", remarks: "" };
 
 export const FDDocumentsRemarksTab = forwardRef<FDTabHandle, Props>(function FDDocumentsRemarksTab(
-  { mode, packageId, onSaved, onAdvance, onDirtyChange },
+  { mode, packageId, onSaved, onAdvance: _onAdvance, onDirtyChange },
   ref,
 ) {
   const [isSaving, setIsSaving] = useState(false);
@@ -105,7 +105,6 @@ export const FDDocumentsRemarksTab = forwardRef<FDTabHandle, Props>(function FDD
       baselineRef.current = values;
       form.reset(values);
       onSaved();
-      if (mode === "create") onAdvance();
       return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");

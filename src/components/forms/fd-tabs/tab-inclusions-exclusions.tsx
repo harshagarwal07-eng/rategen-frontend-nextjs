@@ -66,7 +66,7 @@ export const FDInclusionsExclusionsTab = forwardRef<FDTabHandle, Props>(function
   mode,
   packageId,
   onSaved,
-  onAdvance,
+  onAdvance: _onAdvance,
   onDirtyChange,
 }, ref) {
   const [state, setState] = useState<State>(emptyState);
@@ -145,7 +145,6 @@ export const FDInclusionsExclusionsTab = forwardRef<FDTabHandle, Props>(function
       }
       setHydratedSnapshot(cleaned);
       setState(cleaned);
-      if (mode === "create") onAdvance();
       return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");

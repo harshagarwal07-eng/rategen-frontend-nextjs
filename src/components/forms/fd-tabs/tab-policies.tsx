@@ -182,7 +182,7 @@ function paymentPreview(row: PaymentRow, currency: string): string {
 }
 
 export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesTab(
-  { mode, packageId, onSaved, onAdvance, onDirtyChange },
+  { mode, packageId, onSaved, onAdvance: _onAdvance, onDirtyChange },
   ref,
 ) {
   const [isSaving, setIsSaving] = useState(false);
@@ -227,10 +227,11 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
   const paymentFA = useFieldArray({ control: form.control, name: "payment" });
 
   // Three independent baselines so each section's dirty state is tracked
-  // separately (and saves can update them one at a time).
-  const cancellationBaselineRef = useRef<RuleRow[]>([]);
-  const paymentBaselineRef = useRef<PaymentRow[]>([]);
-  const textBaselineRef = useRef<{ terms: string; payment_policy: string; refund_policy: string }>({
+  // separately (and saves can update them one at a time). State (not refs)
+  // so updates after save trigger a re-render and the dirty memos recompute.
+  const [cancellationBaseline, setCancellationBaseline] = useState<RuleRow[]>([]);
+  const [paymentBaseline, setPaymentBaseline] = useState<PaymentRow[]>([]);
+  const [textBaseline, setTextBaseline] = useState<{ terms: string; payment_policy: string; refund_policy: string }>({
     terms: "",
     payment_policy: "",
     refund_policy: "",
@@ -247,7 +248,7 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
     form.setValue("terms", next.terms);
     form.setValue("payment_policy", next.payment_policy);
     form.setValue("refund_policy", next.refund_policy);
-    textBaselineRef.current = next;
+    setTextBaseline(next);
     setHydratedText(true);
   }, [pkg, hydratedText, form]);
 
@@ -269,8 +270,8 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
           .map(ruleFromPayment);
         cancellationFA.replace(cRows);
         paymentFA.replace(pRows);
-        cancellationBaselineRef.current = cRows;
-        paymentBaselineRef.current = pRows;
+        setCancellationBaseline(cRows);
+        setPaymentBaseline(pRows);
         setRowsKey((k) => k + 1);
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Failed to load policies");
@@ -289,19 +290,19 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
   // Watch form to compute per-section dirty flags.
   const watched = useWatch({ control: form.control });
   const cancellationDirty = useMemo(
-    () => !isEqual(watched.cancellation ?? [], cancellationBaselineRef.current),
-    [watched.cancellation],
+    () => !isEqual(watched.cancellation ?? [], cancellationBaseline),
+    [watched.cancellation, cancellationBaseline],
   );
   const paymentDirty = useMemo(
-    () => !isEqual(watched.payment ?? [], paymentBaselineRef.current),
-    [watched.payment],
+    () => !isEqual(watched.payment ?? [], paymentBaseline),
+    [watched.payment, paymentBaseline],
   );
   const textDirty = useMemo(
     () =>
-      (watched.terms ?? "") !== textBaselineRef.current.terms ||
-      (watched.payment_policy ?? "") !== textBaselineRef.current.payment_policy ||
-      (watched.refund_policy ?? "") !== textBaselineRef.current.refund_policy,
-    [watched.terms, watched.payment_policy, watched.refund_policy],
+      (watched.terms ?? "") !== textBaseline.terms ||
+      (watched.payment_policy ?? "") !== textBaseline.payment_policy ||
+      (watched.refund_policy ?? "") !== textBaseline.refund_policy,
+    [watched.terms, watched.payment_policy, watched.refund_policy, textBaseline],
   );
 
   const isDirty = cancellationDirty || paymentDirty || textDirty;
@@ -350,12 +351,12 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
       if (selectedDepartureId && cancellationDirty) {
         const rows = form.getValues("cancellation");
         await fdReplaceCancellationPolicy(selectedDepartureId, cancellationToPayload(rows));
-        cancellationBaselineRef.current = rows;
+        setCancellationBaseline(rows);
       }
       if (selectedDepartureId && paymentDirty) {
         const rows = form.getValues("payment");
         await fdReplacePaymentSchedule(selectedDepartureId, paymentToPayload(rows));
-        paymentBaselineRef.current = rows;
+        setPaymentBaseline(rows);
       }
       // 2. Package-level text
       if (textDirty) {
@@ -365,15 +366,14 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
           payment_policy: values.payment_policy || null,
           refund_policy: values.refund_policy || null,
         });
-        textBaselineRef.current = {
+        setTextBaseline({
           terms: values.terms,
           payment_policy: values.payment_policy,
           refund_policy: values.refund_policy,
-        };
+        });
       }
       toast.success(mode === "create" ? "Policies saved" : "Policies updated");
       onSaved();
-      if (mode === "create") onAdvance();
       return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");
@@ -565,10 +565,10 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
                 name="terms"
                 render={({ field }) => (
                   <TiptapEditor
-                    initialContent={textBaselineRef.current.terms}
+                    initialContent={textBaseline.terms}
                     onChange={(html) => field.onChange(html)}
                     placeholder="Terms and conditions..."
-                    tools={["bold", "italic", "underline"]}
+                    tools={["bold", "italic", "underline", "bulletList"]}
                     className="min-h-[160px]"
                   />
                 )}
@@ -588,10 +588,10 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
                 name="payment_policy"
                 render={({ field }) => (
                   <TiptapEditor
-                    initialContent={textBaselineRef.current.payment_policy}
+                    initialContent={textBaseline.payment_policy}
                     onChange={(html) => field.onChange(html)}
                     placeholder="Payment policy..."
-                    tools={["bold", "italic", "underline"]}
+                    tools={["bold", "italic", "underline", "bulletList"]}
                     className="min-h-[160px]"
                   />
                 )}
@@ -611,10 +611,10 @@ export const FDPoliciesTab = forwardRef<FDTabHandle, Props>(function FDPoliciesT
                 name="refund_policy"
                 render={({ field }) => (
                   <TiptapEditor
-                    initialContent={textBaselineRef.current.refund_policy}
+                    initialContent={textBaseline.refund_policy}
                     onChange={(html) => field.onChange(html)}
                     placeholder="Refund policy..."
-                    tools={["bold", "italic", "underline"]}
+                    tools={["bold", "italic", "underline", "bulletList"]}
                     className="min-h-[160px]"
                   />
                 )}

@@ -304,7 +304,7 @@ function bandGridClass(n: number): string {
 // ── Component ───────────────────────────────────────────────────────
 
 export const FDFlightsVisaTab = forwardRef<FDTabHandle, Props>(function FDFlightsVisaTab(
-  { mode, packageId, onSaved, onAdvance, onDirtyChange },
+  { mode, packageId, onSaved, onAdvance: _onAdvance, onDirtyChange },
   ref,
 ) {
   const [isSaving, setIsSaving] = useState(false);
@@ -338,9 +338,12 @@ export const FDFlightsVisaTab = forwardRef<FDTabHandle, Props>(function FDFlight
     enabled: !!packageId,
   });
 
-  const flightsBaselineRef = useRef<GroupState[]>([]);
-  const visaBaselineRef = useRef<VisaState>(EMPTY_VISA);
-  const taxesBaselineRef = useRef<TaxRow[]>([]);
+  // Baselines are state (not refs) so updating them after save triggers a
+  // re-render and the dirty memos recompute. With refs the memo deps would
+  // see only the unchanged live value and keep returning the cached `true`.
+  const [flightsBaseline, setFlightsBaseline] = useState<GroupState[]>([]);
+  const [visaBaseline, setVisaBaseline] = useState<VisaState>(EMPTY_VISA);
+  const [taxesBaseline, setTaxesBaseline] = useState<TaxRow[]>([]);
 
   useEffect(() => {
     if (hydrated) return;
@@ -354,16 +357,16 @@ export const FDFlightsVisaTab = forwardRef<FDTabHandle, Props>(function FDFlight
     setGroups(initialGroups);
     setVisa(initialVisa);
     setTaxes(initialTaxes);
-    flightsBaselineRef.current = initialGroups;
-    visaBaselineRef.current = initialVisa;
-    taxesBaselineRef.current = initialTaxes;
+    setFlightsBaseline(initialGroups);
+    setVisaBaseline(initialVisa);
+    setTaxesBaseline(initialTaxes);
     setOpenGroups(new Set([0]));
     setHydrated(true);
   }, [flightsData, visaData, taxesData, hydrated]);
 
-  const flightsDirty = useMemo(() => !isEqual(groups, flightsBaselineRef.current), [groups]);
-  const visaDirty = useMemo(() => !isEqual(visa, visaBaselineRef.current), [visa]);
-  const taxesDirty = useMemo(() => !isEqual(taxes, taxesBaselineRef.current), [taxes]);
+  const flightsDirty = useMemo(() => !isEqual(groups, flightsBaseline), [groups, flightsBaseline]);
+  const visaDirty = useMemo(() => !isEqual(visa, visaBaseline), [visa, visaBaseline]);
+  const taxesDirty = useMemo(() => !isEqual(taxes, taxesBaseline), [taxes, taxesBaseline]);
   const isDirty = hydrated && (flightsDirty || visaDirty || taxesDirty);
 
   const onDirtyChangeRef = useRef(onDirtyChange);
@@ -401,7 +404,7 @@ export const FDFlightsVisaTab = forwardRef<FDTabHandle, Props>(function FDFlight
       if (flightsDirty) {
         const trimmedGroups = groups.map((g) => ({ ...g, name: g.name.trim() }));
         await fdReplaceFlights(packageId, flattenFlights(trimmedGroups));
-        flightsBaselineRef.current = trimmedGroups;
+        setFlightsBaseline(trimmedGroups);
         setGroups(trimmedGroups);
       }
       if (visaDirty) {
@@ -425,15 +428,14 @@ export const FDFlightsVisaTab = forwardRef<FDTabHandle, Props>(function FDFlight
           custom_adult_age_from: visa.custom_adult_age_from,
           custom_adult_age_to: visa.custom_adult_age_to,
         });
-        visaBaselineRef.current = visa;
+        setVisaBaseline(visa);
       }
       if (taxesDirty) {
         await fdReplaceTaxes(packageId, taxesToPayload(taxes));
-        taxesBaselineRef.current = taxes;
+        setTaxesBaseline(taxes);
       }
       toast.success(mode === "create" ? "Flights & Visa saved" : "Flights & Visa updated");
       onSaved();
-      if (mode === "create") onAdvance();
       return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");

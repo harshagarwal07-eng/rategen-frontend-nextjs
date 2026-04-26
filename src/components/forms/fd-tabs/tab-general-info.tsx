@@ -70,7 +70,7 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
   packageId,
   initialData,
   onSaved,
-  onAdvance,
+  onAdvance: _onAdvance,
   onDirtyChange,
 }, ref) {
   const [isSaving, setIsSaving] = useState(false);
@@ -322,7 +322,6 @@ export const FDGeneralInfoTab = forwardRef<FDTabHandle, Props>(function FDGenera
       onSaved(mode === "create" ? currentId : undefined);
       form.reset(values, { keepValues: true });
       baselineRef.current = values;
-      if (mode === "create") onAdvance();
       return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");

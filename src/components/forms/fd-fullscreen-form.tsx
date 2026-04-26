@@ -232,7 +232,10 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
     if (!ref?.current) return;
     setIsSaving(true);
     try {
-      await ref.current.save();
+      const ok = await ref.current.save();
+      // Auto-advance after a successful save in both create and edit modes.
+      // handleAdvance is a no-op on the last tab.
+      if (ok) handleAdvance();
     } finally {
       setIsSaving(false);
     }
@@ -290,6 +293,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
     : fallbackTitle;
   const anyDirty = dirtyTabs.size > 0;
   const activeTabHasHandle = ["general", "itinerary", "inc-exc", "addons", "departures", "flights-visa", "policies", "docs-remarks"].includes(activeTab);
+  const isLastTab = tabIdx === TABS.length - 1;
 
   return (
     <>
@@ -568,7 +572,7 @@ export function FDFullscreenForm({ open, onOpenChange, packageId, onSaved }: FDF
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Saving...
                       </>
-                    ) : mode === "create" ? (
+                    ) : !isLastTab ? (
                       <>
                         Save &amp; Next
                         <ChevronRight className="ml-2 h-4 w-4" />

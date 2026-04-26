@@ -127,7 +127,7 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
   mode,
   packageId,
   onSaved,
-  onAdvance,
+  onAdvance: _onAdvance,
   onDirtyChange,
 }, ref) {
   const [isSaving, setIsSaving] = useState(false);
@@ -343,7 +343,6 @@ export const FDItineraryTab = forwardRef<FDTabHandle, Props>(function FDItinerar
       onSaved();
       form.reset(values, { keepValues: true });
       baselineRef.current = values;
-      if (mode === "create") onAdvance();
       return true;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Save failed");

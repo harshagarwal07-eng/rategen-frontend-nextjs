@@ -407,10 +407,10 @@ function emptyDraft(type: FDAddonType): DraftAddon {
 }
 
 export const FDAddonsTab = forwardRef<FDTabHandle, Props>(function FDAddonsTab({
-  mode,
+  mode: _mode,
   packageId,
   onSaved,
-  onAdvance,
+  onAdvance: _onAdvance,
   onDirtyChange,
 }, ref) {
   const queryClient = useQueryClient();
@@ -576,7 +576,6 @@ export const FDAddonsTab = forwardRef<FDTabHandle, Props>(function FDAddonsTab({
     const { success, failures } = await handleSaveAll();
     if (failures.length === 0) {
       if (drafts.length > 0) toast.success("All add-ons saved");
-      if (mode === "create") onAdvance();
       return true;
     }
     const failList = failures.map((f) => `${f.name} — ${f.error}`).join("; ");
