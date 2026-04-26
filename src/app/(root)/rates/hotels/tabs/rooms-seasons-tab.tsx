@@ -751,7 +751,10 @@ function ContractSelectorRow({
                 <span className="inline-flex items-center gap-2">
                   <span className="font-medium">{c.name}</span>
                   {c.is_default && (
-                    <Badge variant="secondary" className="text-[10px] py-0">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] py-0 border-primary/30 bg-primary/10 text-primary"
+                    >
                       Default
                     </Badge>
                   )}

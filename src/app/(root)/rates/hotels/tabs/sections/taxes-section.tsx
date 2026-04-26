@@ -322,7 +322,7 @@ export default function TaxesSection({
                       }
                       disabled={disabled}
                     >
-                      <SelectTrigger className="h-7 text-xs">
+                      <SelectTrigger className="h-8 py-1 pr-8 text-xs [&_[data-slot=select-value]]:truncate">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
