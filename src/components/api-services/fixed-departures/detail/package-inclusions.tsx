@@ -83,7 +83,7 @@ export function PackageInclusions({ pkg }: PackageInclusionsProps) {
     <section id="inclusions" className="space-y-4 scroll-mt-32">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold flex items-center gap-2">
-          <ListChecks className="size-4 text-success" />
+          <ListChecks className="size-4 text-primary" />
           Inclusions & Exclusions
         </h2>
         <button
@@ -105,7 +105,7 @@ export function PackageInclusions({ pkg }: PackageInclusionsProps) {
             <Card key={cat.key} className="border-border/60 shadow-sm overflow-hidden p-0">
               <Collapsible open={open} onOpenChange={() => toggle(cat.key)}>
                 <CollapsibleTrigger className="w-full px-4 py-3 flex items-center gap-3 hover:bg-muted/40 transition-colors text-left">
-                  <Icon className="size-4 text-success shrink-0" />
+                  <Icon className="size-4 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-semibold">{cat.label}</div>
                     <div className="text-xs text-muted-foreground">
@@ -126,13 +126,13 @@ export function PackageInclusions({ pkg }: PackageInclusionsProps) {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
                       {inc.length > 0 && (
                         <div className="space-y-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-wider text-success">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-primary">
                             Included
                           </div>
                           <ul className="space-y-1.5">
                             {inc.map((line, i) => (
                               <li key={`inc-${i}`} className="flex items-start gap-2 text-sm">
-                                <Check className="size-3.5 text-success shrink-0 mt-0.5" />
+                                <Check className="size-3.5 text-primary shrink-0 mt-0.5" />
                                 <span>{line}</span>
                               </li>
                             ))}

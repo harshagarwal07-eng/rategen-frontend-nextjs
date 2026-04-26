@@ -23,7 +23,7 @@ export function PackageAddons({ addons, currency }: PackageAddonsProps) {
   return (
     <section id="addons" className="space-y-4 scroll-mt-32">
       <h2 className="text-xl font-semibold flex items-center gap-2">
-        <Plus className="size-4 text-success" />
+        <Plus className="size-4 text-primary" />
         Add-ons
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

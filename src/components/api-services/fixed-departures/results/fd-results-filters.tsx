@@ -295,7 +295,7 @@ function FilterSection({
         {activeCount > 0 && (
           <Badge
             variant="secondary"
-            className="h-4 min-w-4 px-1.5 text-[10px] font-medium bg-success/15 text-success border-0"
+            className="h-4 min-w-4 px-1.5 text-[10px] font-medium bg-primary/15 text-primary border-0"
           >
             {activeCount}
           </Badge>

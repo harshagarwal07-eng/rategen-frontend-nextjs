@@ -35,7 +35,7 @@ export function PackageItinerary({ days }: PackageItineraryProps) {
   return (
     <section id="itinerary" className="space-y-4 scroll-mt-32">
       <h2 className="text-xl font-semibold flex items-center gap-2">
-        <MapPin className="size-4 text-success" />
+        <MapPin className="size-4 text-primary" />
         Itinerary
       </h2>
       <div className="space-y-2">

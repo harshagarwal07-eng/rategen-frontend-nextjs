@@ -70,7 +70,7 @@ export function PackageStickyBar({ pkg, selectedDeparture, bannerRef }: PackageS
             size="sm"
             disabled={!selectedDeparture}
             onClick={() => setModalOpen(true)}
-            className="bg-success text-success-foreground hover:bg-success/90 font-medium shrink-0"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium shrink-0"
           >
             <IoLogoWhatsapp className="size-3.5" />
             Book This Departure

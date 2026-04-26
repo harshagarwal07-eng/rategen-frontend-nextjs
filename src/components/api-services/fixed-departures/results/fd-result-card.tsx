@@ -72,13 +72,13 @@ export function FDResultCard({ pkg, detailHref }: FDResultCardProps) {
         )}
         <div className="absolute top-2 left-2 flex flex-wrap gap-1">
           {pkg.flights_included && (
-            <Badge className="bg-success text-success-foreground border-0 gap-1 text-[10px] px-1.5 py-0.5">
+            <Badge className="bg-primary text-primary-foreground border-0 gap-1 text-[10px] px-1.5 py-0.5">
               <Plane className="size-2.5" />
               Flights
             </Badge>
           )}
           {pkg.visa_included && (
-            <Badge className="bg-success text-success-foreground border-0 gap-1 text-[10px] px-1.5 py-0.5">
+            <Badge className="bg-primary text-primary-foreground border-0 gap-1 text-[10px] px-1.5 py-0.5">
               <StickyNote className="size-2.5" />
               Visa
             </Badge>

@@ -76,8 +76,8 @@ export function DeparturesSidebar({ pkg, departures, selectedId, onSelect }: Dep
   return (
     <>
       <Card className="border-border/60 shadow-sm overflow-hidden p-0">
-        <div className="px-4 py-3 bg-success/10 border-b border-success/20">
-          <h3 className="text-sm font-semibold flex items-center gap-2 text-success">
+        <div className="px-4 py-3 bg-primary/10 border-b border-primary/20">
+          <h3 className="text-sm font-semibold flex items-center gap-2 text-primary">
             <Calendar className="size-4" />
             Select your departure
           </h3>
@@ -90,21 +90,21 @@ export function DeparturesSidebar({ pkg, departures, selectedId, onSelect }: Dep
             return (
               <div
                 key={dep.id}
-                className={cn(isSelected && "border-l-2 border-success")}
+                className={cn(isSelected && "border-l-2 border-primary")}
               >
                 <button
                   type="button"
                   onClick={() => onSelect(dep.id)}
                   className={cn(
                     "w-full text-left px-4 py-3 hover:bg-muted/40 transition-colors flex items-start gap-3",
-                    isSelected && "bg-success/5",
+                    isSelected && "bg-primary/5",
                   )}
                 >
                   <div className="flex-1 min-w-0 space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm">{formatDate(dep.departure_date)}</span>
                       {dep.is_guaranteed && (
-                        <Badge className="bg-success text-success-foreground text-[10px] gap-1 border-0">
+                        <Badge className="bg-primary text-primary-foreground text-[10px] gap-1 border-0">
                           <Sparkles className="size-2.5" />
                           Guaranteed
                         </Badge>
@@ -171,7 +171,7 @@ export function DeparturesSidebar({ pkg, departures, selectedId, onSelect }: Dep
                     <div className="pt-2">
                       <Button
                         onClick={() => setModalOpen(true)}
-                        className="w-full bg-success text-success-foreground hover:bg-success/90 font-medium"
+                        className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-medium"
                       >
                         <IoLogoWhatsapp className="size-4" />
                         Book This Departure

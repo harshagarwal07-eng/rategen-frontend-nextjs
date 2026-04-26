@@ -69,7 +69,7 @@ export function PackagePolicies({ pkg, selectedDeparture }: PackagePoliciesProps
   return (
     <section id="policies" className="space-y-4 scroll-mt-32">
       <h2 className="text-xl font-semibold flex items-center gap-2">
-        <ScrollText className="size-4 text-success" />
+        <ScrollText className="size-4 text-primary" />
         Policies
       </h2>
 

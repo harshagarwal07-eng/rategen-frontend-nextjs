@@ -28,7 +28,7 @@ export function PackageFlights({ pkg }: PackageFlightsProps) {
   return (
     <section id="flights" className="space-y-4 scroll-mt-32">
       <h2 className="text-xl font-semibold flex items-center gap-2">
-        <Plane className="size-4 text-success" />
+        <Plane className="size-4 text-primary" />
         Flights
       </h2>
 

@@ -14,7 +14,7 @@ export function PackageOverview({ pkg }: PackageOverviewProps) {
   return (
     <section id="overview" className="space-y-4 scroll-mt-32">
       <h2 className="text-xl font-semibold flex items-center gap-2">
-        <Info className="size-4 text-success" />
+        <Info className="size-4 text-primary" />
         Overview
       </h2>
 
@@ -27,7 +27,7 @@ export function PackageOverview({ pkg }: PackageOverviewProps) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {pkg.departure_city && (
           <Card className="p-3 flex items-center gap-3 border-border/60 shadow-sm">
-            <MapPin className="size-5 text-success shrink-0" />
+            <MapPin className="size-5 text-primary shrink-0" />
             <div>
               <div className="text-xs text-muted-foreground">Departure city</div>
               <div className="text-sm font-medium">{pkg.departure_city}</div>
@@ -36,16 +36,16 @@ export function PackageOverview({ pkg }: PackageOverviewProps) {
         )}
         {pkg.max_group_size != null && (
           <Card className="p-3 flex items-center gap-3 border-border/60 shadow-sm">
-            <Users className="size-5 text-success shrink-0" />
+            <Users className="size-5 text-primary shrink-0" />
             <div>
               <div className="text-xs text-muted-foreground">Max group size</div>
-              <div className="text-sm font-medium text-success">{pkg.max_group_size} pax</div>
+              <div className="text-sm font-medium text-primary">{pkg.max_group_size} pax</div>
             </div>
           </Card>
         )}
         {pkg.age_restriction && (pkg.min_age != null || pkg.max_age != null) && (
           <Card className="p-3 flex items-center gap-3 border-border/60 shadow-sm">
-            <CalendarIcon className="size-5 text-success shrink-0" />
+            <CalendarIcon className="size-5 text-primary shrink-0" />
             <div>
               <div className="text-xs text-muted-foreground">Age policy</div>
               <div className="text-sm font-medium">

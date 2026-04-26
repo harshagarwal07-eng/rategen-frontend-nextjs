@@ -324,7 +324,7 @@ function BookDepartureModalBody({
           <Button
             onClick={handleSend}
             disabled={!isValid}
-            className={cn("bg-success text-success-foreground hover:bg-success/90 font-medium")}
+            className={cn("bg-primary text-primary-foreground hover:bg-primary/90 font-medium")}
           >
             <IoLogoWhatsapp className="size-4" />
             Send via WhatsApp

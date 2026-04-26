@@ -19,28 +19,35 @@ export function PackageAnchorMenu({ sections }: PackageAnchorMenuProps) {
 
   useEffect(() => {
     if (visible.length === 0) return;
-    const onScroll = () => {
-      const offset = 160; // sticky bar (56) + anchor menu (~52) + buffer
-      let current = visible[0]?.id ?? "";
-      for (const s of visible) {
-        const el = document.getElementById(s.id);
-        if (!el) continue;
-        const top = el.getBoundingClientRect().top;
-        if (top - offset <= 0) current = s.id;
-      }
-      setActive(current);
-    };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    // The page is wrapped in a Radix ScrollArea, so window.scroll never fires.
+    // IntersectionObserver works regardless of which container scrolls.
+    // rootMargin keeps a section "active" while its top is between the sticky
+    // headers (~110px) and the lower 50% of the viewport.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const intersecting = entries
+          .filter((e) => e.isIntersecting)
+          .sort(
+            (a, b) => a.target.getBoundingClientRect().top - b.target.getBoundingClientRect().top,
+          );
+        if (intersecting[0]) setActive(intersecting[0].target.id);
+      },
+      { rootMargin: "-110px 0px -50% 0px", threshold: 0 },
+    );
+    visible.forEach((s) => {
+      const el = document.getElementById(s.id);
+      if (el) observer.observe(el);
+    });
+    return () => observer.disconnect();
   }, [visible]);
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const yOffset = -130; // sticky bar + anchor menu + breathing room
-    const y = el.getBoundingClientRect().top + window.scrollY + yOffset;
-    window.scrollTo({ top: y, behavior: "smooth" });
+    // Use scrollIntoView so it scrolls the nearest scrollable ancestor
+    // (the Radix ScrollArea viewport here, not window). scroll-margin-top
+    // on each section handles the sticky-header offset.
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   if (visible.length === 0) return null;
@@ -58,7 +65,7 @@ export function PackageAnchorMenu({ sections }: PackageAnchorMenuProps) {
               className={cn(
                 "relative px-3 py-2 text-sm whitespace-nowrap transition-colors",
                 isActive
-                  ? "text-success font-medium"
+                  ? "text-primary font-medium"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -66,7 +73,7 @@ export function PackageAnchorMenu({ sections }: PackageAnchorMenuProps) {
               <span
                 className={cn(
                   "absolute left-3 right-3 -bottom-px h-0.5 rounded-full transition-all",
-                  isActive ? "bg-success" : "bg-transparent",
+                  isActive ? "bg-primary" : "bg-transparent",
                 )}
               />
             </button>

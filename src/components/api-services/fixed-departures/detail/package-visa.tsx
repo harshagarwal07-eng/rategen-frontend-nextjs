@@ -23,7 +23,7 @@ export function PackageVisa({ pkg }: PackageVisaProps) {
   return (
     <section id="visa" className="space-y-4 scroll-mt-32">
       <h2 className="text-xl font-semibold flex items-center gap-2">
-        <FileCheck className="size-4 text-success" />
+        <FileCheck className="size-4 text-primary" />
         Visa & Insurance
       </h2>
 
