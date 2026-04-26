@@ -56,6 +56,10 @@ import {
   vehicleRatesToRows,
   rowsToVehicleRates,
 } from "./sections/season-rates-editor";
+import {
+  detectRangeOverlaps,
+  detectInterSeasonOverlaps,
+} from "./sections/date-range-overlap";
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
@@ -74,10 +78,16 @@ function packageHasAgePolicy(
   return pkg.service_mode === "private" && modeOfTransport === "vehicle_p2p";
 }
 
+const DEFAULT_AGE_BANDS: AgePolicyBandRow[] = [
+  { band_name: "Infant", age_from: 0, age_to: 1 },
+  { band_name: "Child", age_from: 2, age_to: 11 },
+  { band_name: "Adult", age_from: 12, age_to: 99 },
+];
+
 function readBands(pkg: TransferPackageDetail): AgePolicyBandRow[] {
   const raw = (pkg as unknown as { transfer_package_age_policies?: AgePolicyBandRow[] })
     .transfer_package_age_policies;
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw) || raw.length === 0) return DEFAULT_AGE_BANDS;
   return raw
     .map((b) => ({
       id: b.id,
@@ -233,6 +243,47 @@ function PackageRatesCard({
   const currentSnapshot = snapshotPackage(bands, taxes, seasons);
   const isDirty = currentSnapshot !== snapshot;
 
+  // ── Overlap detection (intra + inter season) ──
+  const ageBandsForLabels = useMemo(
+    () => rowsToBands(bands),
+    [bands],
+  );
+  const seasonRangeErrors = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    // Intra-season
+    for (const s of seasons) {
+      const errs: string[] = new Array(s.date_ranges.length).fill("");
+      for (const c of detectRangeOverlaps(s.date_ranges)) {
+        errs[c.index] = c.message;
+      }
+      map[s._localId] = errs;
+    }
+    // Inter-season (overrides empty slot, additive otherwise)
+    const interConflicts = detectInterSeasonOverlaps(
+      seasons.map((s) => ({
+        seasonLocalId: s._localId,
+        seasonName: s.name,
+        ranges: s.date_ranges,
+      })),
+    );
+    for (const c of interConflicts) {
+      const arr = map[c.seasonLocalId];
+      if (!arr) continue;
+      arr[c.rangeIndex] = arr[c.rangeIndex]
+        ? `${arr[c.rangeIndex]}; ${c.message}`
+        : c.message;
+    }
+    return map;
+  }, [seasons]);
+
+  const hasOverlapErrors = useMemo(
+    () =>
+      Object.values(seasonRangeErrors).some((errs) =>
+        errs.some((e) => e.length > 0),
+      ),
+    [seasonRangeErrors],
+  );
+
   function toggleSeason(localId: string) {
     setOpenSeasonIds((prev) => {
       const next = new Set(prev);
@@ -370,6 +421,14 @@ function PackageRatesCard({
             <p className="text-xs text-muted-foreground">{stopLine}</p>
           )}
 
+          {/* Age Policy (top — drives Adult/Child/Infant labels in season cards) */}
+          {showAgePolicy && (
+            <AgePolicySection
+              rows={bands}
+              onChange={(rows) => onChange({ bands: rows })}
+            />
+          )}
+
           {/* Seasons */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -406,6 +465,8 @@ function PackageRatesCard({
                       s.id.startsWith("pending") ||
                       currentSnapshot !== snapshot
                     }
+                    ageBands={ageBandsForLabels}
+                    rangeErrors={seasonRangeErrors[s._localId]}
                     onToggle={() => toggleSeason(s._localId)}
                     onChange={(next) => updateSeason(s._localId, next)}
                     onDelete={() => handleDeleteSeason(s._localId)}
@@ -417,14 +478,6 @@ function PackageRatesCard({
             )}
           </div>
 
-          {/* Age Policy */}
-          {showAgePolicy && (
-            <AgePolicySection
-              rows={bands}
-              onChange={(rows) => onChange({ bands: rows })}
-            />
-          )}
-
           {/* Taxes */}
           <TaxesEditor
             rows={taxes}
@@ -432,11 +485,21 @@ function PackageRatesCard({
           />
 
           {/* Save */}
-          <div className="flex justify-end pt-2 border-t">
+          <div className="flex justify-end items-center gap-2 pt-2 border-t">
+            {hasOverlapErrors && (
+              <span className="text-xs text-destructive">
+                Resolve overlapping date ranges first.
+              </span>
+            )}
             <Button
               type="button"
               onClick={onSavePackage}
-              disabled={saving || !isDirty}
+              disabled={saving || !isDirty || hasOverlapErrors}
+              title={
+                hasOverlapErrors
+                  ? "Resolve overlapping date ranges first."
+                  : undefined
+              }
               className="min-w-40"
             >
               {saving ? (

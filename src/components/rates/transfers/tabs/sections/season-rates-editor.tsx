@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,7 +19,9 @@ import {
   VehicleRateRow,
   VehicleRateType,
   DiscountType,
+  AgePolicyBand,
 } from "@/types/transfers";
+import AddVehicleDialog, { type CreatedVehicle } from "./add-vehicle-dialog";
 
 // ─── Vehicle type fetch (cached at module level) ───────────────────────
 
@@ -36,6 +38,12 @@ type VehicleType = {
 
 let vehicleTypesCache: VehicleType[] | null = null;
 let vehicleTypesPromise: Promise<VehicleType[]> | null = null;
+const vehicleTypesSubscribers = new Set<(types: VehicleType[]) => void>();
+
+function publishVehicleTypes(next: VehicleType[]) {
+  vehicleTypesCache = next;
+  vehicleTypesSubscribers.forEach((fn) => fn(next));
+}
 
 async function loadVehicleTypes(): Promise<VehicleType[]> {
   if (vehicleTypesCache) return vehicleTypesCache;
@@ -46,17 +54,24 @@ async function loadVehicleTypes(): Promise<VehicleType[]> {
       throw new Error(String((res as { error: unknown }).error));
     }
     const data = (res as VehicleType[]) ?? [];
-    vehicleTypesCache = data;
     vehicleTypesPromise = null;
+    publishVehicleTypes(data);
     return data;
   });
   return vehicleTypesPromise;
 }
 
-function useVehicleTypes() {
+function useVehicleTypes(): {
+  types: VehicleType[];
+  upsert: (vehicle: VehicleType) => void;
+} {
   const [types, setTypes] = useState<VehicleType[]>(vehicleTypesCache ?? []);
   useEffect(() => {
     let cancelled = false;
+    const sub = (next: VehicleType[]) => {
+      if (!cancelled) setTypes(next);
+    };
+    vehicleTypesSubscribers.add(sub);
     loadVehicleTypes()
       .then((data) => {
         if (!cancelled) setTypes(data);
@@ -66,9 +81,18 @@ function useVehicleTypes() {
       });
     return () => {
       cancelled = true;
+      vehicleTypesSubscribers.delete(sub);
     };
   }, []);
-  return types;
+  const upsert = useCallback((vehicle: VehicleType) => {
+    const base = vehicleTypesCache ?? [];
+    const idx = base.findIndex((v) => v.id === vehicle.id);
+    const next = idx >= 0
+      ? base.map((v) => (v.id === vehicle.id ? vehicle : v))
+      : [...base, vehicle];
+    publishVehicleTypes(next);
+  }, []);
+  return { types, upsert };
 }
 
 // ─── SIC rates ─────────────────────────────────────────────────────────
@@ -200,12 +224,29 @@ export function cellsToPrivateRates(cells: PrivateCell[]): PrivatePerPaxRate[] {
     .map((c) => ({ pax_count: c.pax_count, rate: parseNum(c.rate) }));
 }
 
+function findBand(
+  bands: AgePolicyBand[] | undefined,
+  name: string,
+): AgePolicyBand | undefined {
+  if (!bands) return undefined;
+  const target = name.toLowerCase();
+  return bands.find((b) => b.band_name.trim().toLowerCase() === target);
+}
+
+function formatBandLabel(name: string, band: AgePolicyBand | undefined): string {
+  if (!band) return name;
+  return `${name} (${band.age_from}–${band.age_to})`;
+}
+
 interface PrivateRatesSectionProps {
   cells: PrivateCell[];
   onChange: (cells: PrivateCell[]) => void;
+  ageBands?: AgePolicyBand[];
 }
 
-export function PrivateRatesSection({ cells, onChange }: PrivateRatesSectionProps) {
+export function PrivateRatesSection({ cells, onChange, ageBands }: PrivateRatesSectionProps) {
+  const adultBand = findBand(ageBands, "Adult");
+  const adultLabel = formatBandLabel("Adult", adultBand);
   function nextPax(): number | null {
     const used = new Set(cells.map((c) => c.pax_count));
     for (let n = 1; n <= MAX_PAX_CELLS; n++) {
@@ -234,7 +275,7 @@ export function PrivateRatesSection({ cells, onChange }: PrivateRatesSectionProp
   return (
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-        Per-Pax Rates
+        Per-Pax Rates · {adultLabel}
       </p>
       <div className="flex flex-wrap gap-3">
         {sorted.map((c) => (
@@ -355,7 +396,14 @@ export function VehicleRatesSection({
   onRowsChange,
   onRateTypeChange,
 }: VehicleRatesSectionProps) {
-  const vehicleTypes = useVehicleTypes();
+  const { types: vehicleTypes, upsert: upsertVehicleType } = useVehicleTypes();
+  const [addDialogFor, setAddDialogFor] = useState<string | null>(null);
+
+  function handleVehicleCreated(rowKey: string, created: CreatedVehicle) {
+    upsertVehicleType(created);
+    pickVehicle(rowKey, created.id, created);
+    setAddDialogFor(null);
+  }
 
   function addRow() {
     onRowsChange([
@@ -382,8 +430,8 @@ export function VehicleRatesSection({
     onRowsChange(rows.filter((r) => r._key !== key));
   }
 
-  function pickVehicle(key: string, vehicleTypeId: string) {
-    const vt = vehicleTypes.find((v) => v.id === vehicleTypeId);
+  function pickVehicle(key: string, vehicleTypeId: string, override?: VehicleType) {
+    const vt = override ?? vehicleTypes.find((v) => v.id === vehicleTypeId);
     if (!vt) return;
     onRowsChange(
       rows.map((r) =>
@@ -460,7 +508,13 @@ export function VehicleRatesSection({
                   </label>
                   <Select
                     value={row.vehicle_type_id || ""}
-                    onValueChange={(v) => pickVehicle(row._key, v)}
+                    onValueChange={(v) => {
+                      if (v === "__add__") {
+                        setAddDialogFor(row._key);
+                        return;
+                      }
+                      pickVehicle(row._key, v);
+                    }}
                   >
                     <SelectTrigger className="h-7 text-xs">
                       <SelectValue placeholder="Select vehicle…">
@@ -477,6 +531,14 @@ export function VehicleRatesSection({
                           {vt.brand ? `${vt.brand} — ${vt.label}` : vt.label}
                         </SelectItem>
                       ))}
+                      <div className="sticky bottom-0 -mx-1 mt-1 border-t bg-popover">
+                        <SelectItem
+                          value="__add__"
+                          className="text-xs font-medium text-primary focus:text-primary"
+                        >
+                          + Add Vehicle
+                        </SelectItem>
+                      </div>
                     </SelectContent>
                   </Select>
                 </div>
@@ -634,6 +696,13 @@ export function VehicleRatesSection({
       >
         <Plus className="h-3 w-3" /> Add Vehicle
       </Button>
+      <AddVehicleDialog
+        isOpen={addDialogFor !== null}
+        onClose={() => setAddDialogFor(null)}
+        onCreated={(v) => {
+          if (addDialogFor) handleVehicleCreated(addDialogFor, v);
+        }}
+      />
     </div>
   );
 }
@@ -652,7 +721,7 @@ function DiscountRow({ label, type, value, onTypeChange, onValueChange }: Discou
   const effectiveType: DiscountType = type ?? "percent";
   return (
     <div className="flex items-center gap-3">
-      <span className="text-xs text-muted-foreground w-14">{label}</span>
+      <span className="text-xs text-muted-foreground min-w-[5rem]">{label}</span>
       <div className="inline-flex rounded-md border bg-muted/40 p-0.5 h-7">
         {(["percent", "fixed"] as const).map((t) => {
           const active = effectiveType === t;
@@ -694,6 +763,7 @@ interface ChildInfantDiscountProps {
   childValue: string;
   infantType: DiscountType | null;
   infantValue: string;
+  ageBands?: AgePolicyBand[];
   onChange: (v: {
     childType: DiscountType | null;
     childValue: string;
@@ -707,8 +777,11 @@ export function ChildInfantDiscountSection({
   childValue,
   infantType,
   infantValue,
+  ageBands,
   onChange,
 }: ChildInfantDiscountProps) {
+  const childLabel = formatBandLabel("Child", findBand(ageBands, "Child"));
+  const infantLabel = formatBandLabel("Infant", findBand(ageBands, "Infant"));
   return (
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
@@ -719,7 +792,7 @@ export function ChildInfantDiscountSection({
       </p>
       <div className="space-y-2">
         <DiscountRow
-          label="Child"
+          label={childLabel}
           type={childType}
           value={childValue}
           onTypeChange={(t) =>
@@ -730,7 +803,7 @@ export function ChildInfantDiscountSection({
           }
         />
         <DiscountRow
-          label="Infant"
+          label={infantLabel}
           type={infantType}
           value={infantValue}
           onTypeChange={(t) =>

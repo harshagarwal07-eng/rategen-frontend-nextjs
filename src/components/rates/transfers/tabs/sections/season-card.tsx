@@ -20,7 +20,7 @@ import {
   type DateRangePreset,
 } from "@/components/ui/date-range-picker";
 import { DatePicker } from "@/components/ui/date-picker";
-import { TransferModeOfTransport } from "@/types/transfers";
+import { TransferModeOfTransport, AgePolicyBand } from "@/types/transfers";
 import {
   SicRatesSection,
   PrivateRatesSection,
@@ -189,6 +189,8 @@ interface SeasonCardProps {
   modeOfTransport: TransferModeOfTransport | string | null;
   isOpen: boolean;
   isDirty: boolean;
+  ageBands?: AgePolicyBand[];
+  rangeErrors?: string[];
   onToggle: () => void;
   onChange: (next: SeasonEditState) => void;
   onDelete: () => void;
@@ -202,6 +204,8 @@ export default function SeasonCard({
   modeOfTransport,
   isOpen,
   isDirty,
+  ageBands,
+  rangeErrors,
   onToggle,
   onChange,
   onDelete,
@@ -344,6 +348,32 @@ export default function SeasonCard({
               presets={SEASON_PRESETS}
               placeholder="Pick dates or apply a preset…"
             />
+            {season.date_ranges.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {season.date_ranges.map((r, idx) => {
+                  const err = rangeErrors?.[idx];
+                  const hasErr = !!err;
+                  return (
+                    <div
+                      key={`${idx}-${r.valid_from}-${r.valid_till}`}
+                      className={cn(
+                        "rounded-md border px-2 py-1 text-xs flex items-center justify-between gap-2",
+                        hasErr
+                          ? "border-destructive/60 bg-destructive/5 text-destructive"
+                          : "border-transparent text-muted-foreground",
+                      )}
+                    >
+                      <span>
+                        {fmtDate(r.valid_from)} – {fmtDate(r.valid_till)}
+                      </span>
+                      {hasErr && (
+                        <span className="text-[10px] font-medium">{err}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* ── Blackout Dates ── */}
@@ -425,6 +455,7 @@ export default function SeasonCard({
           {showPrivate && (
             <PrivateRatesSection
               cells={season.private_cells}
+              ageBands={ageBands}
               onChange={(c) => patch({ private_cells: c })}
             />
           )}
@@ -436,6 +467,7 @@ export default function SeasonCard({
               childValue={season.child_discount_value}
               infantType={season.infant_discount_type}
               infantValue={season.infant_discount_value}
+              ageBands={ageBands}
               onChange={(v) =>
                 patch({
                   child_discount_type: v.childType,
