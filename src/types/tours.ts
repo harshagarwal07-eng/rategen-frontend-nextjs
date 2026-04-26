@@ -264,7 +264,7 @@ export interface TourDetail extends TourListRow {
 // ─────────────────────────────────────────────────────────────────────────
 
 export interface TourOperationalHour {
-  day_of_week: string; // "Monday", "Tuesday", etc.
+  day_of_week: number; // 1 = Monday, 7 = Sunday (ISO)
   start_time: string | null;
   end_time: string | null;
   is_active: boolean;

@@ -42,6 +42,16 @@ export function bandsToRows(bands: TourAgePolicyBand[]): AgeBandRow[] {
   }));
 }
 
+// Defaults seeded into a NEW package's age policy. User can edit these or
+// add Teen/Senior/custom bands via "Add Band" before first save.
+export function defaultAgeBandRows(): AgeBandRow[] {
+  return [
+    { _key: "default-adult", band_name: "Adult", age_from: 12, age_to: 99, _useCustomName: false },
+    { _key: "default-child", band_name: "Child", age_from: 2, age_to: 11, _useCustomName: false },
+    { _key: "default-infant", band_name: "Infant", age_from: 0, age_to: 1, _useCustomName: false },
+  ];
+}
+
 export function rowsToBands(rows: AgeBandRow[]): TourAgePolicyBand[] {
   return rows.map((r, i) => ({
     band_name: r.band_name.trim(),

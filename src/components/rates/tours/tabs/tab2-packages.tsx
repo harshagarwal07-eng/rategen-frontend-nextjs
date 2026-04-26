@@ -52,6 +52,7 @@ type DoneValues = z.infer<typeof DoneSchema>;
 
 export default function Tab2Packages({
   initialData,
+  countryId,
   onNext,
   setIsLoading,
   formRef,
@@ -335,6 +336,7 @@ export default function Tab2Packages({
                 key={pkg._localId}
                 ref={cardRef}
                 tourId={tourId}
+                countryId={countryId}
                 pkg={pkg}
                 isOpen={openCards.includes(pkg._localId)}
                 onToggle={() => toggleCard(pkg._localId)}

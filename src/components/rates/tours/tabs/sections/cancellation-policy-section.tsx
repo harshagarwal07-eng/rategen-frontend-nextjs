@@ -1,12 +1,10 @@
 "use client";
 
 // Cancellation policy editor for tour packages.
-// Forked from transfers' cancellation-policy-section because that file
-// imports `upsertCancellationPolicy` and `replaceCancellationRules` from
-// the transfers data-access module. Tours have parallel endpoints.
-// Structure and field set are identical to transfers.
+// Pure controlled component — state lives in PackageCard so the policy
+// is persisted as part of the package save (Save & Continue), not via
+// its own button. Initial values are seeded from `pkg.tour_cancellation_policies`.
 
-import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -18,17 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import {
-  upsertCancellationPolicy,
-  replaceCancellationRules,
-} from "@/data-access/tours-api";
-import {
-  TourCancellationPolicy,
-  TourCancellationRule,
-} from "@/types/tours";
 
-interface RuleRow {
+export interface CancellationRuleRow {
   _key: string;
   days_from: number;
   days_to: number;
@@ -39,48 +28,21 @@ interface RuleRow {
 }
 
 interface CancellationPolicySectionProps {
-  packageId?: string;
-  initialPolicy?:
-    | (TourCancellationPolicy & {
-        tour_cancellation_rules?: TourCancellationRule[];
-      })
-    | null;
+  isNonRefundable: boolean;
+  rules: CancellationRuleRow[];
+  onIsNonRefundableChange: (value: boolean) => void;
+  onRulesChange: (rules: CancellationRuleRow[]) => void;
 }
 
 export default function CancellationPolicySection({
-  packageId,
-  initialPolicy,
+  isNonRefundable,
+  rules,
+  onIsNonRefundableChange,
+  onRulesChange,
 }: CancellationPolicySectionProps) {
-  const [isNonRefundable, setIsNonRefundable] = useState(
-    initialPolicy?.is_non_refundable ?? false,
-  );
-  const [rules, setRules] = useState<RuleRow[]>([]);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (
-      initialPolicy?.tour_cancellation_rules &&
-      initialPolicy.tour_cancellation_rules.length > 0
-    ) {
-      setRules(
-        initialPolicy.tour_cancellation_rules.map((r, i) => ({
-          _key: `rule-${i}`,
-          days_from: r.days_from || 0,
-          days_to: r.days_to || 0,
-          anchor: r.anchor || "before_service",
-          charge_type: r.charge_type || "percentage",
-          charge_value: r.charge_value || 0,
-          is_no_show: r.is_no_show || false,
-        })),
-      );
-    } else {
-      setRules([]);
-    }
-  }, [initialPolicy]);
-
   const handleAddRule = () => {
-    setRules((prev) => [
-      ...prev,
+    onRulesChange([
+      ...rules,
       {
         _key: `rule-${Date.now()}`,
         days_from: 0,
@@ -94,16 +56,16 @@ export default function CancellationPolicySection({
   };
 
   const handleRemoveRule = (key: string) => {
-    setRules((prev) => prev.filter((r) => r._key !== key));
+    onRulesChange(rules.filter((r) => r._key !== key));
   };
 
   const handleRuleChange = (
     key: string,
-    field: keyof RuleRow,
+    field: keyof CancellationRuleRow,
     value: string | number | boolean,
   ) => {
-    setRules((prev) =>
-      prev.map((r) =>
+    onRulesChange(
+      rules.map((r) =>
         r._key === key
           ? {
               ...r,
@@ -119,60 +81,23 @@ export default function CancellationPolicySection({
     );
   };
 
-  const handleSave = async () => {
-    if (!packageId || packageId.startsWith("pending")) {
-      toast.info("Save the package first");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const policyRes = await upsertCancellationPolicy(packageId, {
-        is_non_refundable: isNonRefundable,
-      });
-      if (policyRes.error) throw new Error(policyRes.error);
-
-      const rulesPayload: TourCancellationRule[] = isNonRefundable
-        ? []
-        : rules.map((r) => ({
-            days_from: r.days_from,
-            days_to: r.days_to,
-            anchor: r.anchor,
-            charge_type: r.charge_type,
-            charge_value: r.charge_value,
-            is_no_show: r.is_no_show,
-          }));
-
-      const rulesRes = await replaceCancellationRules(packageId, rulesPayload);
-      if (rulesRes.error) throw new Error(rulesRes.error);
-
-      toast.success("Cancellation policy saved");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Failed to save policy",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="rounded-md border bg-muted/20 p-3 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Cancellation Policy
         </h3>
-        <Button type="button" size="sm" onClick={handleSave} disabled={saving}>
-          Save Policy
-        </Button>
+        <span className="text-[10px] text-muted-foreground italic">
+          Saved with package
+        </span>
       </div>
 
       <div className="flex items-center gap-3">
         <Switch
           checked={isNonRefundable}
           onCheckedChange={(checked) => {
-            setIsNonRefundable(checked);
-            if (checked) setRules([]);
+            onIsNonRefundableChange(checked);
+            if (checked) onRulesChange([]);
           }}
         />
         <span className="text-sm">Non-Refundable (100% charge applies)</span>
@@ -312,4 +237,47 @@ export default function CancellationPolicySection({
       )}
     </div>
   );
+}
+
+export function rulesToPayload(
+  rows: CancellationRuleRow[],
+  isNonRefundable: boolean,
+): Omit<CancellationRuleRow, "_key">[] {
+  if (isNonRefundable) return [];
+  return rows.map((r) => ({
+    days_from: r.days_from,
+    days_to: r.days_to,
+    anchor: r.anchor,
+    charge_type: r.charge_type,
+    charge_value: r.charge_value,
+    is_no_show: r.is_no_show,
+  }));
+}
+
+export function buildInitialCancellationState(
+  initial?: {
+    is_non_refundable?: boolean;
+    tour_cancellation_rules?: {
+      days_from?: number;
+      days_to?: number;
+      anchor?: string;
+      charge_type?: string;
+      charge_value?: number;
+      is_no_show?: boolean;
+    }[];
+  } | null,
+): { isNonRefundable: boolean; rules: CancellationRuleRow[] } {
+  const isNonRefundable = !!initial?.is_non_refundable;
+  const rules: CancellationRuleRow[] = (initial?.tour_cancellation_rules ?? []).map(
+    (r, i) => ({
+      _key: `rule-${i}`,
+      days_from: r.days_from ?? 0,
+      days_to: r.days_to ?? 0,
+      anchor: r.anchor ?? "before_service",
+      charge_type: r.charge_type ?? "percentage",
+      charge_value: r.charge_value ?? 0,
+      is_no_show: r.is_no_show ?? false,
+    }),
+  );
+  return { isNonRefundable, rules };
 }

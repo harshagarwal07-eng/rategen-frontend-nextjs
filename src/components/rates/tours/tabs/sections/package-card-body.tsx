@@ -61,7 +61,9 @@ import AgePolicySection, {
   AgeBandRow,
   bandsToRows,
 } from "./age-policy-section";
-import CancellationPolicySection from "./cancellation-policy-section";
+import CancellationPolicySection, {
+  CancellationRuleRow,
+} from "./cancellation-policy-section";
 
 import { PackageFormValues } from "./package-card";
 
@@ -118,6 +120,8 @@ export interface PackageBodyHandle {
 interface PackageCardBodyProps {
   pkg: TourPackageDetail;
   isPending: boolean;
+  /** Tour-level country (uuid). Scopes the master-catalog picker. */
+  countryId: string | null;
   form: UseFormReturn<PackageFormValues>;
   category: TourPackageCategory;
   salesMode: TourPackageSalesMode;
@@ -136,6 +140,10 @@ interface PackageCardBodyProps {
   setOpHourMode: (next: HoursMode) => void;
   ageBandRows: AgeBandRow[];
   setAgeBandRows: (next: AgeBandRow[]) => void;
+  cancellationRules: CancellationRuleRow[];
+  setCancellationRules: (next: CancellationRuleRow[]) => void;
+  cancellationNonRefundable: boolean;
+  setCancellationNonRefundable: (value: boolean) => void;
   /** Notify parent that a non-RHF section was edited. */
   onSectionDirty: () => void;
 }
@@ -143,6 +151,7 @@ interface PackageCardBodyProps {
 export default function PackageCardBody({
   pkg,
   isPending,
+  countryId,
   form,
   category,
   salesMode,
@@ -160,6 +169,10 @@ export default function PackageCardBody({
   setOpHourMode,
   ageBandRows,
   setAgeBandRows,
+  cancellationRules,
+  setCancellationRules,
+  cancellationNonRefundable,
+  setCancellationNonRefundable,
   onSectionDirty,
 }: PackageCardBodyProps) {
   const transferState = useMemo(
@@ -293,7 +306,7 @@ export default function PackageCardBody({
             control={form.control}
             name="transfer_coverage"
             render={({ field }) => (
-              <FormItem>
+              <FormItem className="relative">
                 <FormLabel>Transfer Coverage</FormLabel>
                 <Select
                   value={field.value}
@@ -316,7 +329,7 @@ export default function PackageCardBody({
                   </SelectContent>
                 </Select>
                 {transferState.locked && (
-                  <p className="text-[10px] text-muted-foreground mt-1">
+                  <p className="absolute left-0 top-full mt-0.5 text-[10px] text-muted-foreground whitespace-nowrap pointer-events-none">
                     Auto-locked to &quot;No Transport&quot; for ticket sales mode.
                   </p>
                 )}
@@ -329,6 +342,8 @@ export default function PackageCardBody({
         {/* Section D — Master catalog / Combo / Day-trip multi-pick */}
         {(category === "attraction" || category === "activity") && (
           <MasterCatalogPicker
+            kind={category === "attraction" ? "venue" : "activity"}
+            countryId={countryId}
             selected={linkedMasters}
             maxSelections={1}
             onChange={(next) => {
@@ -340,6 +355,7 @@ export default function PackageCardBody({
         )}
         {category === "day_trip" && (
           <MasterCatalogPicker
+            countryId={countryId}
             selected={linkedMasters}
             maxSelections={10}
             onChange={(next) => {
@@ -736,10 +752,18 @@ export default function PackageCardBody({
           }}
         />
 
-        {/* Section N — Cancellation Policy (self-saving) */}
+        {/* Section N — Cancellation Policy (saved with package) */}
         <CancellationPolicySection
-          packageId={pkg.id}
-          initialPolicy={pkg.tour_cancellation_policies?.[0] ?? null}
+          isNonRefundable={cancellationNonRefundable}
+          rules={cancellationRules}
+          onIsNonRefundableChange={(v) => {
+            setCancellationNonRefundable(v);
+            onSectionDirty();
+          }}
+          onRulesChange={(next) => {
+            setCancellationRules(next);
+            onSectionDirty();
+          }}
         />
       </Form>
     </div>

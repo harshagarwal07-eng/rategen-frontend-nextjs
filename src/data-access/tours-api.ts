@@ -156,9 +156,11 @@ export async function deleteTourImage(
 export async function searchMasterCatalog(
   q: string,
   kind?: "venue" | "activity",
+  countryId?: string | null,
 ): Promise<Result<TourMasterCatalogItem[]>> {
   const params = new URLSearchParams({ q });
   if (kind) params.set("kind", kind);
+  if (countryId) params.set("country_id", countryId);
   const raw = await http.get<TourMasterCatalogItem[]>(
     `/api/tours/master-catalog/search?${params.toString()}`,
   );
@@ -169,11 +171,13 @@ export async function listMasterCatalog(opts: {
   geo_id?: string;
   kind?: "venue" | "activity";
   parent_id?: string;
+  country_id?: string | null;
 }): Promise<Result<TourMasterCatalogItem[]>> {
   const params = new URLSearchParams();
   if (opts.geo_id) params.set("geo_id", opts.geo_id);
   if (opts.kind) params.set("kind", opts.kind);
   if (opts.parent_id) params.set("parent_id", opts.parent_id);
+  if (opts.country_id) params.set("country_id", opts.country_id);
   const qs = params.toString();
   const raw = await http.get<TourMasterCatalogItem[]>(
     `/api/tours/master-catalog${qs ? `?${qs}` : ""}`,

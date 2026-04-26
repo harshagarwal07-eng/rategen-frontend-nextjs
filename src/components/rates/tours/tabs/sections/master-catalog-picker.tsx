@@ -26,6 +26,8 @@ interface MasterCatalogPickerProps {
   maxSelections?: number;
   /** Pre-loaded full catalog (optional). When omitted we lazy load on focus. */
   initialCatalog?: TourMasterCatalogItem[];
+  /** Filter results to a specific country (uuid). Optional. */
+  countryId?: string | null;
   onChange: (next: TourMasterCatalogItem[]) => void;
 }
 
@@ -34,6 +36,7 @@ export default function MasterCatalogPicker({
   selected,
   maxSelections = 1,
   initialCatalog,
+  countryId,
   onChange,
 }: MasterCatalogPickerProps) {
   const [search, setSearch] = useState("");
@@ -54,14 +57,14 @@ export default function MasterCatalogPicker({
     if (initialCatalog && initialCatalog.length > 0) return;
     if (search.trim().length > 0) return;
     let cancelled = false;
-    listMasterCatalog({ kind }).then((res) => {
+    listMasterCatalog({ kind, country_id: countryId ?? undefined }).then((res) => {
       if (cancelled || res.error) return;
       setResults(res.data ?? []);
     });
     return () => {
       cancelled = true;
     };
-  }, [isOpen, initialCatalog, kind, search]);
+  }, [isOpen, initialCatalog, kind, search, countryId]);
 
   // Close on outside click.
   useEffect(() => {
@@ -83,12 +86,12 @@ export default function MasterCatalogPicker({
     const q = search.trim();
     if (q.length === 0) return;
     const t = setTimeout(async () => {
-      const res = await searchMasterCatalog(q, kind);
+      const res = await searchMasterCatalog(q, kind, countryId);
       if (res.error) return;
       setResults(res.data ?? []);
     }, 200);
     return () => clearTimeout(t);
-  }, [search, kind, isOpen]);
+  }, [search, kind, isOpen, countryId]);
 
   const atMax = maxSelections > 0 && selected.length >= maxSelections;
 
@@ -150,7 +153,13 @@ export default function MasterCatalogPicker({
       <div className="relative">
         <Input
           className="h-8 text-xs"
-          placeholder="Search venues & activities…"
+          placeholder={
+            kind === "venue"
+              ? "Search attractions…"
+              : kind === "activity"
+                ? "Search activities…"
+                : "Search venues & activities…"
+          }
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onFocus={() => setIsOpen(true)}

@@ -43,6 +43,8 @@ import {
   replaceItineraryDays,
   replacePackageComponents,
   replacePackageAgePolicies,
+  upsertCancellationPolicy,
+  replaceCancellationRules,
   getPackageComponents,
   getPackageLinkedPackages,
   getPackageComboLocations,
@@ -60,7 +62,13 @@ import {
   rowsToTourOpHours,
   HoursMode,
 } from "./operational-hours-section";
-import { rowsToBands } from "./age-policy-section";
+import { rowsToBands, defaultAgeBandRows } from "./age-policy-section";
+import {
+  CancellationRuleRow,
+  buildInitialCancellationState,
+  rulesToPayload,
+} from "./cancellation-policy-section";
+import type { TourCancellationRule } from "@/types/tours";
 
 // ─── Schema ────────────────────────────────────────────────────────────
 
@@ -125,6 +133,7 @@ function formatDuration(d: number, h: number, m: number): string {
 
 interface PackageCardProps {
   tourId: string;
+  countryId: string | null;
   pkg: PackageStateEntry;
   isOpen: boolean;
   onToggle: () => void;
@@ -135,10 +144,19 @@ interface PackageCardProps {
 
 const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
   function PackageCard(
-    { tourId, pkg, isOpen, onToggle, onDeleted, onDuplicate, onDirtyChange },
+    { tourId, countryId, pkg, isOpen, onToggle, onDeleted, onDuplicate, onDirtyChange },
     ref,
   ) {
     const isPending = pkg.id.startsWith("pending");
+
+    // After a partial-failure save (package row created but child upserts
+    // failed), we must use updateTourPackage on retry — otherwise the
+    // unique-name constraint trips. This ref persists the real id once
+    // createTourPackage succeeds, regardless of whether subsequent steps
+    // succeed in the same orchestration call.
+    const persistedIdRef = useRef<string | null>(
+      isPending ? null : pkg.id,
+    );
 
     const [saving, setSaving] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -159,9 +177,17 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
       initialOpHours.rows,
     );
     const [opHourMode, setOpHourMode] = useState<HoursMode>(initialOpHours.mode);
-    const [ageBandRows, setAgeBandRows] = useState<AgeBandRow[]>(
-      bandsToRows(pkg.tour_package_age_policies ?? []),
+    const [ageBandRows, setAgeBandRows] = useState<AgeBandRow[]>(() => {
+      const seeded = bandsToRows(pkg.tour_package_age_policies ?? []);
+      return isPending && seeded.length === 0 ? defaultAgeBandRows() : seeded;
+    });
+    const [cancellation, setCancellationState] = useState(() =>
+      buildInitialCancellationState(pkg.tour_cancellation_policies?.[0] ?? null),
     );
+    const setCancellationRules = (rules: CancellationRuleRow[]) =>
+      setCancellationState((prev) => ({ ...prev, rules }));
+    const setCancellationNonRefundable = (isNonRefundable: boolean) =>
+      setCancellationState((prev) => ({ ...prev, isNonRefundable }));
     const [itineraryRows, setItineraryRows] = useState<ItineraryRow[]>(
       buildItineraryRows(
         pkg.duration_days || 0,
@@ -293,16 +319,21 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
             rate_mode: (v.rate_mode as TourPackageRateMode) ?? null,
           };
 
-          // 1. Create or update the package row.
+          // 1. Create or update the package row. `persistedIdRef` lets a
+          //    retry after a partial-failure save reuse the row created
+          //    on the previous attempt instead of re-creating (which
+          //    would trip the unique tour+name constraint).
           let saved: TourPackageDetail;
-          if (isPending) {
+          const existingId = persistedIdRef.current;
+          if (existingId === null) {
             const res = await createTourPackage(tourId, payload);
             if (res.error || !res.data) {
               throw new Error(res.error ?? "Failed to create package");
             }
             saved = res.data;
+            persistedIdRef.current = saved.id;
           } else {
-            const res = await updateTourPackage(pkg.id, payload);
+            const res = await updateTourPackage(existingId, payload);
             if (res.error || !res.data) {
               throw new Error(res.error ?? "Failed to update package");
             }
@@ -386,6 +417,23 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
             if (apRes.error)
               throw new Error(`Age policy: ${apRes.error}`);
           }
+
+          // 8. Cancellation policy + rules (always upsert so the policy
+          //    row exists; rules-replace requires it).
+          const cpRes = await upsertCancellationPolicy(saved.id, {
+            is_non_refundable: cancellation.isNonRefundable,
+          });
+          if (cpRes.error)
+            throw new Error(`Cancellation policy: ${cpRes.error}`);
+          const crRes = await replaceCancellationRules(
+            saved.id,
+            rulesToPayload(
+              cancellation.rules,
+              cancellation.isNonRefundable,
+            ) as TourCancellationRule[],
+          );
+          if (crRes.error)
+            throw new Error(`Cancellation rules: ${crRes.error}`);
 
           const updated: PackageStateEntry = {
             ...saved,
@@ -521,6 +569,7 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
             <PackageCardBody
               pkg={pkg}
               isPending={isPending}
+              countryId={countryId}
               form={form}
               category={category}
               salesMode={salesMode}
@@ -557,6 +606,16 @@ const PackageCard = forwardRef<PackageCardHandle, PackageCardProps>(
               ageBandRows={ageBandRows}
               setAgeBandRows={(next) => {
                 setAgeBandRows(next);
+                markSectionsDirty();
+              }}
+              cancellationRules={cancellation.rules}
+              setCancellationRules={(next) => {
+                setCancellationRules(next);
+                markSectionsDirty();
+              }}
+              cancellationNonRefundable={cancellation.isNonRefundable}
+              setCancellationNonRefundable={(v) => {
+                setCancellationNonRefundable(v);
                 markSectionsDirty();
               }}
               onSectionDirty={markSectionsDirty}
