@@ -1,18 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Plus,
   Search,
   Star,
   MoreHorizontal,
-  ChevronRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableHeader,
@@ -27,11 +27,22 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { DataTableSkeleton } from "@/components/ui/table/data-table-skeleton";
 import {
   listTours,
   listTourCountries,
   listTourCurrencies,
+  deleteTour,
 } from "@/data-access/tours-api";
 import {
   TourListRow,
@@ -39,11 +50,21 @@ import {
   TourCurrencyOption,
 } from "@/types/tours";
 import TourCreateWizard from "@/components/forms/tour-create-wizard";
+import {
+  orchestrateSaves,
+  formatSaveErrors,
+} from "@/lib/orchestrate-saves";
 
 export default function ToursClient() {
+  const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<TourListRow | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<TourListRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: tours = [], isLoading } = useQuery({
     queryKey: ["tours"],
@@ -101,32 +122,139 @@ export default function ToursClient() {
     return tours.filter((t) => t.name.toLowerCase().includes(q));
   }, [tours, search]);
 
-  if (isLoading) return <DataTableSkeleton columnCount={6} rowCount={10} />;
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
+  const someFilteredSelected =
+    filtered.some((r) => selectedIds.has(r.id)) && !allFilteredSelected;
+  const selectedTours = tours.filter((t) => selectedIds.has(t.id));
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) filtered.forEach((r) => next.add(r.id));
+      else filtered.forEach((r) => next.delete(r.id));
+      return next;
+    });
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await deleteTour(deleteTarget.id);
+      if (res.error) throw new Error(res.error);
+      toast.success("Tour deleted");
+      qc.invalidateQueries({ queryKey: ["tours"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setBulkDeleting(true);
+    const { succeeded, failed } = await orchestrateSaves(
+      selectedTours,
+      async (t) => {
+        const res = await deleteTour(t.id);
+        if (res.error) throw new Error(res.error);
+      },
+    );
+
+    const total = selectedTours.length;
+    if (failed.length === 0) {
+      toast.success(`Deleted ${succeeded.length} tour${succeeded.length === 1 ? "" : "s"}`);
+      setSelectedIds(new Set());
+    } else if (succeeded.length === 0) {
+      toast.error(
+        `Bulk delete failed: ${formatSaveErrors(failed, (t) => t.name || "Untitled")}`,
+      );
+      // Keep selection as-is so user can retry.
+    } else {
+      // Mixed: keep failed rows selected; clear succeeded.
+      const failedIds = new Set(failed.map((f) => f.item.id));
+      setSelectedIds(failedIds);
+      toast.warning(
+        `Deleted ${succeeded.length} of ${total}. ${failed.length} failed: ${formatSaveErrors(failed, (t) => t.name || "Untitled")}`,
+      );
+    }
+    if (succeeded.length > 0) {
+      qc.invalidateQueries({ queryKey: ["tours"] });
+    }
+    setBulkDeleting(false);
+    setShowBulkDeleteDialog(false);
+  };
+
+  if (isLoading) return <DataTableSkeleton columnCount={7} rowCount={10} />;
 
   return (
     <div className="flex flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative w-64">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search tours..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-9"
-          />
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add New
-          </Button>
-        </div>
+        {selectedIds.size > 0 ? (
+          <>
+            <span className="text-sm text-muted-foreground">
+              {selectedIds.size} tour{selectedIds.size !== 1 ? "s" : ""} selected
+            </span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowBulkDeleteDialog(true)}
+              disabled={bulkDeleting}
+            >
+              Delete {selectedIds.size}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedIds(new Set())}
+              disabled={bulkDeleting}
+            >
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <>
+            <div className="relative w-64">
+              <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search tours..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 h-9"
+              />
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Add New
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
+              <TableHead className="w-[50px]">
+                <Checkbox
+                  checked={allFilteredSelected || (someFilteredSelected ? "indeterminate" : false)}
+                  onCheckedChange={(v) => toggleSelectAll(!!v)}
+                  aria-label="Select all"
+                />
+              </TableHead>
               <TableHead className="w-[280px]">Tour Name</TableHead>
               <TableHead>Country</TableHead>
               <TableHead>Currency</TableHead>
@@ -138,7 +266,7 @@ export default function ToursClient() {
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                   {search
                     ? "No tours match your search."
                     : 'No tours yet. Click "Add New" to get started.'}
@@ -151,6 +279,13 @@ export default function ToursClient() {
                   className="cursor-pointer hover:bg-muted/40"
                   onClick={() => setEditingRow(t)}
                 >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selectedIds.has(t.id)}
+                      onCheckedChange={() => toggleSelect(t.id)}
+                      aria-label="Select row"
+                    />
+                  </TableCell>
                   <TableCell className="font-medium">{t.name}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {t.country_id ? countryName.get(t.country_id) ?? "—" : "—"}
@@ -192,8 +327,13 @@ export default function ToursClient() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => setEditingRow(t)}>
-                          <ChevronRight className="mr-2 h-4 w-4" />
-                          Open
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => setDeleteTarget(t)}
+                          className="text-destructive"
+                        >
+                          Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -226,6 +366,67 @@ export default function ToursClient() {
           currencies={currencies}
         />
       )}
+
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => { if (!o && !deleting) setDeleteTarget(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete tour?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${deleteTarget?.name ?? ""}"? This cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDelete(); }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showBulkDeleteDialog}
+        onOpenChange={(o) => { if (!bulkDeleting) setShowBulkDeleteDialog(o); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedTours.length} tour{selectedTours.length === 1 ? "" : "s"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-60 overflow-y-auto">
+            <ul className="space-y-1">
+              {selectedTours.map((t) => (
+                <li key={t.id} className="text-sm text-muted-foreground">
+                  • {t.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleBulkDelete(); }}
+              disabled={bulkDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleting
+                ? "Deleting..."
+                : `Delete ${selectedTours.length} tour${selectedTours.length === 1 ? "" : "s"}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

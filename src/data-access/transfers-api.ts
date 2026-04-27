@@ -93,6 +93,13 @@ export async function updateTransfer(
   }
 }
 
+export async function deleteTransfer(
+  id: string,
+): Promise<Result<{ deleted: boolean }>> {
+  const raw = await http.delete<{ deleted: boolean }>(`/api/transfers/${id}`);
+  return unwrap<{ deleted: boolean }>(raw);
+}
+
 export async function listTransferPackages(
   transferId: string,
 ): Promise<Result<TransferPackageDetail[]>> {
