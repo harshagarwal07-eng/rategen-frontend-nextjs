@@ -16,6 +16,7 @@ import type { ContractSeasonRow } from "@/types/contract-tab2";
 import type { MealPlan } from "@/types/contract-rates";
 import { RateFormFields } from "./rate-form-fields";
 import {
+  bySortOrder,
   emptyRate,
   fmtRange,
   isRated,
@@ -51,6 +52,11 @@ export function RatesFormView({
     [mealPlans]
   );
 
+  // Defensive ordering — bySortOrder is also applied at the parent's load
+  // step, but we re-sort here so this view doesn't rely on caller order.
+  const orderedRooms = useMemo(() => bySortOrder(rooms), [rooms]);
+  const orderedSeasons = useMemo(() => bySortOrder(seasons), [seasons]);
+
   // Locate (or seed) the LocalRate for a given (room, season). Seeding
   // doesn't push to state — it returns a transient empty rate that the
   // user has to actually edit before it gets persisted on Save All.
@@ -76,11 +82,11 @@ export function RatesFormView({
     });
   }
 
-  if (rooms.length === 0 || seasons.length === 0) {
+  if (orderedRooms.length === 0 || orderedSeasons.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
         <p className="text-sm">
-          {rooms.length === 0
+          {orderedRooms.length === 0
             ? "No rooms on this contract — add them on the Rooms & Seasons tab first."
             : "No seasons on this contract — add them on the Rooms & Seasons tab first."}
         </p>
@@ -90,11 +96,11 @@ export function RatesFormView({
 
   return (
     <div className="space-y-3">
-      {rooms.map((room) => (
+      {orderedRooms.map((room) => (
         <RoomCard
           key={room.id ?? room.name}
           room={room}
-          seasons={seasons}
+          seasons={orderedSeasons}
           rates={rates}
           mealPlans={mealPlans}
           agePolicies={agePolicies}

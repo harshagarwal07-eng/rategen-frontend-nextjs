@@ -81,6 +81,19 @@ interface Props {
 
 const EMPTY_AGE_STATE: AgePoliciesLocalState = [];
 
+// Stable ASC sort by sort_order. Rows without an explicit sort_order land
+// at the end. Backend mig 100/101 stamps sort_order on every row; this
+// keeps Tab 2 from depending on API ordering for display.
+function sortBySortOrder<T extends { sort_order?: number | null }>(
+  rows: T[]
+): T[] {
+  return [...rows].sort((a, b) => {
+    const ao = a.sort_order ?? Number.POSITIVE_INFINITY;
+    const bo = b.sort_order ?? Number.POSITIVE_INFINITY;
+    return ao - bo;
+  });
+}
+
 const RoomsSeasonsTab = forwardRef<RoomsSeasonsTabHandle, Props>(function RoomsSeasonsTab(
   { hotelId, onDirtyChange, onSavingChange },
   ref
@@ -258,7 +271,10 @@ function ContractEditor({
     setSeasonsLoaded(false);
     listContractSeasons(selectedContractId).then((res) => {
       if (cancelled) return;
-      const initial = wrapSeasons(res.data ?? []);
+      // Sort by sort_order ASC before wrapping so the local state mirrors
+      // the user-defined drag order from a previous save (backend mig
+      // 100/101 — server orders by sort_order but we don't trust API order).
+      const initial = wrapSeasons(sortBySortOrder(res.data ?? []));
       setSeasonsState(initial);
       setSeasonsSnapshot(initial);
       setSeasonsLoaded(true);
@@ -309,7 +325,7 @@ function ContractEditor({
     setRoomsLoaded(false);
     listContractRooms(selectedContractId).then((res) => {
       if (cancelled) return;
-      const initial = wrapRooms(res.data ?? []);
+      const initial = wrapRooms(sortBySortOrder(res.data ?? []));
       setRoomsState(initial);
       setRoomsSnapshot(initial);
       setRoomsLoaded(true);

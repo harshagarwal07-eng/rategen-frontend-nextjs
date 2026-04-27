@@ -297,6 +297,22 @@ export function isRated(r: LocalRate, basis: "net" | "bar"): boolean {
   );
 }
 
+// ─── sort_order helper ───────────────────────────────────────────────────
+
+// Stable ASC sort by `sort_order`, treating null/undefined as +Infinity so
+// rows without an explicit order land at the end. Returns a new array;
+// never mutates the input. Used everywhere rooms or seasons are iterated
+// for display so we never depend on backend ordering.
+export function bySortOrder<T extends { sort_order?: number | null }>(
+  rows: T[]
+): T[] {
+  return [...rows].sort((a, b) => {
+    const ao = a.sort_order ?? Number.POSITIVE_INFINITY;
+    const bo = b.sort_order ?? Number.POSITIVE_INFINITY;
+    return ao - bo;
+  });
+}
+
 // ─── Date helpers ────────────────────────────────────────────────────────
 
 export function fmtDay(d: string): string {

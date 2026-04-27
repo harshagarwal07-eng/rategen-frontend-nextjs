@@ -38,6 +38,10 @@ export interface ContractRoom {
   children_count_towards_occupancy?: boolean;
   teens_count_towards_occupancy?: boolean;
   status?: "active" | "inactive";
+  // Backend mig 100/101: server orders GET response by sort_order ASC and
+  // accepts it in PUT. Optional in the type because clients building rooms
+  // for an unsaved-yet contract don't have one.
+  sort_order?: number | null;
 }
 
 export interface SeasonDateRange {
@@ -57,6 +61,8 @@ export interface ContractSeasonRow {
   name: string;
   contract_id: string;
   created_at: string;
+  // Backend mig 100/101: server orders GET response by sort_order ASC.
+  sort_order?: number | null;
   season_date_ranges?: Array<{ id: string; date_from: string; date_to: string }> | null;
 }
 

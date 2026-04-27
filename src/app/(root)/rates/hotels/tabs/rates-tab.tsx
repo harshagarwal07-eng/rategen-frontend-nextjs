@@ -48,6 +48,7 @@ import { RatesCalendarView } from "./sections/rates-calendar-view";
 import { RatesFormView } from "./sections/rates-form-view";
 import { RatesMatrixView } from "./sections/rates-matrix-view";
 import {
+  bySortOrder,
   newAgePricingLocalId,
   newRateLocalId,
   snapshotRates,
@@ -238,8 +239,11 @@ function RatesEditor({
           ]);
         if (signal?.cancelled) return;
 
-        const loadedRooms = roomsRes.data ?? [];
-        const loadedSeasons = seasonsRes.data ?? [];
+        // Sort by explicit sort_order ASC (backend mig 100/101). Don't trust
+        // API order — sort_order is the user-defined display order set on
+        // Tab 2 via drag-reorder.
+        const loadedRooms = bySortOrder(roomsRes.data ?? []);
+        const loadedSeasons = bySortOrder(seasonsRes.data ?? []);
         const loadedAge = agePolsRes.data?.rooms ?? [];
         const loadedTaxes = taxesRes.data ?? [];
         const loadedMeal = mealRes.data ?? [];

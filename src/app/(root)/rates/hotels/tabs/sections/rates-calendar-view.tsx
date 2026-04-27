@@ -8,7 +8,7 @@ import type { AgePolicyBand, ContractRoom, ContractTax } from "@/types/contract-
 import type { ContractSeasonRow } from "@/types/contract-tab2";
 import type { MealPlan } from "@/types/contract-rates";
 import { RateDrawer } from "./rate-drawer";
-import { rateCellValue, type LocalRate } from "./rates-shared";
+import { bySortOrder, rateCellValue, type LocalRate } from "./rates-shared";
 
 const SEASON_COLORS = [
   "#4f46e5",
@@ -92,13 +92,11 @@ export function RatesCalendarView({
 
   const todayStr = useMemo(() => fmtIso(new Date()), []);
 
-  const sortedSeasons = useMemo(() => {
-    return [...seasons].sort((a, b) => {
-      const af = a.season_date_ranges?.[0]?.date_from ?? "";
-      const bf = b.season_date_ranges?.[0]?.date_from ?? "";
-      return af.localeCompare(bf);
-    });
-  }, [seasons]);
+  // Sort by user-defined sort_order ASC. The 10-color palette below is
+  // therefore keyed on the user's chosen season order, not chronological
+  // first-date order.
+  const sortedSeasons = useMemo(() => bySortOrder(seasons), [seasons]);
+  const sortedRooms = useMemo(() => bySortOrder(rooms), [rooms]);
 
   const seasonColor = useMemo(() => {
     const map = new Map<string, string>();
@@ -153,11 +151,11 @@ export function RatesCalendarView({
       ? rateMap.get(`${drawerRoom.id}-${drawerSeason.id}`) ?? null
       : null;
 
-  if (rooms.length === 0 || seasons.length === 0) {
+  if (sortedRooms.length === 0 || sortedSeasons.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
         <p className="text-sm">
-          {rooms.length === 0
+          {sortedRooms.length === 0
             ? "No rooms on this contract — add them on the Rooms & Seasons tab first."
             : "No seasons on this contract — add them on the Rooms & Seasons tab first."}
         </p>
@@ -250,7 +248,7 @@ export function RatesCalendarView({
             </tr>
           </thead>
           <tbody>
-            {rooms.map((room) => (
+            {sortedRooms.map((room) => (
               <tr key={room.id ?? room.name}>
                 <td
                   className="sticky left-0 z-10 bg-background border-r-2 border-b px-2 py-1.5 text-sm font-medium truncate"

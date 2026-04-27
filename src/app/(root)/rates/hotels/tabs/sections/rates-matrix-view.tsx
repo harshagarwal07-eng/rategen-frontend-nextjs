@@ -14,6 +14,7 @@ import type { MealPlan } from "@/types/contract-rates";
 import { RateDrawer } from "./rate-drawer";
 import {
   ageBandLabel,
+  bySortOrder,
   fmtDay,
   formatDaysLabel,
   formatTaxesSummary,
@@ -51,13 +52,11 @@ export function RatesMatrixView({
   const [drawerSeason, setDrawerSeason] = useState<ContractSeasonRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const sortedSeasons = useMemo(() => {
-    return [...seasons].sort((a, b) => {
-      const af = a.season_date_ranges?.[0]?.date_from ?? "";
-      const bf = b.season_date_ranges?.[0]?.date_from ?? "";
-      return af.localeCompare(bf);
-    });
-  }, [seasons]);
+  // Sort columns by user-defined sort_order ASC. (Earlier draft sorted by
+  // earliest date_from; switched to sort_order so Tab 2's drag order is
+  // authoritative — backend mig 100/101.)
+  const sortedSeasons = useMemo(() => bySortOrder(seasons), [seasons]);
+  const sortedRooms = useMemo(() => bySortOrder(rooms), [rooms]);
 
   const rateMap = useMemo(() => {
     const map = new Map<string, LocalRate>();
@@ -66,17 +65,17 @@ export function RatesMatrixView({
   }, [rates]);
 
   // Completion stats — only counts cells where a rate exists AND has a value.
-  const totalCells = rooms.length * sortedSeasons.length;
+  const totalCells = sortedRooms.length * sortedSeasons.length;
   const filledCells = useMemo(() => {
     let n = 0;
-    for (const room of rooms) {
+    for (const room of sortedRooms) {
       for (const s of sortedSeasons) {
         const r = rateMap.get(`${room.id}-${s.id}`);
         if (r && isRated(r, contractRateBasis)) n++;
       }
     }
     return n;
-  }, [rooms, sortedSeasons, rateMap, contractRateBasis]);
+  }, [sortedRooms, sortedSeasons, rateMap, contractRateBasis]);
   const compPct = totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0;
   const compClass =
     compPct === 100
@@ -90,11 +89,11 @@ export function RatesMatrixView({
       ? rateMap.get(`${drawerRoom.id}-${drawerSeason.id}`) ?? null
       : null;
 
-  if (rooms.length === 0 || sortedSeasons.length === 0) {
+  if (sortedRooms.length === 0 || sortedSeasons.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
         <p className="text-sm">
-          {rooms.length === 0
+          {sortedRooms.length === 0
             ? "No rooms on this contract — add them on the Rooms & Seasons tab first."
             : "No seasons on this contract — add them on the Rooms & Seasons tab first."}
         </p>
@@ -148,7 +147,7 @@ export function RatesMatrixView({
             </tr>
           </thead>
           <tbody>
-            {rooms.map((room) => {
+            {sortedRooms.map((room) => {
               const roomRated = sortedSeasons.filter((s) => {
                 const r = rateMap.get(`${room.id}-${s.id}`);
                 return r && isRated(r, contractRateBasis);
@@ -249,7 +248,7 @@ export function RatesMatrixView({
                 Completion
               </td>
               {sortedSeasons.map((season) => {
-                const seasonRated = rooms.filter((room) => {
+                const seasonRated = sortedRooms.filter((room) => {
                   const r = rateMap.get(`${room.id}-${season.id}`);
                   return r && isRated(r, contractRateBasis);
                 }).length;
@@ -262,14 +261,14 @@ export function RatesMatrixView({
                       variant="secondary"
                       className={cn(
                         "text-xs",
-                        seasonRated === rooms.length
+                        seasonRated === sortedRooms.length
                           ? "bg-green-100 text-green-700"
                           : seasonRated === 0
                             ? "bg-red-100 text-red-700"
                             : "bg-amber-100 text-amber-700"
                       )}
                     >
-                      {seasonRated}/{rooms.length}
+                      {seasonRated}/{sortedRooms.length}
                     </Badge>
                   </td>
                 );
