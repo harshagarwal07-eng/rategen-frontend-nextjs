@@ -28,6 +28,10 @@ import {
   listTransferPackages,
 } from "@/data-access/transfers-api";
 import {
+  orchestrateSaves,
+  formatSaveErrors,
+} from "@/lib/orchestrate-saves";
+import {
   TransferAddonDetail,
   TransferDetail,
   TransferPackageDetail,
@@ -243,36 +247,47 @@ export default function Tab4Addons({
     if (!transferId || saving) return;
     setSaving(true);
     setIsLoading?.(true);
-    const snapshot = [...addons];
-    let saved = 0;
-    let attempted = 0;
 
-    for (const addon of snapshot) {
-      const cardRef = cardRefs.current.get(addon._localId);
-      const handle = cardRef?.current;
-      if (!handle) continue;
-      // Skip non-dirty cards.
-      if (!handle.isDirty()) continue;
-      attempted++;
-      const result = await handle.save();
-      if (result.success) {
-        saved++;
-        handleSaved(addon._localId, result.updatedAddon);
-      } else {
-        // Stop on first failure, surface error, leave remaining state dirty.
-        toast.error(`Add-on "${result.name}": ${result.error}`);
-        setSaving(false);
-        setIsLoading?.(false);
-        return;
-      }
-    }
+    // Only attempt dirty cards. Non-dirty addons are skipped entirely so
+    // they don't inflate the saved-count toast.
+    const dirtyAddons = addons.filter((a) =>
+      cardRefs.current.get(a._localId)?.current?.isDirty(),
+    );
 
-    if (attempted === 0) {
+    if (dirtyAddons.length === 0) {
       toast.info("No changes to save.");
-    } else {
-      toast.success(`Saved ${saved} add-on${saved !== 1 ? "s" : ""}.`);
-      onSaved?.();
+      setSaving(false);
+      setIsLoading?.(false);
+      return;
     }
+
+    const { succeeded, failed } = await orchestrateSaves(
+      dirtyAddons,
+      async (addon) => {
+        const handle = cardRefs.current.get(addon._localId)?.current;
+        if (!handle) throw new Error("Card not mounted");
+        const result = await handle.save();
+        if (!result.success) throw new Error(result.error);
+        handleSaved(addon._localId, result.updatedAddon);
+      },
+    );
+
+    const total = dirtyAddons.length;
+    if (failed.length === 0) {
+      toast.success(
+        `Saved ${succeeded.length} add-on${succeeded.length !== 1 ? "s" : ""}.`,
+      );
+      onSaved?.();
+    } else if (succeeded.length === 0) {
+      toast.error(
+        `Save failed: ${formatSaveErrors(failed, (a) => a.name || "Untitled add-on")}`,
+      );
+    } else {
+      toast.warning(
+        `Saved ${succeeded.length} of ${total}. ${formatSaveErrors(failed, (a) => a.name || "Untitled add-on")}`,
+      );
+    }
+
     setSaving(false);
     setIsLoading?.(false);
   };

@@ -18,6 +18,10 @@ import {
   replaceCancellationRules,
 } from "@/data-access/transfers-api";
 import { CancellationPolicy, CancellationRule } from "@/types/transfers";
+import {
+  orchestrateSaves,
+  formatSaveErrors,
+} from "@/lib/orchestrate-saves";
 
 interface RuleRow {
   _key: string;
@@ -112,39 +116,56 @@ export default function CancellationPolicySection({
     }
 
     setSaving(true);
-    try {
-      // Save policy header (is_non_refundable)
-      const policyRes = await upsertCancellationPolicy(packageId, {
-        is_non_refundable: isNonRefundable,
-      });
-      if (policyRes.error) throw new Error(policyRes.error);
 
-      // Save rules (empty if non-refundable)
-      const rulesPayload = isNonRefundable
-        ? []
-        : rules.map((r) => ({
-            days_from: r.days_from,
-            days_to: r.days_to,
-            anchor: r.anchor,
-            charge_type: r.charge_type,
-            charge_value: r.charge_value,
-            is_no_show: r.is_no_show,
-          }));
+    type Step = {
+      label: string;
+      run: () => Promise<{ error: string | null }>;
+    };
+    const rulesPayload = isNonRefundable
+      ? []
+      : rules.map((r) => ({
+          days_from: r.days_from,
+          days_to: r.days_to,
+          anchor: r.anchor,
+          charge_type: r.charge_type,
+          charge_value: r.charge_value,
+          is_no_show: r.is_no_show,
+        }));
+    const steps: Step[] = [
+      {
+        label: "Policy header",
+        run: () =>
+          upsertCancellationPolicy(packageId, {
+            is_non_refundable: isNonRefundable,
+          }),
+      },
+      {
+        label: "Rules",
+        run: () => replaceCancellationRules(packageId, rulesPayload),
+      },
+    ];
 
-      const rulesRes = await replaceCancellationRules(
-        packageId,
-        rulesPayload
-      );
-      if (rulesRes.error) throw new Error(rulesRes.error);
+    const { succeeded, failed } = await orchestrateSaves(
+      steps,
+      async (step) => {
+        const r = await step.run();
+        if (r.error) throw new Error(r.error);
+      },
+    );
 
+    if (failed.length === 0) {
       toast.success("Cancellation policy saved");
-    } catch (error) {
+    } else if (succeeded.length === 0) {
       toast.error(
-        error instanceof Error ? error.message : "Failed to save policy"
+        `Save failed: ${formatSaveErrors(failed, (s) => s.label)}`,
       );
-    } finally {
-      setSaving(false);
+    } else {
+      toast.warning(
+        `Saved ${succeeded.length} of ${steps.length}. ${formatSaveErrors(failed, (s) => s.label)}`,
+      );
     }
+
+    setSaving(false);
   };
 
   return (

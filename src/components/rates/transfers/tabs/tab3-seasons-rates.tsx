@@ -60,6 +60,7 @@ import {
   detectRangeOverlaps,
   detectInterSeasonOverlaps,
 } from "./sections/date-range-overlap";
+import { orchestrateSaves } from "@/lib/orchestrate-saves";
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
@@ -778,71 +779,103 @@ export default function Tab3SeasonsRates({
     if (!entry) return;
 
     setSavingPkgId(pkgId);
-    try {
-      // 1. Age policy (only for PVT P2P packages).
-      if (packageHasAgePolicy(entry.pkg, modeOfTransport)) {
+
+    // Aggregate every error encountered across this package save so a
+    // single mid-flow failure doesn't block subsequent independent steps.
+    const allErrors: Array<{ label: string; error: unknown }> = [];
+
+    // Map of localId → updated season; used to splice POST-promoted IDs
+    // back into state even when later sub-steps fail.
+    const seasonUpdates: Map<string, SeasonEditState> = new Map();
+
+    // 1. Age policy (only for PVT P2P packages) — independent of taxes
+    //    and seasons, so a failure here doesn't block them.
+    if (packageHasAgePolicy(entry.pkg, modeOfTransport)) {
+      try {
         const bands = rowsToBands(entry.bands);
         const res = await replacePackageAgePolicies(entry.pkg.id, bands);
-        if (res.error) throw new Error(`Age policy: ${res.error}`);
+        if (res.error) throw new Error(res.error);
+      } catch (err) {
+        allErrors.push({ label: "Age policy", error: err });
       }
+    }
 
-      // 2. Taxes.
+    // 2. Taxes — independent.
+    try {
       const taxes = rowsToTaxes(entry.taxes);
       const taxesRes = await replacePackageTaxes(entry.pkg.id, taxes);
-      if (taxesRes.error) throw new Error(`Taxes: ${taxesRes.error}`);
+      if (taxesRes.error) throw new Error(taxesRes.error);
+    } catch (err) {
+      allErrors.push({ label: "Taxes", error: err });
+    }
 
-      // 3. Seasons (POST first if pending, then PATCH basics + PUT children).
-      const updatedSeasons: SeasonEditState[] = [];
-      for (const s of entry.seasons) {
+    // 3. Seasons — each season is its own orchestration unit. Within a
+    //    season, POST is a hard prereq (later PUTs need a real id); after
+    //    POST succeeds, basics/dates/blackouts/rates are independent and
+    //    use try-all so a single failure doesn't block the rest.
+    let sortOrderCounter = 0;
+    const seasonResult = await orchestrateSaves(
+      entry.seasons,
+      async (s) => {
         let realId = s.id;
         if (s.id.startsWith("pending")) {
           const created = await createSeason(entry.pkg.id, {
             name: s.name.trim() || "All Season",
             status: "active",
-            sort_order: updatedSeasons.length,
+            sort_order: sortOrderCounter,
           });
           if (created.error || !created.data) {
-            throw new Error(`Season create: ${created.error ?? "unknown"}`);
+            throw new Error(`create: ${created.error ?? "unknown"}`);
           }
           realId = created.data.id;
         }
+        sortOrderCounter++;
 
-        // PATCH basics for both new and existing seasons (for new, update name +
-        // discount fields; for existing, sync any edited fields).
+        // Record the promoted id even before sub-steps run, so a later
+        // sub-step failure doesn't lose the POST result.
+        seasonUpdates.set(s._localId, {
+          ...s,
+          id: realId,
+          _localId: realId,
+        });
+
+        // Build the list of independent sub-steps that should each be
+        // attempted even if a sibling fails.
+        type SubStep = {
+          label: string;
+          run: () => Promise<{ error: string | null }>;
+        };
         const childVal =
-          s.child_discount_value === ""
-            ? null
-            : Number(s.child_discount_value);
+          s.child_discount_value === "" ? null : Number(s.child_discount_value);
         const infantVal =
           s.infant_discount_value === ""
             ? null
             : Number(s.infant_discount_value);
-        const patchRes = await patchSeason(realId, {
-          name: s.name.trim() || null,
-          exception_rules: s.exception_rules.trim() || null,
-          vehicle_rate_type: s.vehicle_rate_type,
-          child_discount_type: s.child_discount_type,
-          child_discount_value: childVal,
-          infant_discount_type: s.infant_discount_type,
-          infant_discount_value: infantVal,
-        });
-        if (patchRes.error) {
-          throw new Error(`Season "${s.name}": ${patchRes.error}`);
-        }
+        const subSteps: SubStep[] = [
+          {
+            label: "basics",
+            run: () =>
+              patchSeason(realId, {
+                name: s.name.trim() || null,
+                exception_rules: s.exception_rules.trim() || null,
+                vehicle_rate_type: s.vehicle_rate_type,
+                child_discount_type: s.child_discount_type,
+                child_discount_value: childVal,
+                infant_discount_type: s.infant_discount_type,
+                infant_discount_value: infantVal,
+              }),
+          },
+          {
+            label: "dates",
+            run: () => replaceSeasonDateRanges(realId, s.date_ranges),
+          },
+          {
+            label: "blackouts",
+            run: () =>
+              replaceSeasonBlackoutDates(realId, s.blackout_dates),
+          },
+        ];
 
-        // Date ranges.
-        const drRes = await replaceSeasonDateRanges(realId, s.date_ranges);
-        if (drRes.error) {
-          throw new Error(`Season "${s.name}" dates: ${drRes.error}`);
-        }
-
-        // Blackout dates.
-        const bdRes = await replaceSeasonBlackoutDates(realId, s.blackout_dates);
-        if (bdRes.error) {
-          throw new Error(`Season "${s.name}" blackouts: ${bdRes.error}`);
-        }
-
-        // Rates per service mode.
         const isSic = entry.pkg.service_mode === "sic";
         const isP2pPvt =
           entry.pkg.service_mode === "private" &&
@@ -852,45 +885,112 @@ export default function Tab3SeasonsRates({
           modeOfTransport === "vehicle_disposal";
 
         if (isSic) {
-          const sr = await replaceSeasonSicRates(realId, rowToSicRates(s.sic_row));
-          if (sr.error) throw new Error(`Season "${s.name}" SIC: ${sr.error}`);
+          subSteps.push({
+            label: "SIC rates",
+            run: () =>
+              replaceSeasonSicRates(realId, rowToSicRates(s.sic_row)),
+          });
         }
         if (isP2pPvt || isDisposalPvt) {
-          const vr = await replaceSeasonVehicleRates(
-            realId,
-            rowsToVehicleRates(s.vehicle_rows),
-          );
-          if (vr.error)
-            throw new Error(`Season "${s.name}" vehicle: ${vr.error}`);
+          subSteps.push({
+            label: "vehicle rates",
+            run: () =>
+              replaceSeasonVehicleRates(
+                realId,
+                rowsToVehicleRates(s.vehicle_rows),
+              ),
+          });
         }
         if (isP2pPvt) {
-          const pr = await replaceSeasonPrivateRates(
-            realId,
-            cellsToPrivateRates(s.private_cells),
-          );
-          if (pr.error)
-            throw new Error(`Season "${s.name}" private: ${pr.error}`);
+          subSteps.push({
+            label: "private rates",
+            run: () =>
+              replaceSeasonPrivateRates(
+                realId,
+                cellsToPrivateRates(s.private_cells),
+              ),
+          });
         }
 
-        updatedSeasons.push({ ...s, id: realId, _localId: realId });
-      }
+        const subResult = await orchestrateSaves(subSteps, async (step) => {
+          const r = await step.run();
+          if (r.error) throw new Error(r.error);
+        });
 
-      // Update local snapshot.
-      const fresh: PackageStateEntry = {
-        ...entry,
-        seasons: updatedSeasons,
-        snapshot: snapshotPackage(entry.bands, entry.taxes, updatedSeasons),
-      };
-      setEntries((prev) =>
-        prev.map((e) => (e.pkg.id === pkgId ? fresh : e)),
-      );
-      toast.success(`Package "${entry.pkg.name}" saved.`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Save failed.";
-      toast.error(msg);
-    } finally {
-      setSavingPkgId(null);
+        if (subResult.failed.length > 0) {
+          const detail = subResult.failed
+            .map(
+              (f) =>
+                `${f.item.label}: ${
+                  f.error instanceof Error ? f.error.message : String(f.error)
+                }`,
+            )
+            .join("; ");
+          throw new Error(detail);
+        }
+      },
+    );
+
+    for (const f of seasonResult.failed) {
+      allErrors.push({
+        label: `Season "${f.item.name || "Untitled"}"`,
+        error: f.error,
+      });
     }
+
+    // Splice POST-promoted ids back into state for any season that at
+    // least reached POST (success OR sub-step failure). Snapshot is only
+    // refreshed when the entire package save was clean — otherwise the
+    // package stays dirty so the user can retry.
+    const updatedSeasons = entry.seasons.map(
+      (s) => seasonUpdates.get(s._localId) ?? s,
+    );
+
+    setEntries((prev) =>
+      prev.map((e) =>
+        e.pkg.id === pkgId
+          ? {
+              ...e,
+              seasons: updatedSeasons,
+              snapshot:
+                allErrors.length === 0
+                  ? snapshotPackage(e.bands, e.taxes, updatedSeasons)
+                  : e.snapshot,
+            }
+          : e,
+      ),
+    );
+
+    if (allErrors.length === 0) {
+      toast.success(`Package "${entry.pkg.name}" saved.`);
+    } else {
+      const summary = allErrors
+        .map(
+          ({ label, error }) =>
+            `${label} — ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+        )
+        .join(", ");
+      // If the seasons block was attempted and at least one season fully
+      // succeeded, treat as partial; otherwise full failure.
+      const totalUnits =
+        (packageHasAgePolicy(entry.pkg, modeOfTransport) ? 1 : 0) +
+        1 +
+        entry.seasons.length;
+      const succeededUnits = totalUnits - allErrors.length;
+      if (succeededUnits > 0) {
+        toast.warning(
+          `Package "${entry.pkg.name}" saved with errors: ${summary}`,
+        );
+      } else {
+        toast.error(
+          `Package "${entry.pkg.name}" failed: ${summary}`,
+        );
+      }
+    }
+
+    setSavingPkgId(null);
   }
 
   // ── Render ──
