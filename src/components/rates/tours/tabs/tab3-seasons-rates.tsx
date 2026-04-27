@@ -152,13 +152,6 @@ function snapshotPackage(
       vehicle_rows: s.vehicle_rows.map((v) => ({
         vehicle_type_id: v.vehicle_type_id,
         rate: v.rate,
-        max_pax: v.max_pax,
-        max_pax_with_luggage: v.max_pax_with_luggage,
-        max_luggage: v.max_luggage,
-        max_kms_day: v.max_kms_day,
-        max_hrs_day: v.max_hrs_day,
-        supplement_hr: v.supplement_hr,
-        supplement_km: v.supplement_km,
       })),
       private_rate_mode: s.private_rate_mode,
       private_cells: s.private_cells.map((c) => ({

@@ -30,19 +30,16 @@ import {
   TourPrivateRateMode,
   TourVehicleRate,
 } from "@/types/tours";
+import AddVehicleDialog, {
+  type CreatedVehicle,
+} from "@/components/rates/transfers/tabs/sections/add-vehicle-dialog";
+import EditVehiclesDialog, {
+  type VehicleType as MasterVehicleType,
+} from "@/components/rates/transfers/tabs/sections/edit-vehicles-dialog";
 
 // ─── Vehicle types cache (module-singleton, shared across rows) ────────
 
-type VehicleType = {
-  id: string;
-  brand: string | null;
-  code: string;
-  label: string;
-  pax_capacity: number | null;
-  has_luggage_variant: boolean;
-  pax_capacity_with_luggage: number | null;
-  luggage_capacity: number | null;
-};
+type VehicleType = MasterVehicleType;
 
 let vehicleTypesCache: VehicleType[] | null = null;
 let vehicleTypesPromise: Promise<VehicleType[]> | null = null;
@@ -76,7 +73,11 @@ async function loadVehicleTypes(): Promise<VehicleType[]> {
   return vehicleTypesPromise;
 }
 
-function useVehicleTypes(): VehicleType[] {
+function useVehicleTypes(): {
+  types: VehicleType[];
+  upsert: (v: VehicleType) => void;
+  replaceAll: (v: VehicleType[]) => void;
+} {
   const [types, setTypes] = useState<VehicleType[]>(vehicleTypesCache ?? []);
   useEffect(() => {
     let cancelled = false;
@@ -94,7 +95,15 @@ function useVehicleTypes(): VehicleType[] {
       subscribers.delete(sub);
     };
   }, []);
-  return types;
+  const upsert = useCallback((v: VehicleType) => {
+    const base = vehicleTypesCache ?? [];
+    const idx = base.findIndex((x) => x.id === v.id);
+    publish(idx >= 0 ? base.map((x) => (x.id === v.id ? v : x)) : [...base, v]);
+  }, []);
+  const replaceAll = useCallback((next: VehicleType[]) => {
+    publish(next);
+  }, []);
+  return { types, upsert, replaceAll };
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -105,11 +114,6 @@ function num(v: number | null | undefined): string {
 }
 function parseNum(s: string): number {
   return parseFloat(s) || 0;
-}
-function parseNullNum(s: string): number | null {
-  if (s === "") return null;
-  const n = parseFloat(s);
-  return isNaN(n) ? null : n;
 }
 
 // ─── Per-band rates (Ticket / Shared) ──────────────────────────────────
@@ -536,41 +540,26 @@ function TieredRowsView({
   );
 }
 
-// ─── Vehicle rates — simplified to 4 columns for the new spec ──────────
-// Vehicle Type, Brand (read-only from master), Max Pax (read-only from
-// master, editable), Rate. Backend extras (max_pax_with_luggage,
-// max_luggage, supplement_*, kms/hrs) are kept in state at empty defaults
-// so the existing PUT shape still saves.
+// ─── Vehicle rates — 6-field row, only Rate is editable ────────────────
+// Per spec: Vehicle Type, Brand, Rate, Max Pax, Max Pax w/Luggage, Max
+// Luggage. Five non-Rate fields are looked up from the vehicle_types
+// master at render time, so master edits show up on next reload of any
+// season referencing the row. We store ONLY vehicle_type_id and rate on
+// the rate row; the remaining nullable backend columns
+// (max_pax_with_luggage, max_kms_day, max_hrs_day, supplement_*) are
+// written as null.
 
 export type VehicleRow = {
   _key: string;
   vehicle_type_id: string;
-  brand: string | null;
-  label: string;
   rate: string;
-  max_pax: string;
-  max_pax_with_luggage: string;
-  max_luggage: string;
-  max_kms_day: string;
-  max_hrs_day: string;
-  supplement_hr: string;
-  supplement_km: string;
 };
 
 export function vehicleRatesToRows(rates: TourVehicleRate[]): VehicleRow[] {
   return rates.map((r, i) => ({
     _key: r.id ?? `vr-${i}-${Math.random()}`,
     vehicle_type_id: r.vehicle_type_id,
-    brand: r.vehicle_types?.brand ?? null,
-    label: r.vehicle_types?.label ?? "",
     rate: num(r.rate),
-    max_pax: num(r.max_pax),
-    max_pax_with_luggage: num(r.max_pax_with_luggage),
-    max_luggage: num(r.max_luggage),
-    max_kms_day: num(r.max_kms_day),
-    max_hrs_day: num(r.max_hrs_day),
-    supplement_hr: num(r.supplement_hr),
-    supplement_km: num(r.supplement_km),
   }));
 }
 
@@ -580,13 +569,13 @@ export function rowsToVehicleRates(rows: VehicleRow[]): TourVehicleRate[] {
     .map((r) => ({
       vehicle_type_id: r.vehicle_type_id,
       rate: parseNum(r.rate),
-      max_pax: parseNullNum(r.max_pax),
-      max_pax_with_luggage: parseNullNum(r.max_pax_with_luggage),
-      max_luggage: parseNullNum(r.max_luggage),
-      max_kms_day: parseNullNum(r.max_kms_day),
-      max_hrs_day: parseNullNum(r.max_hrs_day),
-      supplement_hr: parseNullNum(r.supplement_hr),
-      supplement_km: parseNullNum(r.supplement_km),
+      max_pax: null,
+      max_pax_with_luggage: null,
+      max_luggage: null,
+      max_kms_day: null,
+      max_hrs_day: null,
+      supplement_hr: null,
+      supplement_km: null,
     }));
 }
 
@@ -595,11 +584,17 @@ interface VehicleRatesSectionProps {
   onRowsChange: (rows: VehicleRow[]) => void;
 }
 
+// Sentinel values for the "+ Add" / "Edit list" rows in the dropdown.
+const ADD_SENTINEL = "__add__";
+const EDIT_SENTINEL = "__edit__";
+
 export function VehicleRatesSection({
   rows,
   onRowsChange,
 }: VehicleRatesSectionProps) {
-  const vehicleTypes = useVehicleTypes();
+  const { types: vehicleTypes, upsert, replaceAll } = useVehicleTypes();
+  const [addDialogFor, setAddDialogFor] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
   function addRow() {
     onRowsChange([
@@ -607,16 +602,7 @@ export function VehicleRatesSection({
       {
         _key: `vr-new-${Date.now()}-${Math.random()}`,
         vehicle_type_id: "",
-        brand: null,
-        label: "",
         rate: "",
-        max_pax: "",
-        max_pax_with_luggage: "",
-        max_luggage: "",
-        max_kms_day: "",
-        max_hrs_day: "",
-        supplement_hr: "",
-        supplement_km: "",
       },
     ]);
   }
@@ -625,36 +611,24 @@ export function VehicleRatesSection({
     onRowsChange(rows.filter((r) => r._key !== key));
   }
 
-  const pickVehicle = useCallback(
-    (key: string, vehicleTypeId: string) => {
-      const vt = vehicleTypes.find((v) => v.id === vehicleTypeId);
-      if (!vt) return;
-      onRowsChange(
-        rows.map((r) =>
-          r._key === key
-            ? {
-                ...r,
-                vehicle_type_id: vt.id,
-                brand: vt.brand,
-                label: vt.label,
-                max_pax: r.max_pax || num(vt.pax_capacity),
-                max_pax_with_luggage:
-                  r.max_pax_with_luggage || num(vt.pax_capacity_with_luggage),
-                max_luggage: r.max_luggage || num(vt.luggage_capacity),
-              }
-            : r,
-        ),
-      );
-    },
-    [rows, vehicleTypes, onRowsChange],
-  );
+  function pickVehicle(key: string, vehicleTypeId: string) {
+    onRowsChange(
+      rows.map((r) =>
+        r._key === key ? { ...r, vehicle_type_id: vehicleTypeId } : r,
+      ),
+    );
+  }
 
-  function updateField(
-    key: string,
-    field: "rate" | "max_pax",
-    value: string,
-  ) {
-    onRowsChange(rows.map((r) => (r._key === key ? { ...r, [field]: value } : r)));
+  function updateRate(key: string, value: string) {
+    onRowsChange(
+      rows.map((r) => (r._key === key ? { ...r, rate: value } : r)),
+    );
+  }
+
+  function handleVehicleCreated(rowKey: string, created: CreatedVehicle) {
+    upsert(created);
+    pickVehicle(rowKey, created.id);
+    setAddDialogFor(null);
   }
 
   return (
@@ -669,86 +643,129 @@ export function VehicleRatesSection({
             No vehicles yet. Click &quot;Add Vehicle&quot; to start.
           </p>
         ) : (
-          rows.map((row) => (
-            <div key={row._key} className="rounded-md border p-2">
-              <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_80px_minmax(0,1fr)_28px] gap-2 items-end">
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] font-medium text-muted-foreground">
-                    Vehicle Type
-                  </label>
-                  <Select
-                    value={row.vehicle_type_id || ""}
-                    onValueChange={(v) => pickVehicle(row._key, v)}
-                  >
-                    <SelectTrigger className="h-7 text-xs">
-                      <SelectValue placeholder="Select vehicle…">
-                        {row.vehicle_type_id ? row.label : "Select vehicle…"}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vehicleTypes.map((vt) => (
-                        <SelectItem
-                          key={vt.id}
-                          value={vt.id}
-                          className="text-xs"
-                        >
-                          {vt.brand ? `${vt.brand} — ${vt.label}` : vt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] font-medium text-muted-foreground">
-                    Brand
-                  </label>
-                  <div className="h-7 flex items-center px-2 text-xs text-muted-foreground truncate">
-                    {row.brand ?? (
-                      <span className="text-muted-foreground/50">—</span>
-                    )}
+          rows.map((row) => {
+            const vt = vehicleTypes.find((v) => v.id === row.vehicle_type_id);
+            const trigger = vt
+              ? vt.brand
+                ? `${vt.brand} — ${vt.label}`
+                : vt.label
+              : "Select vehicle…";
+            return (
+              <div key={row._key} className="rounded-md border p-2">
+                <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_80px_64px_64px_64px_28px] gap-2 items-end">
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      Vehicle Type
+                    </label>
+                    <Select
+                      value={row.vehicle_type_id || ""}
+                      onValueChange={(v) => {
+                        if (v === ADD_SENTINEL) {
+                          setAddDialogFor(row._key);
+                          return;
+                        }
+                        if (v === EDIT_SENTINEL) {
+                          setEditOpen(true);
+                          return;
+                        }
+                        pickVehicle(row._key, v);
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="Select vehicle…">
+                          {trigger}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vehicleTypes.map((v) => (
+                          <SelectItem key={v.id} value={v.id} className="text-xs">
+                            {v.brand ? `${v.brand} — ${v.label}` : v.label}
+                          </SelectItem>
+                        ))}
+                        <div className="sticky bottom-0 -mx-1 mt-1 border-t bg-popover">
+                          <SelectItem
+                            value={ADD_SENTINEL}
+                            className="text-xs font-medium text-primary focus:text-primary"
+                          >
+                            + Add new vehicle
+                          </SelectItem>
+                          <SelectItem
+                            value={EDIT_SENTINEL}
+                            className="text-xs font-medium text-muted-foreground focus:text-foreground"
+                          >
+                            Edit master vehicle list
+                          </SelectItem>
+                        </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      Brand
+                    </label>
+                    <div className="h-7 flex items-center px-2 text-xs text-muted-foreground truncate">
+                      {vt?.brand ?? (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      Rate
+                    </label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={row.rate}
+                      onChange={(e) => updateRate(row._key, e.target.value)}
+                      placeholder="0"
+                      className="h-7 text-xs"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      Max Pax
+                    </label>
+                    <div className="h-7 flex items-center justify-center text-xs text-muted-foreground">
+                      {vt?.pax_capacity ?? (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      Max w/Lug
+                    </label>
+                    <div className="h-7 flex items-center justify-center text-xs text-muted-foreground">
+                      {vt?.pax_capacity_with_luggage ?? (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <label className="text-[10px] font-medium text-muted-foreground">
+                      Max Lug
+                    </label>
+                    <div className="h-7 flex items-center justify-center text-xs text-muted-foreground">
+                      {vt?.luggage_capacity ?? (
+                        <span className="text-muted-foreground/50">—</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center pb-1">
+                    <button
+                      type="button"
+                      className="p-1 text-muted-foreground hover:text-destructive"
+                      onClick={() => deleteRow(row._key)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] font-medium text-muted-foreground">
-                    Max Pax
-                  </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={row.max_pax}
-                    onChange={(e) =>
-                      updateField(row._key, "max_pax", e.target.value)
-                    }
-                    placeholder="—"
-                    className="h-7 text-xs"
-                  />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] font-medium text-muted-foreground">
-                    Rate
-                  </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={row.rate}
-                    onChange={(e) => updateField(row._key, "rate", e.target.value)}
-                    placeholder="0"
-                    className="h-7 text-xs"
-                  />
-                </div>
-                <div className="flex items-center pb-1">
-                  <button
-                    type="button"
-                    className="p-1 text-muted-foreground hover:text-destructive"
-                    onClick={() => deleteRow(row._key)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
       <Button
@@ -760,6 +777,19 @@ export function VehicleRatesSection({
       >
         <Plus className="h-3 w-3" /> Add Vehicle
       </Button>
+
+      <AddVehicleDialog
+        isOpen={addDialogFor !== null}
+        onClose={() => setAddDialogFor(null)}
+        onCreated={(v) => {
+          if (addDialogFor) handleVehicleCreated(addDialogFor, v);
+        }}
+      />
+      <EditVehiclesDialog
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+        onChanged={(next) => replaceAll(next)}
+      />
     </div>
   );
 }
