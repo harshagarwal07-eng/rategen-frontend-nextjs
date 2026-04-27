@@ -773,7 +773,7 @@ function ContractSelectorRow({
                   </Badge>
                   {c.rate_type && (
                     <Badge variant="outline" className="text-[10px] py-0 uppercase">
-                      {c.rate_type === "net" ? "Net" : "Gross"}
+                      {c.rate_type === "bar" ? "BAR" : "Net"}
                     </Badge>
                   )}
                 </span>

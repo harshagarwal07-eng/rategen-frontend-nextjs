@@ -13,6 +13,7 @@ import { DmcHotel } from "@/types/hotels";
 import { PendingContract } from "@/types/dmc-contracts";
 import { toast } from "sonner";
 import GeneralInfoTab from "./tabs/general-info-tab";
+import RatesTab, { RatesTabHandle } from "./tabs/rates-tab";
 import RoomsSeasonsTab, { RoomsSeasonsTabHandle } from "./tabs/rooms-seasons-tab";
 
 interface HotelOverlayProps {
@@ -24,7 +25,7 @@ interface HotelOverlayProps {
 const TABS = [
   { id: "general-info", label: "General Info", enabled: true },
   { id: "rooms-seasons", label: "Rooms & Seasons", enabled: true },
-  { id: "rates", label: "Rates", enabled: false },
+  { id: "rates", label: "Rates", enabled: true },
   { id: "supplements", label: "Supplements", enabled: false },
   { id: "offers", label: "Offers", enabled: false },
   { id: "perks", label: "Perks", enabled: false },
@@ -38,17 +39,27 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
   const [loading, setLoading] = useState(false);
   const [tab1Dirty, setTab1Dirty] = useState(false);
   const [tab2Dirty, setTab2Dirty] = useState(false);
+  const [tab3Dirty, setTab3Dirty] = useState(false);
   const [formSaving, setFormSaving] = useState(false);
   const [contractSaving, setContractSaving] = useState(false);
   const [tab2Saving, setTab2Saving] = useState(false);
-  const isSaving = formSaving || contractSaving || tab2Saving;
-  const anyDirty = tab1Dirty || tab2Dirty;
-  const currentTabDirty = activeTab === "general-info" ? tab1Dirty : tab2Dirty;
+  const [tab3Saving, setTab3Saving] = useState(false);
+  const isSaving = formSaving || contractSaving || tab2Saving || tab3Saving;
+  const anyDirty = tab1Dirty || tab2Dirty || tab3Dirty;
+  const currentTabDirty =
+    activeTab === "general-info"
+      ? tab1Dirty
+      : activeTab === "rooms-seasons"
+        ? tab2Dirty
+        : activeTab === "rates"
+          ? tab3Dirty
+          : false;
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [internalHotelId, setInternalHotelId] = useState<string | null>(null);
   const [pendingContracts, setPendingContracts] = useState<PendingContract[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
   const tab2Ref = useRef<RoomsSeasonsTabHandle>(null);
+  const tab3Ref = useRef<RatesTabHandle>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -66,6 +77,7 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
       setHotel(null);
       setTab1Dirty(false);
       setTab2Dirty(false);
+      setTab3Dirty(false);
       setInternalHotelId(null);
       setPendingContracts([]);
     }
@@ -82,6 +94,10 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
   const handleSaveClick = () => {
     if (activeTab === "rooms-seasons") {
       void tab2Ref.current?.saveAll();
+      return;
+    }
+    if (activeTab === "rates") {
+      void tab3Ref.current?.saveAll();
       return;
     }
     formRef.current?.requestSubmit();
@@ -226,7 +242,8 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                         </span>
                         <span>{tab.label}</span>
                         {((tab.id === "general-info" && tab1Dirty) ||
-                          (tab.id === "rooms-seasons" && tab2Dirty)) && (
+                          (tab.id === "rooms-seasons" && tab2Dirty) ||
+                          (tab.id === "rates" && tab3Dirty)) && (
                           <span
                             className="w-2 h-2 rounded-full bg-yellow-500 shrink-0"
                             aria-label="Unsaved changes"
@@ -275,6 +292,14 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                   onSavingChange={setTab2Saving}
                 />
               )}
+              {activeTab === "rates" && (
+                <RatesTab
+                  ref={tab3Ref}
+                  hotelId={internalHotelId}
+                  onDirtyChange={setTab3Dirty}
+                  onSavingChange={setTab3Saving}
+                />
+              )}
             </div>
 
             <div className="sticky bottom-0 border-t px-4 py-2 bg-muted">
@@ -290,7 +315,8 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                     className="min-w-32"
                     disabled={
                       isSaving ||
-                      (activeTab === "rooms-seasons" && !tab2Dirty)
+                      (activeTab === "rooms-seasons" && !tab2Dirty) ||
+                      (activeTab === "rates" && !tab3Dirty)
                     }
                   >
                     {isSaving ? (
@@ -298,7 +324,8 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Saving...
                       </>
-                    ) : activeTab === "rooms-seasons" ? (
+                    ) : activeTab === "rooms-seasons" ||
+                      activeTab === "rates" ? (
                       <>
                         <Save className="mr-2 h-4 w-4" />
                         Save All Changes
