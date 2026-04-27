@@ -12,6 +12,7 @@ import TransferGeneralInfoForm, {
 } from "@/components/rates/transfers/tabs/tab1-general-info";
 import Tab2Packages from "@/components/rates/transfers/tabs/tab2-packages";
 import Tab3SeasonsRates from "@/components/rates/transfers/tabs/tab3-seasons-rates";
+import Tab4Addons from "@/components/rates/transfers/tabs/tab4-addons";
 import {
   createTransfer,
   updateTransfer,
@@ -65,11 +66,12 @@ export default function TransferFullscreenForm({
   const [tab1Dirty, setTab1Dirty] = useState(false);
   const [tab2Dirty, setTab2Dirty] = useState(false);
   const [tab3Dirty, setTab3Dirty] = useState(false);
+  const [tab4Dirty, setTab4Dirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [hasPackages, setHasPackages] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
 
-  const anyDirty = tab1Dirty || tab2Dirty || tab3Dirty;
+  const anyDirty = tab1Dirty || tab2Dirty || tab3Dirty || tab4Dirty;
 
   useEffect(() => {
     if (!isOpen) {
@@ -78,6 +80,8 @@ export default function TransferFullscreenForm({
       setContextInfo({ name: "", countryName: "" });
       setTab1Dirty(false);
       setTab2Dirty(false);
+      setTab3Dirty(false);
+      setTab4Dirty(false);
       setHasPackages(false);
       return;
     }
@@ -85,6 +89,7 @@ export default function TransferFullscreenForm({
     setTab1Dirty(false);
     setTab2Dirty(false);
     setTab3Dirty(false);
+    setTab4Dirty(false);
     const seed: FormState = (initialData as FormState) ?? {};
     setFormData(seed);
     setContextInfo({
@@ -258,7 +263,9 @@ export default function TransferFullscreenForm({
                           ? tab2Dirty
                           : index === 2
                             ? tab3Dirty
-                            : false;
+                            : index === 3
+                              ? tab4Dirty
+                              : false;
                     const stepLocked = index > 0 && !formData.id;
                     return (
                       <button
@@ -343,7 +350,14 @@ export default function TransferFullscreenForm({
                     onDirtyChange={setTab3Dirty}
                   />
                 )}
-                {currentStep === 3 && <PlaceholderTab title="Add-ons" />}
+                {currentStep === 3 && (
+                  <Tab4Addons
+                    initialData={formData.id ? formData : null}
+                    setIsLoading={setIsLoading}
+                    formRef={formRef as React.RefObject<HTMLFormElement>}
+                    onDirtyChange={setTab4Dirty}
+                  />
+                )}
               </div>
             </div>
 
@@ -384,6 +398,19 @@ export default function TransferFullscreenForm({
                       Continue to Add-ons
                     </Button>
                   )}
+                  {currentStep === 3 && (
+                    <Button
+                      onClick={() => {
+                        qc.invalidateQueries({ queryKey: ["transfers"] });
+                        forceClose();
+                      }}
+                      disabled={tab4Dirty}
+                      className="min-w-32"
+                      title={tab4Dirty ? "Save changes first" : undefined}
+                    >
+                      Done
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -418,11 +445,3 @@ export default function TransferFullscreenForm({
   );
 }
 
-function PlaceholderTab({ title }: { title: string }) {
-  return (
-    <div className="mx-auto max-w-2xl py-12 text-center text-muted-foreground">
-      <h2 className="text-xl font-semibold text-foreground mb-2">{title}</h2>
-      <p>Coming next.</p>
-    </div>
-  );
-}

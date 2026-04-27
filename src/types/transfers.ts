@@ -299,6 +299,7 @@ export type TransferPackageDetail = {
   transfer_package_stops?: PackageStop[];
   transfer_operational_hours?: OperationalHour[];
   transfer_cancellation_policies?: Array<CancellationPolicy & { transfer_cancellation_rules?: CancellationRule[] }>;
+  transfer_package_addons?: TransferPackageAddonLink[];
 };
 
 export type TransferPackageCreateInput = Omit<
@@ -402,3 +403,66 @@ export type PackageTax = {
   rate_type: 'percentage' | 'fixed';
   is_inclusive: boolean;
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Tab 4 — Add-ons
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface TransferAddonAgePolicyBand {
+  id?: string;
+  addon_id?: string;
+  band_name: string;
+  age_from: number;
+  age_to: number;
+  band_order: number;
+}
+
+export interface TransferAddonRate {
+  id?: string;
+  addon_id?: string;
+  band_name: string;
+  rate: number | null;
+}
+
+export interface TransferAddonTotalRateTier {
+  id?: string;
+  addon_id?: string;
+  min_pax: number;
+  max_pax: number;
+  rate: number;
+}
+
+export interface TransferAddonImage {
+  id: string;
+  addon_id: string;
+  url: string;
+  caption?: string | null;
+  sort_order?: number | null;
+  created_at?: string;
+}
+
+export interface TransferPackageAddonLink {
+  id?: string;
+  addon_id: string;
+  package_id?: string;
+  is_mandatory: boolean;
+}
+
+export interface TransferAddonDetail {
+  id: string;
+  transfer_id: string;
+  dmc_id?: string;
+  name: string;
+  description: string | null;
+  total_rate: number | null;
+  max_participants: number | null;
+  notes: string | null;
+  sort_order: number | null;
+  status: string;
+  created_at?: string;
+  updated_at?: string;
+  transfer_addon_age_policies: TransferAddonAgePolicyBand[];
+  transfer_addon_rates: TransferAddonRate[];
+  transfer_addon_total_rates: TransferAddonTotalRateTier[];
+  transfer_addon_images: TransferAddonImage[];
+}

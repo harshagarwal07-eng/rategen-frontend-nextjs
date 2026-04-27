@@ -23,6 +23,12 @@ import {
   DiscountType,
   AgePolicyBand,
   PackageTax,
+  TransferAddonDetail,
+  TransferAddonAgePolicyBand,
+  TransferAddonRate,
+  TransferAddonTotalRateTier,
+  TransferAddonImage,
+  TransferPackageAddonLink,
 } from "@/types/transfers";
 
 type Result<T> = { data: T | null; error: string | null };
@@ -89,9 +95,11 @@ export async function updateTransfer(
 
 export async function listTransferPackages(
   transferId: string,
-): Promise<Result<unknown[]>> {
-  const raw = await http.get<unknown[]>(`/api/transfers/${transferId}/packages`);
-  return unwrap<unknown[]>(raw);
+): Promise<Result<TransferPackageDetail[]>> {
+  const raw = await http.get<TransferPackageDetail[]>(
+    `/api/transfers/${transferId}/packages`,
+  );
+  return unwrap<TransferPackageDetail[]>(raw);
 }
 
 export async function listTransferCountries(): Promise<Result<TransferCountryOption[]>> {
@@ -394,6 +402,149 @@ export async function replacePackageTaxes(
         rate: t.rate,
         rate_type: t.rate_type,
         is_inclusive: t.is_inclusive,
+      })),
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+// ── Tab 4 — Add-ons ────────────────────────────────────────────────────
+
+export async function listTransferAddons(
+  transferId: string,
+): Promise<Result<TransferAddonDetail[]>> {
+  const raw = await http.get<TransferAddonDetail[]>(
+    `/api/transfers/${transferId}/addons`,
+  );
+  return unwrap<TransferAddonDetail[]>(raw);
+}
+
+export async function createTransferAddon(
+  transferId: string,
+  dto: Partial<TransferAddonDetail>,
+): Promise<Result<TransferAddonDetail>> {
+  const raw = await http.post<TransferAddonDetail>(
+    `/api/transfers/${transferId}/addons`,
+    dto,
+  );
+  return unwrap<TransferAddonDetail>(raw);
+}
+
+export async function updateTransferAddon(
+  addonId: string,
+  dto: Partial<TransferAddonDetail>,
+): Promise<Result<TransferAddonDetail>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.patch<TransferAddonDetail>(
+      `/api/transfers/addons/${addonId}`,
+      dto,
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function deleteTransferAddon(
+  addonId: string,
+): Promise<Result<{ deleted: boolean }>> {
+  const raw = await http.delete<{ deleted: boolean }>(
+    `/api/transfers/addons/${addonId}`,
+  );
+  return unwrap<{ deleted: boolean }>(raw);
+}
+
+export async function replaceTransferAddonAgePolicies(
+  addonId: string,
+  bands: TransferAddonAgePolicyBand[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/addons/${addonId}/age-policies`,
+      bands.map((b, i) => ({
+        band_name: b.band_name,
+        age_from: b.age_from,
+        age_to: b.age_to,
+        band_order: b.band_order ?? i,
+      })),
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function replaceTransferAddonRates(
+  addonId: string,
+  rates: TransferAddonRate[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/addons/${addonId}/rates`,
+      rates.map((r) => ({ band_name: r.band_name, rate: r.rate })),
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function replaceTransferAddonTotalRates(
+  addonId: string,
+  tiers: TransferAddonTotalRateTier[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/addons/${addonId}/total-rates`,
+      tiers.map((t) => ({
+        min_pax: t.min_pax,
+        max_pax: t.max_pax,
+        rate: t.rate,
+      })),
+    );
+    return { data: res.data, error: null };
+  } catch (e) {
+    return { data: null, error: axiosErrorMessage(e) };
+  }
+}
+
+export async function addTransferAddonImage(
+  addonId: string,
+  dto: { url: string; caption?: string | null; sort_order?: number | null },
+): Promise<Result<TransferAddonImage>> {
+  const raw = await http.post<TransferAddonImage>(
+    `/api/transfers/addons/${addonId}/images`,
+    dto,
+  );
+  return unwrap<TransferAddonImage>(raw);
+}
+
+export async function deleteTransferAddonImage(
+  imageId: string,
+): Promise<Result<{ deleted: boolean }>> {
+  const raw = await http.delete<{ deleted: boolean }>(
+    `/api/transfers/addon-images/${imageId}`,
+  );
+  return unwrap<{ deleted: boolean }>(raw);
+}
+
+export async function replacePackageAddons(
+  packageId: string,
+  links: TransferPackageAddonLink[],
+): Promise<Result<unknown>> {
+  try {
+    const client = await authedAxios();
+    const res = await client.put(
+      `/api/transfers/packages/${packageId}/addons`,
+      links.map((l) => ({
+        addon_id: l.addon_id,
+        is_mandatory: Boolean(l.is_mandatory),
       })),
     );
     return { data: res.data, error: null };
