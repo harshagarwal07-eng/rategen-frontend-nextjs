@@ -9,7 +9,31 @@ import {
   parse,
   startOfYear,
 } from "date-fns";
-import { CalendarPlus, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
+import {
+  CalendarPlus,
+  ChevronDown,
+  Copy,
+  GripVertical,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -293,6 +317,23 @@ export default function SeasonsSection({
     setOpenIds((prev) => new Set(prev).add(id));
   };
 
+  // Drag-reorder. Backend mig 101 derives sort_order from array index when
+  // the client doesn't send sort_order, so reordering state is sufficient —
+  // no extra payload field needed.
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = state.findIndex((s) => s._localId === active.id);
+    const newIndex = state.findIndex((s) => s._localId === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    onChange(arrayMove(state, oldIndex, newIndex));
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between">
@@ -316,23 +357,84 @@ export default function SeasonsSection({
           <p className="text-sm">No seasons yet. Click &ldquo;Add Season&rdquo;.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {state.map((s) => (
-            <SeasonCard
-              key={s._localId}
-              season={s}
-              errors={errors[s._localId] ?? {}}
-              disabled={disabled}
-              presets={presets}
-              isOpen={openIds.has(s._localId)}
-              onToggle={() => toggleOpen(s._localId)}
-              onPatch={(patch) => updateSeason(s._localId, patch)}
-              onDuplicate={() => handleDuplicate(s._localId)}
-              onDelete={() => removeSeason(s._localId)}
-            />
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={state.map((s) => s._localId)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-2">
+              {state.map((s) => (
+                <SortableSeasonCard
+                  key={s._localId}
+                  season={s}
+                  errors={errors[s._localId] ?? {}}
+                  disabled={disabled}
+                  presets={presets}
+                  isOpen={openIds.has(s._localId)}
+                  onToggle={() => toggleOpen(s._localId)}
+                  onPatch={(patch) => updateSeason(s._localId, patch)}
+                  onDuplicate={() => handleDuplicate(s._localId)}
+                  onDelete={() => removeSeason(s._localId)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
+    </div>
+  );
+}
+
+// dnd-kit wrapper. Mirrors combo-fullscreen-form.tsx's SortableSeason
+// pattern: useSortable on the wrapper div, attributes/listeners spread onto
+// a dedicated GripVertical handle inside the card header.
+function SortableSeasonCard(props: {
+  season: LocalSeason;
+  errors: SeasonErrors;
+  disabled: boolean;
+  presets: DateRangePreset[];
+  isOpen: boolean;
+  onToggle: () => void;
+  onPatch: (patch: Partial<LocalSeason>) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: props.season._localId, disabled: props.disabled });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const handle = (
+    <button
+      type="button"
+      {...attributes}
+      {...listeners}
+      disabled={props.disabled}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "flex h-7 w-7 items-center justify-center rounded shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted touch-none",
+        props.disabled
+          ? "opacity-40 cursor-not-allowed"
+          : "cursor-grab active:cursor-grabbing"
+      )}
+      aria-label="Drag to reorder season"
+      title="Drag to reorder"
+    >
+      <GripVertical className="h-3.5 w-3.5" />
+    </button>
+  );
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <SeasonCard {...props} dragHandle={handle} />
     </div>
   );
 }
@@ -351,6 +453,7 @@ function SeasonCard({
   onPatch,
   onDuplicate,
   onDelete,
+  dragHandle,
 }: {
   season: LocalSeason;
   errors: SeasonErrors;
@@ -361,6 +464,7 @@ function SeasonCard({
   onPatch: (patch: Partial<LocalSeason>) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  dragHandle?: React.ReactNode;
 }) {
   const titleText = season.name.trim() || "Unnamed Season";
   const summary =
@@ -375,6 +479,7 @@ function SeasonCard({
     <div className="rounded-md border bg-muted/20">
       {/* Header — chevron at far right per UI polish brief */}
       <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
+        {dragHandle}
         <button
           type="button"
           className="flex flex-1 items-center gap-2 min-w-0 text-left"

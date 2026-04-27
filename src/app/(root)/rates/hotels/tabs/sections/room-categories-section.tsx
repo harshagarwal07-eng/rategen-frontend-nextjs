@@ -12,12 +12,39 @@
 // - Empty state in the kids block when no Rooms-scope bands exist at all
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, ChevronDown, Copy, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  ChevronDown,
+  Copy,
+  GripVertical,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { ContractRoom } from "@/types/contract-tab2";
+
+export type ContractRateType = "net" | "bar";
 
 const SECTION_LABEL_CLS =
   "text-[10px] font-semibold uppercase tracking-wide text-muted-foreground";
@@ -132,6 +159,12 @@ interface Props {
   onErrorsChange?: (errors: RoomsErrors) => void;
   scopeLabels: RoomScopeLabels;
   onJumpToAgePolicies?: () => void;
+  /**
+   * Contract-level rate model. When 'bar', PPPN is not supported by the
+   * backend rate engine — the section locks new rooms to PRPN and surfaces
+   * a fix-it affordance on existing PPPN rooms.
+   */
+  contractRateType?: ContractRateType;
 }
 
 export default function RoomCategoriesSection({
@@ -141,6 +174,7 @@ export default function RoomCategoriesSection({
   onErrorsChange,
   scopeLabels,
   onJumpToAgePolicies,
+  contractRateType = "net",
 }: Props) {
   const errors = useMemo(() => validateRooms(state), [state]);
   useEffect(() => {
@@ -177,6 +211,21 @@ export default function RoomCategoriesSection({
   const updateRoom = (id: string, patch: Partial<LocalRoom>) =>
     onChange(state.map((r) => (r._localId === id ? { ...r, ...patch } : r)));
 
+  // Drag-reorder. Backend mig 101 derives sort_order from array index.
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = state.findIndex((r) => r._localId === active.id);
+    const newIndex = state.findIndex((r) => r._localId === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    onChange(arrayMove(state, oldIndex, newIndex));
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between">
@@ -199,24 +248,88 @@ export default function RoomCategoriesSection({
           <p className="text-sm">No rooms yet. Click &ldquo;Add Room&rdquo;.</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {state.map((r) => (
-            <RoomCard
-              key={r._localId}
-              room={r}
-              errors={errors[r._localId] ?? {}}
-              disabled={disabled}
-              scopeLabels={scopeLabels}
-              onJumpToAgePolicies={onJumpToAgePolicies}
-              isOpen={openIds.has(r._localId)}
-              onToggle={() => toggleOpen(r._localId)}
-              onPatch={(patch) => updateRoom(r._localId, patch)}
-              onDuplicate={() => duplicateRoom(r._localId)}
-              onDelete={() => removeRoom(r._localId)}
-            />
-          ))}
-        </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={state.map((r) => r._localId)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="space-y-2">
+              {state.map((r) => (
+                <SortableRoomCard
+                  key={r._localId}
+                  room={r}
+                  errors={errors[r._localId] ?? {}}
+                  disabled={disabled}
+                  scopeLabels={scopeLabels}
+                  onJumpToAgePolicies={onJumpToAgePolicies}
+                  contractRateType={contractRateType}
+                  isOpen={openIds.has(r._localId)}
+                  onToggle={() => toggleOpen(r._localId)}
+                  onPatch={(patch) => updateRoom(r._localId, patch)}
+                  onDuplicate={() => duplicateRoom(r._localId)}
+                  onDelete={() => removeRoom(r._localId)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
+    </div>
+  );
+}
+
+// dnd-kit wrapper. Mirrors combo-fullscreen-form.tsx's SortableSeason
+// pattern: useSortable on the wrapper div, attributes/listeners spread onto
+// a dedicated GripVertical handle inside the card header.
+function SortableRoomCard(props: {
+  room: LocalRoom;
+  errors: RoomErrors;
+  disabled: boolean;
+  scopeLabels: RoomScopeLabels;
+  onJumpToAgePolicies?: () => void;
+  contractRateType: ContractRateType;
+  isOpen: boolean;
+  onToggle: () => void;
+  onPatch: (patch: Partial<LocalRoom>) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: props.room._localId, disabled: props.disabled });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const handle = (
+    <button
+      type="button"
+      {...attributes}
+      {...listeners}
+      disabled={props.disabled}
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        "flex h-7 w-7 items-center justify-center rounded shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted touch-none",
+        props.disabled
+          ? "opacity-40 cursor-not-allowed"
+          : "cursor-grab active:cursor-grabbing"
+      )}
+      aria-label="Drag to reorder room"
+      title="Drag to reorder"
+    >
+      <GripVertical className="h-3.5 w-3.5" />
+    </button>
+  );
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <RoomCard {...props} dragHandle={handle} />
     </div>
   );
 }
@@ -227,32 +340,39 @@ function RoomCard({
   disabled,
   scopeLabels,
   onJumpToAgePolicies,
+  contractRateType,
   isOpen,
   onToggle,
   onPatch,
   onDuplicate,
   onDelete,
+  dragHandle,
 }: {
   room: LocalRoom;
   errors: RoomErrors;
   disabled: boolean;
   scopeLabels: RoomScopeLabels;
   onJumpToAgePolicies?: () => void;
+  contractRateType: ContractRateType;
   isOpen: boolean;
   onToggle: () => void;
   onPatch: (patch: Partial<LocalRoom>) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  dragHandle?: React.ReactNode;
 }) {
   const titleText = room.name.trim() || "Unnamed Room";
   const summary = room.max_total_occupancy != null
     ? `max occupancy ${room.max_total_occupancy}`
     : "occupancy not set";
+  const isBarContract = contractRateType === "bar";
+  const isPpnpOnBar = isBarContract && room.rate_type === "PPPN";
 
   return (
     <div className="rounded-md border bg-muted/20">
       {/* Header — chevron at far right per UI polish brief */}
       <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
+        {dragHandle}
         <button
           type="button"
           className="flex flex-1 items-center gap-2 min-w-0 text-left"
@@ -269,6 +389,14 @@ function RoomCard({
           {room.rate_type && (
             <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
               {room.rate_type}
+            </span>
+          )}
+          {isPpnpOnBar && (
+            <span
+              className="shrink-0 inline-flex items-center gap-1 text-amber-700"
+              title="PPPN not supported on BAR contracts"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
             </span>
           )}
           <span className="text-xs text-muted-foreground truncate">
@@ -335,13 +463,26 @@ function RoomCard({
           </div>
           <div className="space-y-1">
             <label className={SECTION_LABEL_CLS}>Rate Type</label>
-            <RateTypeToggleGroup
+            <RateTypeControl
               value={room.rate_type ?? null}
               disabled={disabled}
+              contractRateType={contractRateType}
               onChange={(v) => onPatch({ rate_type: v })}
             />
           </div>
         </div>
+
+        {isPpnpOnBar && (
+          <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-700" />
+            <div className="flex-1">
+              <span className="font-semibold">
+                PPPN not supported on BAR contracts.
+              </span>{" "}
+              Change room to PRPN, or change the contract to Net.
+            </div>
+          </div>
+        )}
 
         {/* Occupancy (issue 7): single row Max + Min(default 1) + Standard,
             with infants_count_towards_occupancy moved into this block. */}
@@ -512,18 +653,52 @@ function RoomCard({
   );
 }
 
-// Segmented control for Rate Type. Active option uses primary green.
-// Replaces a Select to make the small fixed option set (PRPN / PPPN) more
-// glanceable and to thread the green accent into the room body.
-function RateTypeToggleGroup({
+// Rate Type widget. Three modes:
+//   1. Net contract → segmented PRPN/PPPN toggle (existing behavior).
+//   2. BAR contract + PRPN room → static PRPN pill, no toggle (PPPN is not
+//      a valid choice and the backend rate engine rejects it).
+//   3. BAR contract + PPPN room → static PPPN pill (locked) plus an inline
+//      "Switch to PRPN" button so the user can fix the room without
+//      digging through a disabled toggle. The amber chip below the row
+//      explains why.
+function RateTypeControl({
   value,
   disabled,
+  contractRateType,
   onChange,
 }: {
   value: string | null;
   disabled: boolean;
+  contractRateType: ContractRateType;
   onChange: (next: string) => void;
 }) {
+  if (contractRateType === "bar") {
+    if (value === "PPPN") {
+      return (
+        <div className="inline-flex items-center gap-2">
+          <span className="inline-flex h-7 items-center rounded-md border border-amber-300 bg-amber-50 px-3 text-xs font-semibold uppercase tracking-wide text-amber-800">
+            PPPN
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            onClick={() => onChange("PRPN")}
+            className="h-7"
+          >
+            Switch to PRPN
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <span className="inline-flex h-7 items-center rounded-md border border-primary/30 bg-primary/10 px-3 text-xs font-semibold uppercase tracking-wide text-primary">
+        PRPN
+      </span>
+    );
+  }
+
   return (
     <div
       className={cn(

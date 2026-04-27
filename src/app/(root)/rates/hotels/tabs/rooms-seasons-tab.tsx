@@ -635,6 +635,7 @@ function ContractEditor({
             onErrorsChange={setRoomsErrors}
             scopeLabels={scopeLabels}
             onJumpToAgePolicies={jumpToAgePolicies}
+            contractRateType={selected?.rate_type === "bar" ? "bar" : "net"}
           />
         </FDCard>
 
