@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import {
   Plus,
   Search,
+  Sparkles,
   Star,
   MoreHorizontal,
 } from "lucide-react";
@@ -50,6 +51,7 @@ import {
   TourCurrencyOption,
 } from "@/types/tours";
 import TourCreateWizard from "@/components/forms/tour-create-wizard";
+import { AddUsingAiModal } from "@/components/parser/add-using-ai-modal";
 import {
   orchestrateSaves,
   formatSaveErrors,
@@ -59,6 +61,7 @@ export default function ToursClient() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<TourListRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<TourListRow | null>(null);
@@ -239,10 +242,24 @@ export default function ToursClient() {
                 <Plus className="h-4 w-4" />
                 Add New
               </Button>
+              <Button
+                size="sm"
+                className="bg-blue-600 text-white hover:bg-blue-700"
+                onClick={() => setAiModalOpen(true)}
+              >
+                <Sparkles className="h-4 w-4" />
+                Add Using AI
+              </Button>
             </div>
           </>
         )}
       </div>
+
+      <AddUsingAiModal
+        open={aiModalOpen}
+        onOpenChange={setAiModalOpen}
+        sourceEntry="tours"
+      />
 
       <div className="rounded-md border">
         <Table>

@@ -52,6 +52,7 @@ import {
   TransferCurrencyOption,
 } from "@/types/transfers";
 import TransferFullscreenForm from "@/components/forms/transfer-create-wizard";
+import { AddUsingAiModal } from "@/components/parser/add-using-ai-modal";
 import {
   orchestrateSaves,
   formatSaveErrors,
@@ -67,6 +68,7 @@ export default function TransfersClient() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<TransferListRow | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<TransferListRow | null>(null);
@@ -248,7 +250,7 @@ export default function TransfersClient() {
               <Button
                 size="sm"
                 className="bg-blue-600 text-white hover:bg-blue-700"
-                onClick={() => router.push("/tt-parser")}
+                onClick={() => setAiModalOpen(true)}
               >
                 <Sparkles className="h-4 w-4" />
                 Add Using AI
@@ -257,6 +259,12 @@ export default function TransfersClient() {
           </>
         )}
       </div>
+
+      <AddUsingAiModal
+        open={aiModalOpen}
+        onOpenChange={setAiModalOpen}
+        sourceEntry="transfers"
+      />
 
       <div className="rounded-md border">
         <Table>
