@@ -271,7 +271,14 @@ export function HotelOverlay({ hotelId, isOpen, onClose }: HotelOverlayProps) {
           </div>
 
           <div className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto p-6">
+            {/* `key={activeTab}` forces React to fully unmount the previous
+                tab's subtree and mount a fresh instance on every switch.
+                The conditional `&&` render below should already do this, but
+                a reproducible bug was observed where unsaved copy-from-
+                contract state on Tab 2 persisted across a Tab 2 → Tab 1 →
+                Tab 2 round-trip — pinning the key here makes the discard-
+                on-switch contract explicit and bulletproof. */}
+            <div key={activeTab} className="flex-1 overflow-y-auto p-6">
               {activeTab === "general-info" && (
                 <GeneralInfoTab
                   hotelId={internalHotelId}
