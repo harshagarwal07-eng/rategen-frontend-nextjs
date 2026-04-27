@@ -401,11 +401,13 @@ function RatesEditor({
       sourceRooms,
       sourceSeasons,
       sourceRates,
+      sourceAgePolicies,
     }: {
       sourceContractId: string;
       sourceRooms: ContractRoom[];
       sourceSeasons: ContractSeasonRow[];
       sourceRates: ContractRate[];
+      sourceAgePolicies: AgePolicyBand[];
     }) => {
       const sourceRoomNameById = new Map<string, string>();
       for (const r of sourceRooms) {
@@ -423,11 +425,23 @@ function RatesEditor({
       for (const s of seasons) {
         targetSeasonByName.set(s.name.trim().toLowerCase(), s);
       }
-      // Map age policies by lowercased label so child pricing crosses over.
+
+      // ── Age-policy id → id remap, by label (case-insensitive, trimmed) ──
+      // Source band id → its lowercased label.
+      const sourceLabelById = new Map<string, string>();
+      for (const b of sourceAgePolicies) {
+        if (b.id) sourceLabelById.set(b.id, b.label.trim().toLowerCase());
+      }
+      // Target label → target band (so we can resolve to id).
       const targetPolicyByLabel = new Map<string, AgePolicyBand>();
       for (const p of agePolicies) {
         if (p.id) targetPolicyByLabel.set(p.label.trim().toLowerCase(), p);
       }
+      // Track labels present on source but missing on target so we can
+      // surface a single summarising toast at the end. Adult is the
+      // implicit baseline for child-pricing rows; never appears in
+      // age_pricing[] and is therefore irrelevant here.
+      const droppedLabels = new Set<string>();
 
       let matched = 0;
       let skipped = 0;
@@ -447,34 +461,63 @@ function RatesEditor({
           continue;
         }
 
-        // Map child pricing by source policy label (need source agePolicies
-        // to look up label from id — fetch minimal mapping from the source
-        // rate's age_pricing rows directly via the source contract isn't
-        // cheap, so we look up each source age_policy_id label by querying
-        // the source contract's age policies. Source contract's policies
-        // weren't fetched; fall back to dropping unrecognised ids.
-        // The dialog already has selectedRoomIds/SeasonIds filtering, but
-        // not policy labels. To keep the UI simple, we map source
-        // age_policy_ids into target ids by matching the source band's
-        // label — which we don't have here. So we drop child pricing on
-        // copy. This matches the brief's "Child pricing by age band label"
-        // intent only when source labels happen to equal target ids;
-        // otherwise child pricing will be dropped on cross-contract copy.
-        // Documented divergence in the report.
-
-        const localChildPricing: LocalAgePricing[] = agePolicies
-          .filter((b) => !!b.id && b.label.toLowerCase() !== "adult")
-          .map((b) => ({
+        // Walk the source rate's age_pricing rows. Resolve each
+        // source-side age_policy_id → label → target's age_policy_id. If
+        // no match on the target, drop the row and remember the label.
+        const localChildPricing: LocalAgePricing[] = [];
+        for (const ap of sr.age_pricing ?? []) {
+          const label = sourceLabelById.get(ap.age_policy_id);
+          if (!label) {
+            // Source band id without a known label — treat as untrusted
+            // and skip silently (this can happen if the band was deleted
+            // server-side after the rate was written).
+            continue;
+          }
+          if (label === "adult") continue;
+          const targetBand = targetPolicyByLabel.get(label);
+          if (!targetBand || !targetBand.id) {
+            droppedLabels.add(label);
+            continue;
+          }
+          localChildPricing.push({
             _localId: newAgePricingLocalId(),
             id: null,
-            age_policy_id: b.id as string,
+            age_policy_id: targetBand.id,
+            is_free: !!ap.is_free,
+            max_free_count: ap.max_free_count ?? null,
+            without_bed_price: ap.without_bed_price ?? null,
+            without_bed_price_type:
+              ap.without_bed_price_type === "percentage"
+                ? "percentage"
+                : "fixed",
+            with_bed_price: ap.with_bed_price ?? null,
+            with_bed_price_type:
+              ap.with_bed_price_type === "percentage"
+                ? "percentage"
+                : "fixed",
+          });
+        }
+
+        // For target bands the source didn't carry, seed empty rows so
+        // the user sees the full set on the form. Skip bands the source
+        // already provided.
+        const present = new Set(localChildPricing.map((c) => c.age_policy_id));
+        for (const b of agePolicies) {
+          if (!b.id) continue;
+          if (b.label.trim().toLowerCase() === "adult") continue;
+          if (present.has(b.id)) continue;
+          localChildPricing.push({
+            _localId: newAgePricingLocalId(),
+            id: null,
+            age_policy_id: b.id,
             is_free: false,
             max_free_count: null,
             without_bed_price: null,
             without_bed_price_type: "fixed",
             with_bed_price: null,
             with_bed_price_type: "fixed",
-          }));
+          });
+        }
 
         // Find existing target rate (same room+season) to update — else seed
         // a fresh local rate.
@@ -531,6 +574,14 @@ function RatesEditor({
         );
       } else {
         toast.info("No rates to copy.");
+      }
+      if (droppedLabels.size > 0) {
+        const labels = Array.from(droppedLabels)
+          .map((l) => l.charAt(0).toUpperCase() + l.slice(1))
+          .join(", ");
+        toast.warning(
+          `${droppedLabels.size} band${droppedLabels.size === 1 ? "" : "s"} skipped: ${labels} not in target contract.`
+        );
       }
     },
     [agePolicies, rates, rooms, seasons]

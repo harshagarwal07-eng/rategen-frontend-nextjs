@@ -20,13 +20,21 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { listContractRooms, listContractSeasons } from "@/data-access/contract-tab2";
+import {
+  getAgePolicies,
+  listContractRooms,
+  listContractSeasons,
+} from "@/data-access/contract-tab2";
 import {
   getRateDetail,
   listContractRates,
 } from "@/data-access/contract-rates";
 import type { DmcContract } from "@/types/dmc-contracts";
-import type { ContractRoom, ContractSeasonRow } from "@/types/contract-tab2";
+import type {
+  AgePolicyBand,
+  ContractRoom,
+  ContractSeasonRow,
+} from "@/types/contract-tab2";
 import type { ContractRate } from "@/types/contract-rates";
 import { fmtRange } from "./rates-shared";
 
@@ -37,13 +45,15 @@ interface CopyFromRatesDialogProps {
   currentContractId: string;
   currentRooms: ContractRoom[];
   currentSeasons: ContractSeasonRow[];
-  // Returns the source contract's rates+rooms+seasons so the parent can
-  // remap by room/season name into the current contract's id space.
+  // Returns the source contract's rates+rooms+seasons+age policies so the
+  // parent can remap by room/season name and age-band label into the
+  // current contract's id space.
   onApply: (payload: {
     sourceContractId: string;
     sourceRooms: ContractRoom[];
     sourceSeasons: ContractSeasonRow[];
     sourceRates: ContractRate[];
+    sourceAgePolicies: AgePolicyBand[];
   }) => Promise<void>;
 }
 
@@ -63,6 +73,7 @@ export function CopyFromRatesDialog({
   const [sourceRooms, setSourceRooms] = useState<ContractRoom[]>([]);
   const [sourceSeasons, setSourceSeasons] = useState<ContractSeasonRow[]>([]);
   const [sourceRates, setSourceRates] = useState<ContractRate[]>([]);
+  const [sourceAgePolicies, setSourceAgePolicies] = useState<AgePolicyBand[]>([]);
   const [selectedRoomIds, setSelectedRoomIds] = useState<Set<string>>(new Set());
   const [selectedSeasonIds, setSelectedSeasonIds] = useState<Set<string>>(new Set());
   const [loadingSource, setLoadingSource] = useState(false);
@@ -81,6 +92,7 @@ export function CopyFromRatesDialog({
       setSourceRooms([]);
       setSourceSeasons([]);
       setSourceRates([]);
+      setSourceAgePolicies([]);
       setSelectedRoomIds(new Set());
       setSelectedSeasonIds(new Set());
     }
@@ -89,14 +101,18 @@ export function CopyFromRatesDialog({
   async function loadSource(contractId: string) {
     setLoadingSource(true);
     try {
-      const [roomsRes, seasonsRes, ratesRes] = await Promise.all([
+      const [roomsRes, seasonsRes, ratesRes, agePolsRes] = await Promise.all([
         listContractRooms(contractId),
         listContractSeasons(contractId),
         listContractRates(contractId),
+        getAgePolicies(contractId),
       ]);
       const rooms = roomsRes.data ?? [];
       const seasons = seasonsRes.data ?? [];
       const ratesList = ratesRes.data ?? [];
+      // Rooms-scope only — child pricing on rates references rooms-scope
+      // bands. Meals-scope bands are used for meal supplements elsewhere.
+      const agePols = agePolsRes.data?.rooms ?? [];
       // Pull age_pricing for each rate so the apply step can carry child
       // pricing across.
       const detailed = await Promise.all(
@@ -109,6 +125,7 @@ export function CopyFromRatesDialog({
       setSourceRooms(rooms);
       setSourceSeasons(seasons);
       setSourceRates(fullRates);
+      setSourceAgePolicies(agePols);
       setSelectedRoomIds(new Set(rooms.map((r) => r.id ?? "")));
       setSelectedSeasonIds(new Set(seasons.map((s) => s.id)));
     } catch (err) {
@@ -155,6 +172,7 @@ export function CopyFromRatesDialog({
         sourceRooms: filteredRooms,
         sourceSeasons: filteredSeasons,
         sourceRates: filteredRates,
+        sourceAgePolicies,
       });
       onOpenChange(false);
     } finally {
