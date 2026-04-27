@@ -17,7 +17,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, Sparkles, Loader2 } from "lucide-react";
+import { ChevronLeft, Sparkles, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -193,9 +193,13 @@ export function ParseSessionView({ jobId, sourceEntry }: Props) {
           {state.globalError ?? "Parse failed. Check the backend logs for details."}
         </div>
       ) : null}
-      {(state.jobStatus === "completed" || state.jobStatus === "fully_resolved") && state.childJobId ? (
-        <CrossTypeBanner childJobId={state.childJobId} sourceEntry={sourceEntry} />
-      ) : null}
+      <SiblingBanner
+        thisJobId={jobId}
+        sourceEntry={sourceEntry}
+        childJobId={state.childJobId}
+        parentJobId={jobData?.job.parent_parse_job_id ?? null}
+      />
+
 
       {!isTerminal ? (
         <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -383,15 +387,72 @@ function BucketCard({ label, count, className }: { label: string; count: number;
   );
 }
 
-function CrossTypeBanner({ childJobId, sourceEntry }: { childJobId: string; sourceEntry: SourceEntry }) {
-  const otherSource = sourceEntry === "tours" ? "transfers" : "tours";
-  const childHref = `/rates/${otherSource}/parser/jobs/${childJobId}`;
+function SiblingBanner({
+  thisJobId,
+  sourceEntry,
+  childJobId,
+  parentJobId,
+}: {
+  thisJobId: string;
+  sourceEntry: SourceEntry;
+  childJobId: string | null;
+  parentJobId: string | null;
+}) {
+  // Pick whichever sibling exists. childJobId comes from the live job_complete
+  // SSE event; parentJobId comes from the loaded parse_jobs row (set when the
+  // current job is itself a cross-type child).
+  const siblingId = childJobId ?? parentJobId;
+  const dismissKey = useMemo(() => `parser:sibling-banner:${thisJobId}`, [thisJobId]);
+  const [dismissed, setDismissed] = useState<boolean>(true); // start true — flip to false in effect once we read localStorage
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setDismissed(window.localStorage.getItem(dismissKey) === "1");
+  }, [dismissKey]);
+
+  // Fetch sibling job to read its job_type + package count.
+  const { data: sibling } = useQuery({
+    queryKey: ["parser", "job", siblingId],
+    queryFn: async () => {
+      if (!siblingId) return null;
+      const r = await getParserJob(siblingId);
+      if (r.error || !r.data) return null;
+      return r.data;
+    },
+    enabled: Boolean(siblingId) && !dismissed,
+  });
+
+  if (!siblingId || dismissed) return null;
+  const otherType = sibling?.job.job_type ?? (sourceEntry === "tours" ? "transfer" : "tour");
+  const otherSource = otherType === "tour" ? "tours" : "transfers";
+  const count = sibling?.packages.length ?? 0;
+  const href = `/rates/${otherSource}/parser/jobs/${siblingId}`;
+  const noun = otherType === "tour" ? "tour" : "transfer";
+
+  function dismiss() {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(dismissKey, "1");
+    }
+    setDismissed(true);
+  }
+
   return (
-    <div className="mt-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
-      This sheet also contains {otherSource}. {" "}
-      <Link href={childHref} target="_blank" rel="noreferrer" className="font-medium underline">
-        Review them →
-      </Link>
+    <div className="mt-4 flex items-center justify-between gap-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm text-blue-800">
+      <div>
+        <span className="font-medium">This sheet also contains</span>{" "}
+        {count > 0 ? `${count} ${noun}${count === 1 ? "" : "s"}` : `${noun}s`}.{" "}
+        <Link href={href} target="_blank" rel="noreferrer" className="font-medium underline">
+          Review them →
+        </Link>
+      </div>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss banner"
+        className="rounded-md p-1 hover:bg-blue-100"
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   );
 }
