@@ -454,13 +454,14 @@ export interface TourVehicleRate {
   season_id?: string;
   vehicle_type_id: string;
   rate: number;
-  max_pax: number | null;
-  max_pax_with_luggage: number | null;
-  max_luggage: number | null;
-  max_kms_day: number | null;
-  max_hrs_day: number | null;
-  supplement_hr: number | null;
-  supplement_km: number | null;
+  /** Optional row-level overrides — kept for legacy rows; new rows
+   *  store only vehicle_type_id + rate, with capacities looked up from
+   *  vehicle_types master at render time. */
+  max_pax_with_luggage?: number | null;
+  max_kms_day?: number | null;
+  max_hrs_day?: number | null;
+  supplement_hr?: number | null;
+  supplement_km?: number | null;
   vehicle_types?: {
     brand: string | null;
     code: string;

@@ -555,11 +555,8 @@ function TieredRowsView({
 // ─── Vehicle rates — 6-field row, only Rate is editable ────────────────
 // Per spec: Vehicle Type, Brand, Rate, Max Pax, Max Pax w/Luggage, Max
 // Luggage. Five non-Rate fields are looked up from the vehicle_types
-// master at render time, so master edits show up on next reload of any
-// season referencing the row. We store ONLY vehicle_type_id and rate on
-// the rate row; the remaining nullable backend columns
-// (max_pax_with_luggage, max_kms_day, max_hrs_day, supplement_*) are
-// written as null.
+// master at render time. The rate row stores ONLY vehicle_type_id and
+// rate; capacities never ride on the rate row.
 
 export type VehicleRow = {
   _key: string;
@@ -575,19 +572,14 @@ export function vehicleRatesToRows(rates: TourVehicleRate[]): VehicleRow[] {
   }));
 }
 
-export function rowsToVehicleRates(rows: VehicleRow[]): TourVehicleRate[] {
+export function rowsToVehicleRates(
+  rows: VehicleRow[],
+): { vehicle_type_id: string; rate: number }[] {
   return rows
     .filter((r) => r.vehicle_type_id)
     .map((r) => ({
       vehicle_type_id: r.vehicle_type_id,
       rate: parseNum(r.rate),
-      max_pax: null,
-      max_pax_with_luggage: null,
-      max_luggage: null,
-      max_kms_day: null,
-      max_hrs_day: null,
-      supplement_hr: null,
-      supplement_km: null,
     }));
 }
 

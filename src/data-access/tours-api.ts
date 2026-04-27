@@ -19,7 +19,6 @@ import {
   TourSeasonDateRange,
   TourPaxRate,
   TourPrivatePerPaxRate,
-  TourVehicleRate,
   TourAgePolicyBand,
   TourPackageTax,
   TourPackageComponent,
@@ -547,18 +546,13 @@ export async function replaceSeasonPrivateRates(
 
 export async function replaceSeasonVehicleRates(
   seasonId: string,
-  rates: TourVehicleRate[],
+  rates: { vehicle_type_id: string; rate: number }[],
 ): Promise<Result<unknown>> {
+  // Per-vehicle capacities live on vehicle_types master; the rate row
+  // stores only the FK + price. season_id is added by the backend.
   const stripped = rates.map((r) => ({
     vehicle_type_id: r.vehicle_type_id,
     rate: r.rate,
-    max_pax: r.max_pax,
-    max_pax_with_luggage: r.max_pax_with_luggage,
-    max_luggage: r.max_luggage,
-    max_kms_day: r.max_kms_day,
-    max_hrs_day: r.max_hrs_day,
-    supplement_hr: r.supplement_hr,
-    supplement_km: r.supplement_km,
   }));
   const raw = await http.put(
     `/api/tours/seasons/${seasonId}/vehicle-rates`,
