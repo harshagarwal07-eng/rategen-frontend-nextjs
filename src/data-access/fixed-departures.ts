@@ -356,3 +356,91 @@ export async function fdGetPackagePublic(id: string): Promise<FDPublicPackage> {
   const { data } = await fdApi.get<FDPublicPackage>(`${BASE}/packages/${id}/public`);
   return data;
 }
+
+export interface FDQuoteRequest {
+  departure_id: string;
+  travelers: {
+    adults: number;
+    children: Array<{ age: number; bed_preference?: "extra_bed" | "no_bed" }>;
+    infants: Array<{ age: number }>;
+  };
+  selected_addons?: Array<{ addon_id: string; count?: number }>;
+}
+
+export interface FDQuotePaxLine {
+  category: string;
+  count: number;
+  rate: number;
+  subtotal: number;
+}
+
+export interface FDQuoteFlightPaxLine extends FDQuotePaxLine {
+  flight_group: string;
+}
+
+export interface FDQuoteAddonBreakdown {
+  addon_id: string;
+  name: string;
+  gross: number;
+  commission: number;
+  net: number;
+  per_pax: FDQuotePaxLine[];
+}
+
+export interface FDQuoteResponse {
+  currency: string;
+  pax_summary: {
+    adults_billed: number;
+    children_billed: Array<{
+      requested_age: number;
+      billed_as: "adult" | "child" | "infant";
+      bed: "extra_bed" | "no_bed" | null;
+    }>;
+    infants_billed: number;
+  };
+  rooms: Array<{
+    type: "single" | "double" | "triple";
+    adults: number;
+    children_extra_bed: number;
+    children_no_bed: number;
+    infants: number;
+    is_shared_room: boolean;
+    cost: number;
+  }>;
+  breakdown: {
+    land: { gross: number; commission: number; net: number; per_pax: FDQuotePaxLine[] };
+    flight: {
+      gross: number;
+      commission: number;
+      net: number;
+      per_pax: FDQuoteFlightPaxLine[];
+      groups_included_in_package: string[];
+    };
+    visa: { gross: number; per_pax: FDQuotePaxLine[]; included_in_package: boolean };
+    insurance: { gross: number; per_pax: FDQuotePaxLine[]; included_in_package: boolean };
+    addons: FDQuoteAddonBreakdown[];
+    taxes: Array<{
+      name: string;
+      basis: string;
+      value_type: "percentage" | "fixed";
+      value: number;
+      computed: number;
+      included: boolean;
+    }>;
+  };
+  totals: {
+    gross_subtotal: number;
+    total_commission: number;
+    net_subtotal: number;
+    tax_total: number;
+    grand_total_gross: number;
+    grand_total_net: number;
+  };
+  warnings: string[];
+  errors: string[];
+}
+
+export async function fdComputeQuote(payload: FDQuoteRequest): Promise<FDQuoteResponse> {
+  const { data } = await fdApi.post<FDQuoteResponse>(`${BASE}/quote`, payload);
+  return data;
+}

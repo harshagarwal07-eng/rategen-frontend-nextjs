@@ -189,10 +189,12 @@ export function DeparturesSidebar({ pkg, departures, selectedId, onSelect }: Dep
         <BookDepartureModal
           open={modalOpen}
           onOpenChange={setModalOpen}
+          departureId={selected.id}
           packageName={pkg.name}
           tourCode={pkg.tour_code}
           departureDate={selected.departure_date}
-          agePolicies={pkg.fd_age_policies}
+          currency={pkg.currency}
+          addons={pkg.fd_addons}
         />
       )}
     </>

@@ -82,10 +82,12 @@ export function PackageStickyBar({ pkg, selectedDeparture, bannerRef }: PackageS
         <BookDepartureModal
           open={modalOpen}
           onOpenChange={setModalOpen}
+          departureId={selectedDeparture.id}
           packageName={pkg.name}
           tourCode={pkg.tour_code}
           departureDate={selectedDeparture.departure_date}
-          agePolicies={pkg.fd_age_policies}
+          currency={pkg.currency}
+          addons={pkg.fd_addons}
         />
       )}
     </>
