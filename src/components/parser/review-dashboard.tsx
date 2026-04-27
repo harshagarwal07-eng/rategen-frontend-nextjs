@@ -28,12 +28,18 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Info, Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
+import { Info, Loader2, Pencil, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Popover,
   PopoverContent,
@@ -48,16 +54,53 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  patchParserPackage,
   patchParserPackageStatus,
   saveApprovedPackages,
   type ParseJobPackageRow,
   type SourceEntry,
 } from "@/data-access/parser-api";
+import GeoPickerModal, {
+  type GeoSelection,
+} from "@/components/shared/geo-picker-modal";
+import MasterCatalogPicker from "@/components/rates/tours/tabs/sections/master-catalog-picker";
+import { listTourCountries } from "@/data-access/tours-api";
+import type { TourCountryOption, TourMasterCatalogItem } from "@/types/tours";
 
 interface Props {
   jobId: string;
   sourceEntry: SourceEntry;
+  /** ISO 2-char country_code from parse_jobs. Used to scope the geo / catalog
+   *  pickers to the same country the parse was about. */
+  countryCode: string;
   packages: ParseJobPackageRow[];
+}
+
+/** What's currently being edited in a picker — null when no picker is open. */
+type PickerTarget =
+  | { kind: "tour-geo"; pkg: ParseJobPackageRow }
+  | { kind: "tour-catalog"; pkg: ParseJobPackageRow }
+  | { kind: "transfer-stop"; pkg: ParseJobPackageRow; stopOrder: number };
+
+interface TourGeoMatch {
+  primary_geo_id: string | null;
+  primary_geo_name: string | null;
+  primary_geo_score: number | null;
+  _has_match?: boolean;
+}
+
+interface TransferStopMatch {
+  stop_order: number;
+  stop_type: string;
+  raw_location?: string;
+  geo_id: string | null;
+  geo_name: string | null;
+  score: number | null;
+}
+
+interface TransferGeoMatch {
+  stops: TransferStopMatch[];
+  _has_match?: boolean;
 }
 
 const LOW_CONF_THRESHOLD = 0.6;
@@ -66,12 +109,166 @@ function isTerminalStatus(s: ParseJobPackageRow["review_status"]): boolean {
   return s === "saved" || s === "rejected";
 }
 
-export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
+export function ReviewDashboard({ jobId, sourceEntry, countryCode, packages }: Props) {
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const [bulkBusy, setBulkBusy] = useState<null | "approve" | "reject">(null);
+  const [picker, setPicker] = useState<PickerTarget | null>(null);
+
+  // Resolve country_code → uuid for the picker. Same /api/geo/countries the
+  // upload modal uses; query is cached so this is free if the list page
+  // already fetched it.
+  const { data: countries = [] } = useQuery({
+    queryKey: ["geo", "countries"],
+    queryFn: async () => {
+      const r = await listTourCountries();
+      if (r.error || !r.data) return [];
+      return r.data;
+    },
+  });
+  const countryId = useMemo(() => {
+    if (!countryCode) return null;
+    const match = countries.find(
+      (c: TourCountryOption) => c.country_code === countryCode,
+    );
+    return match?.id ?? null;
+  }, [countries, countryCode]);
+
+  async function patchPackageGeo(
+    packageId: string,
+    geoMatch: TourGeoMatch | TransferGeoMatch,
+  ) {
+    const r = await patchParserPackage(jobId, packageId, {
+      geo_match: geoMatch as unknown as Record<string, unknown>,
+    });
+    if (r.error) {
+      toast.error(`Update failed: ${r.error}`);
+      return false;
+    }
+    toast.success("Location updated");
+    await qc.invalidateQueries({ queryKey: ["parser", "job", jobId] });
+    return true;
+  }
+
+  async function patchPackageCatalog(
+    packageId: string,
+    catalogId: string | null,
+  ) {
+    const r = await patchParserPackage(jobId, packageId, {
+      catalog_match_id: catalogId,
+    });
+    if (r.error) {
+      toast.error(`Update failed: ${r.error}`);
+      return false;
+    }
+    toast.success("Catalog match updated");
+    await qc.invalidateQueries({ queryKey: ["parser", "job", jobId] });
+    return true;
+  }
+
+  async function applyTourGeoSelection(
+    pkg: ParseJobPackageRow,
+    selections: GeoSelection[],
+  ) {
+    if (selections.length === 0) {
+      // Clear
+      const next: TourGeoMatch = {
+        primary_geo_id: null,
+        primary_geo_name: null,
+        primary_geo_score: null,
+        _has_match: false,
+      };
+      await patchPackageGeo(pkg.id, next);
+      return;
+    }
+    const sel = selections[0];
+    let geoId: string | null = null;
+    let label: string | null = sel.label ?? null;
+    if (sel.kind === "geo") {
+      geoId = sel.id;
+    } else if (sel.kind === "attraction" || sel.kind === "activity") {
+      if (!sel.geo_id) {
+        toast.error(
+          `${sel.label ?? "Selected item"} has no parent location yet — pick a city instead.`,
+        );
+        return;
+      }
+      geoId = sel.geo_id;
+    } else if (sel.kind === "dmc_custom") {
+      toast.info("Custom locations aren't supported yet — pick a city.");
+      return;
+    }
+    if (!geoId) return;
+    const next: TourGeoMatch = {
+      primary_geo_id: geoId,
+      primary_geo_name: label,
+      primary_geo_score: null,
+      _has_match: true,
+    };
+    await patchPackageGeo(pkg.id, next);
+  }
+
+  async function applyTransferStopGeo(
+    pkg: ParseJobPackageRow,
+    stopOrder: number,
+    selections: GeoSelection[],
+  ) {
+    const prev = (pkg.geo_match ?? {}) as unknown as TransferGeoMatch;
+    const stops = Array.isArray(prev.stops) ? prev.stops : [];
+
+    let geoId: string | null = null;
+    let label: string | null = null;
+    if (selections.length > 0) {
+      const sel = selections[0];
+      if (sel.kind === "geo") {
+        geoId = sel.id;
+        label = sel.label ?? null;
+      } else if (sel.kind === "attraction" || sel.kind === "activity") {
+        if (!sel.geo_id) {
+          toast.error(
+            `${sel.label ?? "Selected item"} has no parent location — pick a city instead.`,
+          );
+          return;
+        }
+        geoId = sel.geo_id;
+        label = sel.label ?? null;
+      } else {
+        toast.info("Custom locations aren't supported for stops yet.");
+        return;
+      }
+    }
+
+    const updated = stops.map((s) =>
+      s.stop_order === stopOrder
+        ? { ...s, geo_id: geoId, geo_name: label, score: null }
+        : s,
+    );
+    // Recompute _has_match: same rule as heuristic — origin (and destination
+    // if present) must resolve.
+    const requiredTypes: string[] = updated.some((s) => s.stop_type === "destination")
+      ? ["origin", "destination"]
+      : ["origin"];
+    const hasMatch = requiredTypes.every((t) =>
+      updated.some((m) => m.stop_type === t && m.geo_id !== null),
+    );
+
+    const next: TransferGeoMatch = {
+      ...prev,
+      stops: updated,
+      _has_match: hasMatch,
+    };
+    await patchPackageGeo(pkg.id, next);
+  }
+
+  async function applyCatalogSelection(
+    pkg: ParseJobPackageRow,
+    items: TourMasterCatalogItem[],
+  ) {
+    const id = items[0]?.id ?? null;
+    await patchPackageCatalog(pkg.id, id);
+  }
 
   const stats = useMemo(() => {
     const total = packages.length;
@@ -278,8 +475,10 @@ export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
                   selected={selectedIds.has(p.id)}
                   busy={busyIds.has(p.id)}
                   sourceEntry={sourceEntry}
+                  pickerEnabled={Boolean(countryId)}
                   onToggleSelect={() => toggleSelect(p.id)}
                   onSetStatus={(s) => setStatus(p.id, s)}
+                  onOpenPicker={(target) => setPicker(target)}
                 />
               ))
             )}
@@ -356,6 +555,73 @@ export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
           </Button>
         </div>
       </div>
+
+      {/* Geo picker — mounted once, opens for any tour-geo or
+       *  transfer-stop edit. Picker is a Dialog internally. */}
+      <GeoPickerModal
+        open={picker?.kind === "tour-geo" || picker?.kind === "transfer-stop"}
+        onOpenChange={(o) => {
+          if (!o) setPicker(null);
+        }}
+        countryId={countryId}
+        fieldLabel={
+          picker?.kind === "transfer-stop"
+            ? `Stop ${picker.stopOrder}`
+            : "Primary location"
+        }
+        initialSelections={[]}
+        enabledKinds={
+          picker?.kind === "transfer-stop"
+            ? ["city"]
+            : ["city", "custom_point", "tours"]
+        }
+        singleSelect
+        onApply={async (next) => {
+          const target = picker;
+          setPicker(null);
+          if (!target) return;
+          if (target.kind === "tour-geo") {
+            await applyTourGeoSelection(target.pkg, next);
+          } else if (target.kind === "transfer-stop") {
+            await applyTransferStopGeo(target.pkg, target.stopOrder, next);
+          }
+        }}
+      />
+
+      {/* Catalog picker — wrapped in Dialog because the inline picker
+       *  expects to live in a form. */}
+      <Dialog
+        open={picker?.kind === "tour-catalog"}
+        onOpenChange={(o) => {
+          if (!o) setPicker(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Pick master catalog entry</DialogTitle>
+          </DialogHeader>
+          {picker?.kind === "tour-catalog" ? (
+            <CatalogPickerBody
+              pkg={picker.pkg}
+              countryId={countryId}
+              onPick={async (items) => {
+                const target = picker;
+                setPicker(null);
+                if (target?.kind === "tour-catalog") {
+                  await applyCatalogSelection(target.pkg, items);
+                }
+              }}
+              onClear={async () => {
+                const target = picker;
+                setPicker(null);
+                if (target?.kind === "tour-catalog") {
+                  await applyCatalogSelection(target.pkg, []);
+                }
+              }}
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -417,15 +683,19 @@ function PackageRow({
   selected,
   busy,
   sourceEntry,
+  pickerEnabled,
   onToggleSelect,
   onSetStatus,
+  onOpenPicker,
 }: {
   pkg: ParseJobPackageRow;
   selected: boolean;
   busy: boolean;
   sourceEntry: SourceEntry;
+  pickerEnabled: boolean;
   onToggleSelect: () => void;
   onSetStatus: (s: "approved" | "rejected") => void;
+  onOpenPicker: (target: PickerTarget) => void;
 }) {
   const parsed = (pkg.parsed_data ?? {}) as Record<string, unknown>;
   const name = String(parsed.name ?? "(unnamed)");
@@ -455,7 +725,12 @@ function PackageRow({
         <ConfidenceBadge score={pkg.confidence_score} flags={pkg.heuristic_flags} reasons={pkg.confidence_reasons} />
       </TableCell>
       <TableCell className="text-xs">
-        <MatchSummary pkg={pkg} sourceEntry={sourceEntry} />
+        <MatchSummary
+          pkg={pkg}
+          sourceEntry={sourceEntry}
+          pickerEnabled={pickerEnabled && !isTerminal}
+          onOpenPicker={onOpenPicker}
+        />
       </TableCell>
       <TableCell>
         <ReviewStatusBadge status={pkg.review_status} />
@@ -556,32 +831,138 @@ function ReviewStatusBadge({ status }: { status: ParseJobPackageRow["review_stat
 function MatchSummary({
   pkg,
   sourceEntry,
+  pickerEnabled,
+  onOpenPicker,
 }: {
   pkg: ParseJobPackageRow;
   sourceEntry: SourceEntry;
+  pickerEnabled: boolean;
+  onOpenPicker: (target: PickerTarget) => void;
 }) {
   if (sourceEntry === "tours") {
-    const geo = (pkg.geo_match ?? {}) as { primary_geo_name?: string | null; primary_geo_score?: number | null };
-    const cat = pkg.catalog_match_id
-      ? `cat: ${(pkg.catalog_match_score ?? 0) >= 0.5 ? "✓" : "?"}`
-      : "no cat";
-    const geoLabel = geo.primary_geo_name
-      ? `geo: ${geo.primary_geo_name}`
-      : "no geo";
+    const geo = (pkg.geo_match ?? {}) as unknown as TourGeoMatch;
+    const geoLabel = geo.primary_geo_name ?? null;
+    const catLabel = pkg.catalog_match_id
+      ? `Linked${(pkg.catalog_match_score ?? 0) >= 0.5 ? " ✓" : " ?"}`
+      : "—";
     return (
-      <div className="text-xs text-muted-foreground">
-        {cat} · {geoLabel}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Catalog:</span>
+          <span>{catLabel}</span>
+          {pickerEnabled ? (
+            <ChangeButton onClick={() => onOpenPicker({ kind: "tour-catalog", pkg })} />
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Geo:</span>
+          <span className="truncate" title={geoLabel ?? undefined}>
+            {geoLabel ?? "—"}
+          </span>
+          {pickerEnabled ? (
+            <ChangeButton onClick={() => onOpenPicker({ kind: "tour-geo", pkg })} />
+          ) : null}
+        </div>
       </div>
     );
   }
-  const geo = (pkg.geo_match ?? {}) as {
-    stops?: Array<{ stop_type: string; geo_name: string | null }>;
-  };
-  const stops = geo.stops ?? [];
-  const matched = stops.filter((s) => s.geo_name).length;
+  const geo = (pkg.geo_match ?? {}) as unknown as TransferGeoMatch;
+  const stops = Array.isArray(geo.stops) ? geo.stops : [];
   return (
-    <div className="text-xs text-muted-foreground">
-      stops: {matched}/{stops.length} matched
+    <div className="space-y-0.5">
+      {stops.length === 0 ? (
+        <div className="text-muted-foreground">No stops parsed</div>
+      ) : (
+        stops.map((s) => (
+          <div
+            key={s.stop_order}
+            className="flex items-center gap-2"
+            title={s.raw_location ?? undefined}
+          >
+            <span className="text-muted-foreground">
+              Stop {s.stop_order} ({s.stop_type}):
+            </span>
+            <span className={s.geo_id ? "" : "text-amber-700"}>
+              {s.geo_name ?? "unmatched"}
+            </span>
+            {pickerEnabled ? (
+              <ChangeButton
+                onClick={() =>
+                  onOpenPicker({
+                    kind: "transfer-stop",
+                    pkg,
+                    stopOrder: s.stop_order,
+                  })
+                }
+              />
+            ) : null}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function ChangeButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-blue-600 hover:bg-blue-50"
+      aria-label="Change"
+    >
+      <Pencil className="h-3 w-3" />
+      <span className="text-[11px]">Change</span>
+    </button>
+  );
+}
+
+function CatalogPickerBody({
+  pkg,
+  countryId,
+  onPick,
+  onClear,
+}: {
+  pkg: ParseJobPackageRow;
+  countryId: string | null;
+  onPick: (items: TourMasterCatalogItem[]) => void | Promise<void>;
+  onClear: () => void | Promise<void>;
+}) {
+  const parsed = (pkg.parsed_data ?? {}) as { category?: string };
+  // Master catalog stores 'attraction' | 'activity'. Map the parsed
+  // tour-package category to the picker's `kind` arg, falling back to
+  // unfiltered ("any kind") for combo / day_trip / multi_day where it's
+  // unclear what to surface — the picker's search still works.
+  const kind =
+    parsed.category === "attraction"
+      ? "attraction"
+      : parsed.category === "activity"
+        ? "activity"
+        : undefined;
+  const [selected, setSelected] = useState<TourMasterCatalogItem[]>([]);
+  return (
+    <div className="space-y-3">
+      <MasterCatalogPicker
+        kind={kind}
+        countryId={countryId}
+        selected={selected}
+        maxSelections={1}
+        onChange={(next) => setSelected(next)}
+      />
+      <div className="flex items-center justify-end gap-2">
+        {pkg.catalog_match_id ? (
+          <Button variant="ghost" size="sm" onClick={() => onClear()}>
+            Clear link
+          </Button>
+        ) : null}
+        <Button
+          size="sm"
+          disabled={selected.length === 0}
+          onClick={() => onPick(selected)}
+        >
+          Apply
+        </Button>
+      </div>
     </div>
   );
 }

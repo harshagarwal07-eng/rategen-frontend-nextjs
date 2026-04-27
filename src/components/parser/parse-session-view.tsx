@@ -245,6 +245,7 @@ export function ParseSessionView({ jobId, sourceEntry }: Props) {
         <ReviewDashboard
           jobId={jobId}
           sourceEntry={sourceEntry}
+          countryCode={jobData?.job.country_code ?? ""}
           packages={jobData?.packages ?? []}
         />
       )}
