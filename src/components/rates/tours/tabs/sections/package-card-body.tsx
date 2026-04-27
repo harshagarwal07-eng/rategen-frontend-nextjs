@@ -45,7 +45,11 @@ import {
 } from "@/types/tours";
 
 import PackageCategoryToggle from "./package-category-toggle";
-import PackageSalesModeToggle from "./package-sales-mode-toggle";
+import PackageSalesModeToggle, {
+  defaultSalesModeFor,
+  isSalesModeAllowed,
+} from "./package-sales-mode-toggle";
+import { toast } from "sonner";
 import MasterCatalogPicker from "./master-catalog-picker";
 import ComboPoolBuilder from "./combo-pool-builder";
 import ComboPrimaryLocationsSection from "./combo-primary-locations-section";
@@ -179,6 +183,20 @@ export default function PackageCardBody({
     () => getTransferOptions(salesMode),
     [salesMode],
   );
+
+  // Coerce sales_mode to a legal value when category changes (e.g., switching
+  // attraction → day_trip while on Ticket).
+  useEffect(() => {
+    const cur = form.getValues("sales_mode");
+    if (!isSalesModeAllowed(cur, category)) {
+      const next = defaultSalesModeFor(category);
+      form.setValue("sales_mode", next, { shouldDirty: true });
+      toast.info(
+        `Sales mode reset to ${next} — ${cur} not available for ${category.replace("_", " ")}.`,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category]);
 
   // Coerce transfer_coverage to legal value when sales_mode changes.
   useEffect(() => {

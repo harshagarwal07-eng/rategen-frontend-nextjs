@@ -1,8 +1,9 @@
 "use client";
 
-// Sales-mode pill bar. Mirrors old_frontend SALES_MODES list.
-// `ticket` is disabled for `day_trip` and `multi_day` per legacy
-// `isSalesModeAllowed`.
+// Sales-mode pill bar. Available modes depend on package category.
+//   attraction / combo  → ticket, shared, private, exclusive
+//   day_trip / multi_day → shared, private, exclusive (no ticket)
+// Only allowed modes are rendered (not just disabled).
 
 import { cn } from "@/lib/utils";
 import {
@@ -20,13 +21,29 @@ const SALES_MODES: {
   { value: "exclusive", label: "Exclusive" },
 ];
 
+export function getAllowedSalesModes(
+  category: TourPackageCategory,
+): TourPackageSalesMode[] {
+  if (category === "day_trip" || category === "multi_day") {
+    return ["shared", "private", "exclusive"];
+  }
+  return ["ticket", "shared", "private", "exclusive"];
+}
+
 export function isSalesModeAllowed(
   mode: TourPackageSalesMode,
   category: TourPackageCategory,
 ): boolean {
-  if ((category === "day_trip" || category === "multi_day") && mode === "ticket")
-    return false;
-  return true;
+  return getAllowedSalesModes(category).includes(mode);
+}
+
+// New packages default to `private` if the category allows it (every
+// category does today), with `shared` as a structural fallback.
+export function defaultSalesModeFor(
+  category: TourPackageCategory,
+): TourPackageSalesMode {
+  const allowed = getAllowedSalesModes(category);
+  return allowed.includes("private") ? "private" : allowed[0];
 }
 
 interface PackageSalesModeToggleProps {
@@ -42,6 +59,7 @@ export default function PackageSalesModeToggle({
   category,
   className,
 }: PackageSalesModeToggleProps) {
+  const allowed = getAllowedSalesModes(category);
   return (
     <div
       className={cn(
@@ -49,27 +67,19 @@ export default function PackageSalesModeToggle({
         className,
       )}
     >
-      {SALES_MODES.map((opt) => {
-        const allowed = isSalesModeAllowed(opt.value, category);
+      {SALES_MODES.filter((o) => allowed.includes(o.value)).map((opt) => {
         const active = opt.value === value;
         return (
           <button
             key={opt.value}
             type="button"
-            disabled={!allowed}
-            onClick={() => allowed && onChange(opt.value)}
+            onClick={() => onChange(opt.value)}
             className={cn(
               "px-3 text-xs font-medium rounded-sm transition-colors",
               active
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
-              !allowed && "opacity-30 cursor-not-allowed",
             )}
-            title={
-              !allowed
-                ? "Ticket sales mode does not apply to day-trip or multi-day packages."
-                : undefined
-            }
           >
             {opt.label}
           </button>
