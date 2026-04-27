@@ -197,9 +197,12 @@ export default function MasterCatalogPicker({
                       <Plus className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
                     )}
                     <span className="truncate">{entry.name}</span>
-                    <span className="ml-auto text-muted-foreground capitalize">
+                    <Badge
+                      variant="secondary"
+                      className="ml-auto text-[10px] capitalize shrink-0"
+                    >
                       {entry.kind}
-                    </span>
+                    </Badge>
                   </button>
                 );
               })

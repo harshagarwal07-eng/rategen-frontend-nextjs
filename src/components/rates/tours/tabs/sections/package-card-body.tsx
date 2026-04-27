@@ -29,7 +29,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { UseFormReturn } from "react-hook-form";
-import GeoNodePicker from "@/components/shared/geo-node-picker";
+import PrimaryLocationPicker from "./primary-location-picker";
 import {
   TourAgePolicyBand,
   TourComboLocation,
@@ -358,11 +358,14 @@ export default function PackageCardBody({
           />
         </div>
 
-        {/* Section D — Master catalog / Combo / Day-trip multi-pick */}
+        {/* Section D — Master catalog / Combo / Day-trip multi-pick.
+            For attraction & activity package categories we no longer
+            filter by kind: the linked-catalog list mixes attractions
+            and activities (badges differentiate). Day-trip already
+            mixes; combo uses its own pool builder. */}
         {(category === "attraction" || category === "activity") && (
           <div className="flex flex-col gap-2">
             <MasterCatalogPicker
-              kind={category}
               countryId={countryId}
               selected={linkedMasters}
               maxSelections={1}
@@ -599,14 +602,17 @@ export default function PackageCardBody({
               <FormItem>
                 <FormLabel>Primary Location</FormLabel>
                 <FormControl>
-                  <GeoNodePicker
+                  <PrimaryLocationPicker
                     value={field.value ?? null}
+                    countryId={countryId}
                     onChange={(id) => field.onChange(id)}
-                    placeholder="Search zone/area…"
+                    placeholder="No primary location set"
                   />
                 </FormControl>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  Auto-set when a master attraction is linked.
+                  Auto-set when a master attraction is linked. Pick city
+                  or attraction/activity (UAE / Singapore / Bali /
+                  Mauritius) manually via the modal.
                 </p>
               </FormItem>
             )}

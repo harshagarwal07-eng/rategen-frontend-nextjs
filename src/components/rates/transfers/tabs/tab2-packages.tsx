@@ -906,7 +906,15 @@ export default function Tab2Packages({
       dmc_custom_location_id: s.kind === "dmc_custom" ? s.id : null,
       master_catalog_id: null,
     });
+    // The shared GeoSelection union now includes attraction/activity
+    // kinds for tour primary-location use; transfers stops only persist
+    // geo + dmc_custom, so guard before encoding.
+    const isPersistable = (
+      s: { kind: string; id: string },
+    ): s is { kind: "geo" | "dmc_custom"; id: string } =>
+      s.kind === "geo" || s.kind === "dmc_custom";
     for (const sel of sourceStops.origin) {
+      if (!isPersistable(sel)) continue;
       dupStopRows.push({
         stop_order: stopOrder++,
         stop_type: "origin",
@@ -927,6 +935,7 @@ export default function Tab2Packages({
       }
     }
     for (const sel of sourceStops.destination) {
+      if (!isPersistable(sel)) continue;
       dupStopRows.push({
         stop_order: stopOrder++,
         stop_type: "destination",

@@ -34,7 +34,31 @@ export type GeoSelection =
       // country column — it's derived from `parent_geo_id` → cities).
       country_id?: string;
       country_name?: string;
+    }
+  | {
+      // Master-catalog attraction. `id` is master_catalog.id; `geo_id`
+      // is the row's parent city — consumers that store a geo node FK
+      // (e.g. tour_packages.primary_geo_id) should resolve through that.
+      kind: "attraction";
+      id: string;
+      label?: string;
+      geo_id?: string | null;
+      country_id?: string;
+      country_name?: string;
+    }
+  | {
+      kind: "activity";
+      id: string;
+      label?: string;
+      geo_id?: string | null;
+      country_id?: string;
+      country_name?: string;
     };
+
+/** Country codes whose master-data tabs (attraction, activity, hotel
+ *  later) are populated. Tabs gated by this list show "Coming soon"
+ *  for any other country. */
+export const MASTER_DATA_COUNTRIES = ["AE", "SG", "ID", "MU"] as const;
 
 export function selectionKey(s: GeoSelection): string {
   return `${s.kind}:${s.id}`;

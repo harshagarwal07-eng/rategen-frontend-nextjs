@@ -139,7 +139,16 @@ export function buildStopsPayload(state: StopsState) {
   }> = [];
   let stop_order = 1;
 
+  // Transfers stops only persist `geo` and `dmc_custom` kinds. The
+  // shared GeoPickerModal can emit additional kinds (attraction,
+  // activity) when other consumers opt in via enabledKinds; transfers
+  // doesn't, but we guard defensively in case the upstream union grows.
+  const isPersistableKind = (
+    k: GeoSelection["kind"],
+  ): k is "geo" | "dmc_custom" => k === "geo" || k === "dmc_custom";
+
   for (const sel of state.origin) {
+    if (!isPersistableKind(sel.kind)) continue;
     rows.push({
       stop_order: stop_order++,
       stop_type: "origin",
@@ -158,6 +167,7 @@ export function buildStopsPayload(state: StopsState) {
     }
   }
   for (const sel of state.destination) {
+    if (!isPersistableKind(sel.kind)) continue;
     rows.push({
       stop_order: stop_order++,
       stop_type: "destination",

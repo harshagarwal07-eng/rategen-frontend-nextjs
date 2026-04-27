@@ -26,9 +26,14 @@ import { listCountries } from "@/data-access/geo-picker-api";
 import type { TransferCountryOption } from "@/types/transfers";
 import CityKindContent from "./kinds/city-kind";
 import CustomPointKindContent from "./kinds/custom-point-kind";
-import type {
-  GeoPickerKind,
-  GeoSelection,
+import {
+  AttractionKindContent,
+  ActivityKindContent,
+} from "./kinds/master-catalog-kind";
+import {
+  MASTER_DATA_COUNTRIES,
+  type GeoPickerKind,
+  type GeoSelection,
 } from "./types";
 
 export type { GeoSelection } from "./types";
@@ -37,57 +42,77 @@ export type { GeoSelection } from "./types";
 // reused across remounts.
 const countriesCache = { value: null as TransferCountryOption[] | null };
 
-const KINDS: GeoPickerKind[] = [
+// Kind registry. `requiresMasterData: true` gates the tab on the active
+// country code being in MASTER_DATA_COUNTRIES; if the consumer didn't
+// opt the kind in via `enabledKinds`, it stays disabled regardless. The
+// shell builds the activation matrix at render time using `enabledKinds`
+// and the active country.
+type KindRegistryEntry = Omit<GeoPickerKind, "enabled"> & {
+  requiresMasterData?: boolean;
+};
+
+const KINDS: KindRegistryEntry[] = [
   {
     id: "city",
     label: "City",
     Icon: Building2,
-    enabled: true,
     Content: CityKindContent,
   },
   {
     id: "custom_point",
     label: "Custom Point",
     Icon: MapPin,
-    enabled: true,
     Content: CustomPointKindContent,
   },
   {
     id: "hotel",
     label: "Hotel",
     Icon: Hotel,
-    enabled: false,
-    comingSoonHint: "Hotel pick coming soon — sourced from master catalog",
+    requiresMasterData: true,
+    comingSoonHint: "Hotel pick coming soon — needs seeded master data",
   },
   {
     id: "airport",
     label: "Airport",
     Icon: Plane,
-    enabled: false,
+    requiresMasterData: true,
     comingSoonHint: "Airport pick coming soon — needs seeded master data",
   },
   {
     id: "station",
     label: "Station",
     Icon: TrainFront,
-    enabled: false,
+    requiresMasterData: true,
     comingSoonHint: "Station pick coming soon — needs seeded master data",
   },
   {
     id: "port",
     label: "Port",
     Icon: Ship,
-    enabled: false,
+    requiresMasterData: true,
     comingSoonHint: "Port pick coming soon — needs seeded master data",
   },
   {
     id: "attraction",
     label: "Attraction",
     Icon: TreePine,
-    enabled: false,
-    comingSoonHint: "Attraction pick coming soon — sourced from master catalog",
+    requiresMasterData: true,
+    comingSoonHint:
+      "Attraction pick available for UAE / Singapore / Bali / Mauritius",
+    Content: AttractionKindContent,
+  },
+  {
+    id: "activity",
+    label: "Activity",
+    Icon: TreePine,
+    requiresMasterData: true,
+    comingSoonHint:
+      "Activity pick available for UAE / Singapore / Bali / Mauritius",
+    Content: ActivityKindContent,
   },
 ];
+
+const DEFAULT_ENABLED_KINDS: string[] = ["city", "custom_point"];
 
 export interface GeoPickerModalProps {
   open: boolean;
@@ -99,6 +124,15 @@ export interface GeoPickerModalProps {
   fieldLabel: string;
   initialSelections: GeoSelection[];
   onApply: (next: GeoSelection[]) => void;
+  /** Kinds the consumer wants exposed. Defaults to ['city', 'custom_point']
+   *  to preserve existing transfers behavior. Tabs gated by master data
+   *  (attraction/activity/hotel/etc.) are still disabled when the active
+   *  country lacks data, even if listed here. */
+  enabledKinds?: string[];
+  /** When true, applying clears any previous selection and replaces it
+   *  with the latest single click. Used by single-pick consumers like
+   *  tour primary-location. */
+  singleSelect?: boolean;
 }
 
 export default function GeoPickerModal({
@@ -108,6 +142,8 @@ export default function GeoPickerModal({
   fieldLabel,
   initialSelections,
   onApply,
+  enabledKinds = DEFAULT_ENABLED_KINDS,
+  singleSelect = false,
 }: GeoPickerModalProps) {
   const [activeKindId, setActiveKindId] = useState<string>(KINDS[0].id);
   const [selections, setSelections] = useState<GeoSelection[]>(
@@ -144,10 +180,53 @@ export default function GeoPickerModal({
     };
   }, []);
 
-  const activeKind = useMemo(
-    () => KINDS.find((k) => k.id === activeKindId) ?? KINDS[0],
-    [activeKindId],
+  const activeCountryCode = useMemo(() => {
+    if (!activeCountryId || !countries) return null;
+    return countries.find((c) => c.id === activeCountryId)?.country_code ?? null;
+  }, [activeCountryId, countries]);
+
+  // Build per-kind enabled flag from registry + consumer's enabledKinds
+  // + master-data gating.
+  const enabledKindSet = useMemo(
+    () => new Set(enabledKinds),
+    [enabledKinds],
   );
+  const kindList = useMemo<GeoPickerKind[]>(
+    () =>
+      KINDS.map((k) => {
+        const consumerOptIn = enabledKindSet.has(k.id);
+        const dataAvailable =
+          !k.requiresMasterData ||
+          (activeCountryCode !== null &&
+            (MASTER_DATA_COUNTRIES as readonly string[]).includes(
+              activeCountryCode,
+            ));
+        return {
+          id: k.id,
+          label: k.label,
+          Icon: k.Icon,
+          comingSoonHint: k.comingSoonHint,
+          Content: k.Content,
+          enabled: consumerOptIn && dataAvailable && !!k.Content,
+        };
+      }),
+    [enabledKindSet, activeCountryCode],
+  );
+
+  const activeKind = useMemo(
+    () => kindList.find((k) => k.id === activeKindId) ?? kindList[0],
+    [activeKindId, kindList],
+  );
+
+  // If the current tab is disabled (e.g. user changed country and the
+  // master-data tab no longer applies), shift to the first enabled tab.
+  useEffect(() => {
+    const current = kindList.find((k) => k.id === activeKindId);
+    if (current && !current.enabled) {
+      const firstEnabled = kindList.find((k) => k.enabled);
+      if (firstEnabled) setActiveKindId(firstEnabled.id);
+    }
+  }, [kindList, activeKindId]);
 
   const countryOptions = useMemo(
     () =>
@@ -229,7 +308,7 @@ export default function GeoPickerModal({
 
         {/* Kind tabs */}
         <div className="flex flex-wrap items-center gap-1.5 px-4 py-2 border-b bg-muted/30">
-          {KINDS.map((k) => {
+          {kindList.map((k) => {
             const isActive = k.id === activeKindId;
             const Icon = k.Icon;
             return (
@@ -270,7 +349,15 @@ export default function GeoPickerModal({
             <activeKind.Content
               activeCountryId={activeCountryId}
               selections={selections}
-              onChange={setSelections}
+              onChange={(next) => {
+                // Single-select: keep only the most recently added entry
+                // so only one chip ever shows.
+                if (singleSelect && next.length > 1) {
+                  setSelections([next[next.length - 1]]);
+                  return;
+                }
+                setSelections(next);
+              }}
               search={search}
             />
           ) : (
