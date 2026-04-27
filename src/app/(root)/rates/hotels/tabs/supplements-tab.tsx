@@ -41,6 +41,7 @@ import {
   deleteSupplement,
   getSupplementDetail,
   listContractSupplements,
+  replaceSupplementAgeBands,
   replaceSupplementAgePricing,
   replaceSupplementDateRanges,
   replaceSupplementMealPlans,
@@ -59,6 +60,7 @@ import {
   buildDateRangePayload,
   computeGalaDates,
   LocalSupplement,
+  newAgeBandLocalId,
   newAgePricingLocalId,
   newLocalId,
   newRangeLocalId,
@@ -469,6 +471,14 @@ function SupplementsEditor({
       const idx = prev.findIndex((s) => s._localId === localId);
       if (idx < 0) return prev;
       const src = prev[idx];
+      // Re-mint band local ids and rebind pricing rows so the clone is fully
+      // self-contained (no shared _localId references with the source).
+      const bandIdMap = new Map<string, string>();
+      const newBands = src.age_bands.map((b) => {
+        const nextId = newAgeBandLocalId();
+        bandIdMap.set(b._localId, nextId);
+        return { ...b, _localId: nextId, id: null };
+      });
       const clone: LocalSupplement = {
         ...src,
         _localId: newLocalId(),
@@ -482,12 +492,16 @@ function SupplementsEditor({
           ...r,
           _localId: newRangeLocalId(),
         })),
+        age_bands: newBands,
         room_category_ids: [...src.room_category_ids],
         meal_plans: [...src.meal_plans],
         age_pricing: src.age_pricing.map((ap) => ({
           ...ap,
           _localId: newAgePricingLocalId(),
           id: null,
+          _localBandId: ap._localBandId
+            ? bandIdMap.get(ap._localBandId) ?? null
+            : null,
         })),
         contract_tax_ids: [...src.contract_tax_ids],
         contract_tax_inclusive: { ...src.contract_tax_inclusive },
@@ -531,6 +545,53 @@ function SupplementsEditor({
         );
         return;
       }
+      // Custom age bands — mirror backend validation so we fail fast and
+      // never POST a payload the API will 400 on.
+      if (s.use_custom_age_bands) {
+        if (s.supplement_type === "meal_plan") {
+          toast.error(
+            `"${s.name}": meal plan supplements cannot use custom age bands.`
+          );
+          return;
+        }
+        const seenLabels = new Set<string>();
+        for (const b of s.age_bands) {
+          const label = b.label.trim();
+          if (!label) {
+            toast.error(`"${s.name}": every custom age band needs a label.`);
+            return;
+          }
+          if (b.age_to < b.age_from) {
+            toast.error(
+              `"${s.name}": band "${label}" age_to must be ≥ age_from.`
+            );
+            return;
+          }
+          const key = label.toLowerCase();
+          if (seenLabels.has(key)) {
+            toast.error(`"${s.name}": duplicate band label "${label}".`);
+            return;
+          }
+          seenLabels.add(key);
+        }
+        const sorted = [...s.age_bands].sort((a, b) => a.age_from - b.age_from);
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i].age_from <= sorted[i - 1].age_to) {
+            toast.error(
+              `"${s.name}": bands "${sorted[i - 1].label}" and "${sorted[i].label}" overlap.`
+            );
+            return;
+          }
+        }
+        for (const ap of s.age_pricing) {
+          if (!ap._localBandId) {
+            toast.error(
+              `"${s.name}": every age pricing row must reference a band when custom bands are on.`
+            );
+            return;
+          }
+        }
+      }
     }
 
     setSaving(true);
@@ -542,7 +603,8 @@ function SupplementsEditor({
         const s = updatedItems[i];
         if (!dirtyMap[s._localId]) continue;
 
-        // Phase 1 — main row
+        // Phase 1 — main row. Toggle is hard-set false for meal_plan so we
+        // never send it true even if the local row was somehow flipped.
         const mainPayload: CreateSupplementPayload = {
           name: s.name.trim(),
           supplement_type: s.supplement_type,
@@ -561,6 +623,10 @@ function SupplementsEditor({
           is_free: false,
           meal_plan_id:
             s.supplement_type === "meal_plan" ? s.meal_plan_id : null,
+          use_custom_age_bands:
+            s.supplement_type === "meal_plan"
+              ? false
+              : s.use_custom_age_bands,
           valid_from: s.valid_from,
           valid_till: s.valid_till,
           booking_from: s.booking_from,
@@ -617,41 +683,88 @@ function SupplementsEditor({
           throw new Error(`Room categories for "${s.name}": ${rcRes.error}`);
         }
 
-        // Age pricing — resolve any missing age_policy_id by lookup-or-create
-        // via a parallel request. The backend doesn't lazy-create age_policies,
-        // so we depend on Tab 2's seeded bands here. Bands without an id are
-        // dropped with a toast.
+        // Custom age bands — must run BEFORE age-pricing PUT so the bands
+        // exist when pricing references them. Backend save order per the
+        // foot-gun note: PATCH supplement → PUT age-bands → PUT age-pricing.
+        // For non-meal_plan supplements we always send the call (even with [])
+        // so toggling OFF actually clears bands from the previous session;
+        // otherwise stale rows would re-appear on next reload. meal_plan
+        // supplements are rejected by the backend, so skip entirely.
+        const localBandToReal = new Map<string, string>();
+        const useBands =
+          s.supplement_type !== "meal_plan" && s.use_custom_age_bands;
+        if (s.supplement_type !== "meal_plan") {
+          const bandPayload = useBands
+            ? s.age_bands.map((b) => ({
+                ...(b.id ? { id: b.id } : {}),
+                label: b.label.trim(),
+                age_from: b.age_from,
+                age_to: b.age_to,
+                sort_order: b.sort_order,
+              }))
+            : [];
+          const bandsRes = await replaceSupplementAgeBands(realId, bandPayload);
+          if (bandsRes.error) {
+            throw new Error(`Age bands for "${s.name}": ${bandsRes.error}`);
+          }
+          if (useBands) {
+            // Map local _localId → real id by label (UNIQUE within
+            // supplement backs this — same key snapshotSupplement uses).
+            const realByLabel = new Map<string, string>();
+            for (const r of bandsRes.data ?? []) {
+              realByLabel.set(r.label.trim().toLowerCase(), r.id);
+            }
+            for (const b of s.age_bands) {
+              const real = realByLabel.get(b.label.trim().toLowerCase());
+              if (real) localBandToReal.set(b._localId, real);
+            }
+          }
+        }
+
+        // Age pricing — payload shape depends on the toggle. In band mode
+        // each row carries supplement_age_band_id; in policy mode it carries
+        // age_policy_id resolved by label match (existing behaviour).
         const apItems: Array<{
-          age_policy_id: string;
+          age_policy_id?: string;
+          supplement_age_band_id?: string;
           is_free: boolean;
           price?: number;
           price_type?: string;
         }> = [];
         const dropped: string[] = [];
         for (const ap of s.age_pricing) {
-          let policyId = ap.age_policy_id;
-          if (!policyId) {
-            // Try matching against agePolicies by label only — safer than
-            // age_from/age_to since users may tweak the band ranges.
-            const match = agePolicies.find(
-              (p) =>
-                p.label.trim().toLowerCase() === ap.label.trim().toLowerCase()
-            );
-            if (match) policyId = match.id;
-          }
-          if (!policyId) {
-            dropped.push(ap.label || "(unlabeled)");
-            continue;
-          }
           const row: {
-            age_policy_id: string;
+            age_policy_id?: string;
+            supplement_age_band_id?: string;
             is_free: boolean;
             price?: number;
             price_type?: string;
-          } = {
-            age_policy_id: policyId,
-            is_free: ap.is_free,
-          };
+          } = { is_free: ap.is_free };
+          if (useBands) {
+            const realBandId = ap._localBandId
+              ? localBandToReal.get(ap._localBandId)
+              : undefined;
+            if (!realBandId) {
+              dropped.push(ap._localBandId ?? "(unbound)");
+              continue;
+            }
+            row.supplement_age_band_id = realBandId;
+          } else {
+            let policyId = ap.age_policy_id ?? undefined;
+            if (!policyId) {
+              const match = agePolicies.find(
+                (p) =>
+                  p.label.trim().toLowerCase() ===
+                  ap.label.trim().toLowerCase()
+              );
+              if (match) policyId = match.id;
+            }
+            if (!policyId) {
+              dropped.push(ap.label || "(unlabeled)");
+              continue;
+            }
+            row.age_policy_id = policyId;
+          }
           if (!ap.is_free) {
             if (ap.price != null) row.price = ap.price;
             if (ap.price_type) row.price_type = ap.price_type;
@@ -660,11 +773,13 @@ function SupplementsEditor({
         }
         if (dropped.length > 0) {
           toast.warning(
-            `"${s.name}": skipped age band${
+            `"${s.name}": skipped ${dropped.length} age pricing row${
               dropped.length === 1 ? "" : "s"
-            } — define them in Rooms & Seasons → Age Policies first: ${dropped.join(
-              ", "
-            )}`
+            } — ${
+              useBands
+                ? "band binding could not be resolved"
+                : "define them in Rooms & Seasons → Age Policies first"
+            }: ${dropped.join(", ")}`
           );
         }
         const apRes = await replaceSupplementAgePricing(realId, apItems);
@@ -682,10 +797,19 @@ function SupplementsEditor({
           throw new Error(`Taxes for "${s.name}": ${txRes.error}`);
         }
 
+        // Propagate real band ids onto local bands so the next save round
+        // sends UPDATE (with id) instead of INSERT for the same band.
+        const refreshedBands = useBands
+          ? s.age_bands.map((b) => {
+              const real = localBandToReal.get(b._localId);
+              return real ? { ...b, id: real } : b;
+            })
+          : [];
         const updated: LocalSupplement = {
           ...s,
           id: realId,
           isNew: false,
+          age_bands: refreshedBands,
         };
         updatedItems[i] = updated;
         newSnapshots[updated._localId] = snapshotSupplement(updated);

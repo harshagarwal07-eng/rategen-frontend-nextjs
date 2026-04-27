@@ -3,6 +3,7 @@
 import { http } from "@/lib/api";
 import {
   CreateSupplementPayload,
+  SupplementAgeBand,
   SupplementAgePricingRow,
   SupplementBase,
   SupplementContractTaxRow,
@@ -148,7 +149,8 @@ export async function replaceSupplementTaxes(
 export async function replaceSupplementAgePricing(
   supplementId: string,
   items: Array<{
-    age_policy_id: string;
+    age_policy_id?: string;
+    supplement_age_band_id?: string;
     is_free?: boolean;
     price?: number;
     price_type?: string;
@@ -161,4 +163,26 @@ export async function replaceSupplementAgePricing(
   const err = hasError(raw);
   if (err) return { data: null, error: err };
   return { data: (raw as SupplementAgePricingRow[]) ?? [], error: null };
+}
+
+// PUT /api/supplements/:id/age-bands
+// Replaces the supplement's custom age bands. Backend rejects when
+// supplement_type === 'meal_plan'.
+export async function replaceSupplementAgeBands(
+  supplementId: string,
+  age_bands: Array<{
+    id?: string;
+    label: string;
+    age_from: number;
+    age_to: number;
+    sort_order?: number;
+  }>
+): Promise<Result<SupplementAgeBand[]>> {
+  const raw = await http.put<SupplementAgeBand[]>(
+    `/api/supplements/${supplementId}/age-bands`,
+    { age_bands }
+  );
+  const err = hasError(raw);
+  if (err) return { data: null, error: err };
+  return { data: (raw as SupplementAgeBand[]) ?? [], error: null };
 }

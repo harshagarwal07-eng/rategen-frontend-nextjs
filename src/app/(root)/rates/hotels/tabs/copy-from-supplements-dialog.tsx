@@ -29,9 +29,10 @@ import { DmcContract } from "@/types/dmc-contracts";
 import { SupplementType } from "@/types/contract-supplements";
 import {
   LocalSupplement,
+  newAgeBandLocalId,
+  newAgePricingLocalId,
   newLocalId,
   newRangeLocalId,
-  newAgePricingLocalId,
   wrapSupplement,
 } from "./sections/supplements-shared";
 
@@ -107,7 +108,14 @@ export default function CopyFromSupplementsDialog({
       for (const r of detailResults) {
         if (!r.data) continue;
         const wrapped = wrapSupplement(r.data);
-        // Strip ids so this becomes a local-only insert.
+        // Strip ids so this becomes a local-only insert. Re-mint band local
+        // ids and rebind pricing rows so the clone is fully self-contained.
+        const bandIdMap = new Map<string, string>();
+        const newBands = wrapped.age_bands.map((b) => {
+          const nextId = newAgeBandLocalId();
+          bandIdMap.set(b._localId, nextId);
+          return { ...b, _localId: nextId, id: null };
+        });
         const cloned: LocalSupplement = {
           ...wrapped,
           _localId: newLocalId(),
@@ -122,6 +130,7 @@ export default function CopyFromSupplementsDialog({
             ...rr,
             _localId: newRangeLocalId(),
           })),
+          age_bands: newBands,
           age_pricing: wrapped.age_pricing.map((ap) => ({
             ...ap,
             _localId: newAgePricingLocalId(),
@@ -129,6 +138,9 @@ export default function CopyFromSupplementsDialog({
             // age_policy_id from source contract is invalid for the target —
             // drop and rely on label match at save time.
             age_policy_id: null,
+            _localBandId: ap._localBandId
+              ? bandIdMap.get(ap._localBandId) ?? null
+              : null,
           })),
         };
         fresh.push(cloned);

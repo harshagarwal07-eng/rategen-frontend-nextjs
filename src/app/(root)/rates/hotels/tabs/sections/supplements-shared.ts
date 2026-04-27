@@ -19,17 +19,29 @@ export interface LocalDateRange {
 export interface LocalAgePricing {
   _localId: string;
   id: string | null;
+  // Policy mode (use_custom_age_bands=false): age_policy_id resolves at save
+  // time via label-match against contract-level age_policies. label/age_from/
+  // age_to are user-edited inline.
   age_policy_id: string | null;
-  // Legacy contract from old_frontend: when picking a fresh age band the user
-  // chooses by label/from-to and we lazy-create an age_policy on save. The
-  // backend supplement age-pricing replace endpoint requires age_policy_id, so
-  // unsaved rows must resolve to a real id at save time.
   label: string;
   age_from: number;
   age_to: number;
+  // Band mode (use_custom_age_bands=true): the row binds to a LocalAgeBand by
+  // its _localId. At save, _localBandId is mapped to the real
+  // supplement_age_band_id from the bands PUT response (matched by label).
+  _localBandId: string | null;
   is_free: boolean;
   price: number | null;
   price_type: "fixed" | "percentage" | null;
+}
+
+export interface LocalAgeBand {
+  _localId: string;
+  id: string | null;
+  label: string;
+  age_from: number;
+  age_to: number;
+  sort_order: number;
 }
 
 export interface LocalSupplement {
@@ -58,6 +70,12 @@ export interface LocalSupplement {
   // Extra valid/booking ranges live in supplement_date_ranges.
   valid_ranges: LocalDateRange[];
   booking_ranges: LocalDateRange[];
+
+  // Per-supplement age band override (transfer + other only). When true, the
+  // supplement carries its own bands (age_bands) and pricing rows reference
+  // those instead of contract-level age_policies. Forced false for meal_plan.
+  use_custom_age_bands: boolean;
+  age_bands: LocalAgeBand[];
 
   // Sub-tables.
   room_category_ids: string[]; // empty = all rooms
@@ -90,6 +108,7 @@ export const AGE_LABELS = ["infant", "child", "teen", "adult"] as const;
 export const newLocalId = () => `supp-${crypto.randomUUID()}`;
 export const newRangeLocalId = () => `range-${crypto.randomUUID()}`;
 export const newAgePricingLocalId = () => `ap-${crypto.randomUUID()}`;
+export const newAgeBandLocalId = () => `band-${crypto.randomUUID()}`;
 
 // Auto-detect Christmas Gala / New Year Gala windows for a given contract
 // stay period. Uses the SEEDED meal-plan codes (XM-GD / NY-GD) — old_frontend
@@ -173,6 +192,8 @@ export function blankSupplement(
     booking_till: contract?.booking_valid_till ?? null,
     valid_ranges: [],
     booking_ranges: [],
+    use_custom_age_bands: false,
+    age_bands: [],
     room_category_ids: [],
     meal_plans: [],
     age_pricing: [],
@@ -202,6 +223,21 @@ export function wrapSupplement(detail: SupplementDetail): LocalSupplement {
   const taxInclusive: Record<string, boolean> = {};
   for (const t of detail.contract_taxes ?? []) {
     taxInclusive[t.contract_tax_id] = !!t.is_inclusive;
+  }
+
+  const bands: LocalAgeBand[] = (detail.age_bands ?? []).map((b) => ({
+    _localId: newAgeBandLocalId(),
+    id: b.id,
+    label: b.label,
+    age_from: b.age_from,
+    age_to: b.age_to,
+    sort_order: b.sort_order ?? 0,
+  }));
+  // Map real band id → its freshly-minted _localId so pricing rows can bind by
+  // local id throughout the editing session.
+  const bandIdToLocal = new Map<string, string>();
+  for (const b of bands) {
+    if (b.id) bandIdToLocal.set(b.id, b._localId);
   }
 
   return {
@@ -239,6 +275,8 @@ export function wrapSupplement(detail: SupplementDetail): LocalSupplement {
     booking_till: detail.booking_till,
     valid_ranges: validExtras,
     booking_ranges: bookingExtras,
+    use_custom_age_bands: !!detail.use_custom_age_bands,
+    age_bands: bands,
     room_category_ids: (detail.room_categories ?? []).map(
       (r) => r.room_category_id
     ),
@@ -247,6 +285,9 @@ export function wrapSupplement(detail: SupplementDetail): LocalSupplement {
       _localId: newAgePricingLocalId(),
       id: ap.id ?? null,
       age_policy_id: ap.age_policy_id ?? null,
+      _localBandId: ap.supplement_age_band_id
+        ? bandIdToLocal.get(ap.supplement_age_band_id) ?? null
+        : null,
       label: "",
       age_from: 0,
       age_to: 99,
@@ -308,6 +349,13 @@ export function unflattenFromDisplay(
 }
 
 export function snapshotSupplement(s: LocalSupplement): string {
+  // For band-mode pricing rows, key by the bound band's label rather than its
+  // _localId — local ids regenerate on every reload and would mark all rows
+  // dirty after a refresh. Labels are unique within a supplement (DB UNIQUE).
+  const bandLabelByLocalId = new Map<string, string>();
+  for (const b of s.age_bands) bandLabelByLocalId.set(b._localId, b.label.trim());
+  const useBands = s.use_custom_age_bands;
+
   const stripped = {
     id: s.id,
     name: s.name.trim(),
@@ -324,6 +372,7 @@ export function snapshotSupplement(s: LocalSupplement): string {
     flat_amount: s.charge_basis === "per_room" ? s.flat_amount : null,
     flat_amount_type:
       s.charge_basis === "per_room" ? s.flat_amount_type : null,
+    use_custom_age_bands: useBands,
     valid_from: s.valid_from,
     valid_till: s.valid_till,
     booking_from: s.booking_from,
@@ -336,11 +385,26 @@ export function snapshotSupplement(s: LocalSupplement): string {
       .map((r) => ({ date_from: r.date_from, date_to: r.date_to })),
     room_category_ids: [...s.room_category_ids].sort(),
     meal_plans: [...s.meal_plans].sort(),
+    age_bands: useBands
+      ? [...s.age_bands]
+          .map((b) => ({
+            label: b.label.trim(),
+            age_from: b.age_from,
+            age_to: b.age_to,
+            sort_order: b.sort_order,
+          }))
+          .sort((a, b) => a.label.localeCompare(b.label))
+      : [],
     age_pricing: s.age_pricing.map((ap) => ({
-      age_policy_id: ap.age_policy_id,
-      label: ap.label,
-      age_from: ap.age_from,
-      age_to: ap.age_to,
+      band_label: useBands
+        ? ap._localBandId
+          ? bandLabelByLocalId.get(ap._localBandId) ?? null
+          : null
+        : null,
+      age_policy_id: useBands ? null : ap.age_policy_id,
+      label: useBands ? "" : ap.label,
+      age_from: useBands ? 0 : ap.age_from,
+      age_to: useBands ? 99 : ap.age_to,
       is_free: ap.is_free,
       price: ap.is_free ? null : ap.price,
       price_type: ap.is_free ? null : ap.price_type,

@@ -22,12 +22,14 @@ import {
 import { cn } from "@/lib/utils";
 import {
   AGE_LABELS,
+  LocalAgeBand,
   LocalAgePricing,
   LocalSupplement,
   MEAL_PLAN_CODES,
   SUPPLEMENT_TYPE_BADGE,
   SUPPLEMENT_TYPE_LABELS,
   flattenForDisplay,
+  newAgeBandLocalId,
   newAgePricingLocalId,
   newRangeLocalId,
   unflattenFromDisplay,
@@ -146,6 +148,7 @@ export function SupplementCard({
         _localId: newAgePricingLocalId(),
         id: null,
         age_policy_id: null,
+        _localBandId: null,
         label: "adult",
         age_from: 18,
         age_to: 99,
@@ -171,6 +174,7 @@ export function SupplementCard({
         _localId: newAgePricingLocalId(),
         id: null,
         age_policy_id: ap.id,
+        _localBandId: null,
         label: ap.label,
         age_from: ap.age_from,
         age_to: ap.age_to,
@@ -179,6 +183,156 @@ export function SupplementCard({
         price_type: "fixed",
       }))
     );
+  }
+
+  // ---- Custom age bands (transfer / other only) ----
+  const showCustomBandsToggle =
+    s.charge_basis === "per_person" &&
+    (s.supplement_type === "transfer" || s.supplement_type === "other");
+
+  function flipCustomBandsToggle(want: boolean) {
+    if (want === s.use_custom_age_bands) return;
+    if (want) {
+      // Seed bands from rooms-scope age policies; clear pricing rows since
+      // they referenced policies (now stale) and would orphan after the flip.
+      const seeded: LocalAgeBand[] = agePolicies.map((ap, idx) => ({
+        _localId: newAgeBandLocalId(),
+        id: null,
+        label: ap.label,
+        age_from: ap.age_from,
+        age_to: ap.age_to,
+        sort_order: idx,
+      }));
+      update({
+        use_custom_age_bands: true,
+        age_bands: seeded,
+        age_pricing: [],
+      });
+    } else {
+      // Reverting: drop custom bands and clear pricing (it referenced bands
+      // that no longer exist). User starts fresh in policy mode.
+      update({
+        use_custom_age_bands: false,
+        age_bands: [],
+        age_pricing: [],
+      });
+    }
+  }
+
+  // Confirm-flip: set when a flip would discard existing user state.
+  const [pendingToggleTo, setPendingToggleTo] = useState<boolean | null>(null);
+  function onToggleClick(want: boolean) {
+    if (want === s.use_custom_age_bands) return;
+    const hasState = s.age_bands.length > 0 || s.age_pricing.length > 0;
+    if (!hasState) {
+      flipCustomBandsToggle(want);
+      return;
+    }
+    setPendingToggleTo(want);
+  }
+  function confirmToggle() {
+    if (pendingToggleTo === null) return;
+    flipCustomBandsToggle(pendingToggleTo);
+    setPendingToggleTo(null);
+  }
+  function cancelToggle() {
+    setPendingToggleTo(null);
+  }
+
+  function updateBand(index: number, patch: Partial<LocalAgeBand>) {
+    const next = [...s.age_bands];
+    next[index] = { ...next[index], ...patch };
+    field("age_bands", next);
+  }
+  function addBand() {
+    field("age_bands", [
+      ...s.age_bands,
+      {
+        _localId: newAgeBandLocalId(),
+        id: null,
+        label: "",
+        age_from: 0,
+        age_to: 0,
+        sort_order: s.age_bands.length,
+      },
+    ]);
+  }
+  function removeBand(index: number) {
+    const removed = s.age_bands[index];
+    update({
+      age_bands: s.age_bands.filter((_, i) => i !== index),
+      // Drop any pricing row that referenced the deleted band to avoid an
+      // orphan binding (the band row would render "—" and fail at save).
+      age_pricing: removed
+        ? s.age_pricing.filter((ap) => ap._localBandId !== removed._localId)
+        : s.age_pricing,
+    });
+  }
+  function reseedBandsFromRoomAgePolicy() {
+    if (agePolicies.length === 0) return;
+    const seeded: LocalAgeBand[] = agePolicies.map((ap, idx) => ({
+      _localId: newAgeBandLocalId(),
+      id: null,
+      label: ap.label,
+      age_from: ap.age_from,
+      age_to: ap.age_to,
+      sort_order: idx,
+    }));
+    // Reset pricing too — the previous bands are gone.
+    update({ age_bands: seeded, age_pricing: [] });
+  }
+
+  function addBandPricingRow() {
+    field("age_pricing", [
+      ...s.age_pricing,
+      {
+        _localId: newAgePricingLocalId(),
+        id: null,
+        age_policy_id: null,
+        _localBandId: s.age_bands[0]?._localId ?? null,
+        label: "",
+        age_from: 0,
+        age_to: 99,
+        is_free: false,
+        price: null,
+        price_type: "fixed",
+      },
+    ]);
+  }
+
+  // ---- Band validation: per-row + cross-row overlap + label uniqueness ----
+  const bandErrors: Record<string, string> = {};
+  if (s.use_custom_age_bands) {
+    const seenLabels = new Map<string, number>();
+    for (let i = 0; i < s.age_bands.length; i++) {
+      const b = s.age_bands[i];
+      const key = b.label.trim().toLowerCase();
+      if (!key) {
+        bandErrors[b._localId] = "Label required";
+        continue;
+      }
+      const dupAt = seenLabels.get(key);
+      if (dupAt !== undefined) {
+        bandErrors[b._localId] = `Duplicate label of row ${dupAt + 1}`;
+      }
+      seenLabels.set(key, i);
+      if (b.age_to < b.age_from) {
+        bandErrors[b._localId] = "Age To must be ≥ Age From";
+      }
+    }
+    // Overlap detection (sort by age_from, check each band's start > previous end).
+    const sorted = [...s.age_bands]
+      .map((b, i) => ({ b, i }))
+      .sort((a, c) => a.b.age_from - c.b.age_from);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1].b;
+      const cur = sorted[i].b;
+      if (cur.age_from <= prev.age_to) {
+        bandErrors[cur._localId] = bandErrors[cur._localId]
+          ? `${bandErrors[cur._localId]}; overlaps "${prev.label || "(unnamed)"}"`
+          : `Overlaps "${prev.label || "(unnamed)"}" (${prev.age_from}-${prev.age_to})`;
+      }
+    }
   }
 
   // ---- Meal plan picker (only for type=meal_plan) ----
@@ -678,7 +832,7 @@ export function SupplementCard({
               expanded={ageOpen}
               onToggle={() => setAgeOpen(!ageOpen)}
               headerExtra={
-                agePolicies.length > 0 ? (
+                !s.use_custom_age_bands && agePolicies.length > 0 ? (
                   <button
                     type="button"
                     className="text-xs font-medium text-primary hover:underline"
@@ -692,7 +846,158 @@ export function SupplementCard({
                 ) : null
               }
             >
-              {s.age_pricing.length > 0 && (
+              {/* Custom-bands toggle (transfer + other only) */}
+              {showCustomBandsToggle && (
+                <div className="mb-3 flex items-center justify-between gap-3 rounded-md border bg-background/60 px-3 py-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium">
+                      Use custom age bands for this supplement
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {s.use_custom_age_bands
+                        ? "Pricing rows reference bands defined below."
+                        : "Using contract age policies. Toggle on to define custom bands."}
+                    </p>
+                  </div>
+                  <Switch
+                    checked={s.use_custom_age_bands}
+                    onCheckedChange={(v) => onToggleClick(!!v)}
+                  />
+                </div>
+              )}
+
+              {/* Inline confirm bar shown when flipping the toggle would
+                  discard existing band/pricing state. */}
+              {pendingToggleTo !== null && (
+                <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <p className="mb-2">
+                    {pendingToggleTo
+                      ? "Switching to custom bands will reset existing age pricing for this supplement. Continue?"
+                      : "Switching off will discard your custom bands and reset age pricing to contract age policies. Continue?"}
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={cancelToggle}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      onClick={confirmToggle}
+                    >
+                      Continue
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Custom bands editor — visible only when toggle is on. */}
+              {s.use_custom_age_bands && (
+                <div className="mb-3 rounded-md border bg-background/60 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Custom Age Bands
+                    </span>
+                    {agePolicies.length > 0 && (
+                      <button
+                        type="button"
+                        className="text-xs font-medium text-primary hover:underline"
+                        onClick={reseedBandsFromRoomAgePolicy}
+                      >
+                        Reseed from room age policy
+                      </button>
+                    )}
+                  </div>
+                  {s.age_bands.length > 0 ? (
+                    <div className="rounded-md border">
+                      <div className="grid grid-cols-[1fr_90px_90px_32px] gap-2 border-b bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <span>Label</span>
+                        <span>Age From</span>
+                        <span>Age To</span>
+                        <span />
+                      </div>
+                      {s.age_bands.map((b, i) => {
+                        const err = bandErrors[b._localId];
+                        return (
+                          <div
+                            key={b._localId}
+                            className="border-b last:border-b-0"
+                          >
+                            <div className="grid grid-cols-[1fr_90px_90px_32px] items-center gap-2 px-3 py-1.5">
+                              <Input
+                                value={b.label}
+                                onChange={(e) =>
+                                  updateBand(i, { label: e.target.value })
+                                }
+                                className="h-7 text-xs"
+                                placeholder="e.g. Child"
+                              />
+                              <Input
+                                type="number"
+                                min={0}
+                                value={b.age_from}
+                                onChange={(e) =>
+                                  updateBand(i, {
+                                    age_from: parseInt(e.target.value) || 0,
+                                  })
+                                }
+                                className="h-7 text-xs"
+                              />
+                              <Input
+                                type="number"
+                                min={0}
+                                value={b.age_to}
+                                onChange={(e) =>
+                                  updateBand(i, {
+                                    age_to: parseInt(e.target.value) || 0,
+                                  })
+                                }
+                                className="h-7 text-xs"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeBand(i)}
+                                aria-label="Remove band"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                            {err && (
+                              <p className="px-3 pb-1.5 text-[10px] text-destructive">
+                                {err}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      No bands yet. Add a band or reseed from the room age policy.
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 gap-1.5"
+                    onClick={addBand}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Band
+                  </Button>
+                </div>
+              )}
+              {/* Policy-mode pricing rows (existing UI) */}
+              {!s.use_custom_age_bands && s.age_pricing.length > 0 && (
                 <div className="rounded-md border overflow-x-auto">
                   <div className="grid grid-cols-[120px_80px_80px_80px_100px_120px_32px] gap-2 border-b bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[600px]">
                     <span>Label</span>
@@ -809,16 +1114,155 @@ export function SupplementCard({
                   ))}
                 </div>
               )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-2 gap-1.5"
-                onClick={addAgeBand}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Age Band
-              </Button>
+              {!s.use_custom_age_bands && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 gap-1.5"
+                  onClick={addAgeBand}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Age Band
+                </Button>
+              )}
+
+              {/* Band-mode pricing rows: bind by band, no inline label/range */}
+              {s.use_custom_age_bands && (
+                <>
+                  {s.age_pricing.length > 0 && (
+                    <div className="rounded-md border overflow-x-auto">
+                      <div className="grid grid-cols-[1fr_80px_120px_120px_32px] gap-2 border-b bg-muted/40 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground min-w-[520px]">
+                        <span>Band</span>
+                        <span>Is Free</span>
+                        <span>Price</span>
+                        <span>Type</span>
+                        <span />
+                      </div>
+                      {s.age_pricing.map((ap, i) => {
+                        const boundBand = s.age_bands.find(
+                          (b) => b._localId === ap._localBandId
+                        );
+                        return (
+                          <div
+                            key={ap._localId}
+                            className="grid grid-cols-[1fr_80px_120px_120px_32px] items-center gap-2 border-b px-3 py-1.5 last:border-b-0 min-w-[520px]"
+                          >
+                            <Select
+                              value={ap._localBandId ?? ""}
+                              onValueChange={(v) =>
+                                updateAge(i, { _localBandId: v })
+                              }
+                            >
+                              <SelectTrigger className="h-7 text-xs">
+                                <SelectValue placeholder="Select band…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {s.age_bands.length === 0 && (
+                                  <SelectItem value="__none__" disabled>
+                                    No bands defined
+                                  </SelectItem>
+                                )}
+                                {s.age_bands.map((b) => (
+                                  <SelectItem key={b._localId} value={b._localId}>
+                                    {(b.label || "(unnamed)") +
+                                      ` (${b.age_from}–${b.age_to})`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <div className="flex items-center justify-center">
+                              <Switch
+                                checked={ap.is_free}
+                                onCheckedChange={(v) =>
+                                  updateAge(i, {
+                                    is_free: !!v,
+                                    price: v ? null : ap.price,
+                                    price_type: v
+                                      ? null
+                                      : ap.price_type ?? "fixed",
+                                  })
+                                }
+                              />
+                            </div>
+                            {!ap.is_free ? (
+                              <>
+                                <Input
+                                  type="number"
+                                  className="h-7 text-xs"
+                                  value={ap.price ?? ""}
+                                  onChange={(e) =>
+                                    updateAge(i, {
+                                      price:
+                                        e.target.value === ""
+                                          ? null
+                                          : parseFloat(e.target.value),
+                                    })
+                                  }
+                                  placeholder="0.00"
+                                />
+                                <ToggleGroup
+                                  value={ap.price_type ?? "fixed"}
+                                  options={[
+                                    { value: "fixed", label: "Fixed" },
+                                    { value: "percentage", label: "%" },
+                                  ]}
+                                  onChange={(v) =>
+                                    updateAge(i, {
+                                      price_type: v as "fixed" | "percentage",
+                                    })
+                                  }
+                                  small
+                                />
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              </>
+                            )}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => removeAgeBand(i)}
+                              aria-label="Remove pricing row"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                            {!boundBand && (
+                              <p className="col-span-5 -mt-1 text-[10px] text-destructive">
+                                Pick a band — current binding is missing.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 gap-1.5"
+                    onClick={addBandPricingRow}
+                    disabled={s.age_bands.length === 0}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Pricing Row
+                  </Button>
+                  {s.age_bands.length === 0 && (
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Define at least one band above to add pricing rows.
+                    </p>
+                  )}
+                </>
+              )}
             </SubSection>
           )}
 
