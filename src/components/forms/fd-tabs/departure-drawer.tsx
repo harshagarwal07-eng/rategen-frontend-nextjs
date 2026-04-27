@@ -35,6 +35,8 @@ import {
 import { saveDeparture } from "./save-departure";
 import type { RateSource } from "./departure-pricing-section";
 import type { FDAddon, FDAgePolicy, FDDeparture } from "@/types/fixed-departures";
+import type { CommissionCopyTarget } from "./copy-commissions-sheet";
+import type { CommissionState } from "./departure-commission-section";
 
 type DrawerMode =
   | { kind: "create"; initialDate?: string }
@@ -50,6 +52,8 @@ interface Props {
   packageBands?: FDAgePolicy[];
   rateSources?: RateSource[];
   flightGroups?: string[];
+  commissionCopyTargets?: CommissionCopyTarget[];
+  onCopyCommissionToTargets?: (targetIds: string[], state: CommissionState) => Promise<void>;
   mode: DrawerMode | null;
   onSaved: (saved: FDDeparture) => void;
 }
@@ -64,6 +68,8 @@ export function DepartureDrawer({
   packageBands,
   rateSources,
   flightGroups,
+  commissionCopyTargets,
+  onCopyCommissionToTargets,
   mode,
   onSaved,
 }: Props) {
@@ -178,6 +184,10 @@ export function DepartureDrawer({
                 packageBands={packageBands}
                 rateSources={rateSources}
                 excludeSourceId={mode?.kind === "edit" ? mode.departure.id : undefined}
+                commissionCopyTargets={(commissionCopyTargets ?? []).filter(
+                  (t) => mode?.kind !== "edit" || t.id !== mode.departure.id,
+                )}
+                onCopyCommissionToTargets={onCopyCommissionToTargets}
               />
             ) : (
               <div className="text-sm text-muted-foreground">Loading…</div>

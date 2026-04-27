@@ -37,7 +37,11 @@ import {
   fdListAddons,
   fdDeleteDeparture,
   fdGetFlights,
+  fdUpdateDeparture,
+  fdReplaceDepartureCommissions,
 } from "@/data-access/fixed-departures";
+import type { CommissionCopyTarget } from "./copy-commissions-sheet";
+import type { CommissionState } from "./departure-commission-section";
 import type {
   FDAddon,
   FDAgePolicy,
@@ -365,6 +369,53 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
     }));
   }, [departures]);
 
+  // Copy-to-others targets for the commission section. Same source as
+  // rateSources — saved departures only, since we're hitting their endpoints
+  // by id.
+  const commissionCopyTargets = useMemo<CommissionCopyTarget[]>(() => {
+    return (departures ?? []).map((d) => ({
+      id: d.id,
+      departure_date: d.departure_date ?? "",
+      departure_status: d.departure_status,
+    }));
+  }, [departures]);
+
+  // Loop with stop-on-error. Reports # succeeded vs # requested via toast.
+  const copyCommissionsToTargets = async (
+    targetIds: string[],
+    state: CommissionState,
+  ): Promise<void> => {
+    let saved = 0;
+    for (const id of targetIds) {
+      try {
+        await fdUpdateDeparture(id, {
+          is_commissionable: state.is_commissionable,
+          apply_land_commission_to_addons: state.apply_land_commission_to_addons,
+          room_sharing_enabled: state.room_sharing_enabled,
+          same_gender_sharing: state.same_gender_sharing,
+        });
+        await fdReplaceDepartureCommissions(
+          id,
+          state.rows.map((r) => ({
+            component: r.component,
+            age_band: r.age_band,
+            commission_type: r.commission_type,
+            commission_value: r.commission_value,
+          })),
+        );
+        saved += 1;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Copy failed";
+        toast.error(`Copy failed after ${saved} of ${targetIds.length}: ${msg}`);
+        break;
+      }
+    }
+    if (saved > 0) {
+      await queryClient.invalidateQueries({ queryKey: ["fd-package", packageId, "departures"] });
+      toast.success(`Commission copied to ${saved} departure${saved === 1 ? "" : "s"}.`);
+    }
+  };
+
   const today = todayIsoDate();
   const { upcoming, past } = useMemo(() => {
     const u: DraftDeparture[] = [];
@@ -423,6 +474,8 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
           packageBands={packageBands}
           rateSources={rateSources}
           flightGroups={flightGroups}
+          commissionCopyTargets={commissionCopyTargets}
+          onCopyCommissionToTargets={copyCommissionsToTargets}
           getOrCreateRef={getOrCreateRef}
           updateDraft={updateDraft}
           setDeleteTarget={setDeleteTarget}
@@ -445,6 +498,8 @@ export const FDDepartureDatesTab = forwardRef<FDTabHandle, Props>(function FDDep
         packageBands={packageBands}
         rateSources={rateSources}
         flightGroups={flightGroups}
+        commissionCopyTargets={commissionCopyTargets}
+        onCopyCommissionToTargets={copyCommissionsToTargets}
         mode={drawerState}
         onSaved={() => { void handleDrawerSaved(); }}
       />
@@ -584,6 +639,8 @@ interface TableViewProps {
   packageBands: FDAgePolicy[];
   rateSources: RateSource[];
   flightGroups: string[];
+  commissionCopyTargets: CommissionCopyTarget[];
+  onCopyCommissionToTargets: (targetIds: string[], state: CommissionState) => Promise<void>;
   getOrCreateRef: (id: string) => React.RefObject<DepartureRowHandle | null>;
   updateDraft: (localId: string, patch: Partial<DepartureFormState>) => void;
   setDeleteTarget: (d: DraftDeparture | null) => void;
@@ -600,6 +657,8 @@ function TableView({
   packageBands,
   rateSources,
   flightGroups,
+  commissionCopyTargets,
+  onCopyCommissionToTargets,
   getOrCreateRef,
   updateDraft,
   setDeleteTarget,
@@ -644,6 +703,8 @@ function TableView({
             packageBands={packageBands}
             rateSources={rateSources}
             flightGroups={flightGroups}
+            commissionCopyTargets={commissionCopyTargets}
+            onCopyCommissionToTargets={onCopyCommissionToTargets}
             onChange={(patch) => updateDraft(draft._localId, patch)}
             onDeleteRequest={() => setDeleteTarget(draft)}
           />
@@ -672,6 +733,8 @@ function TableView({
                     currency={currency}
                     addons={addons}
                     packageBands={packageBands}
+                    commissionCopyTargets={commissionCopyTargets}
+                    onCopyCommissionToTargets={onCopyCommissionToTargets}
                     onChange={(patch) => updateDraft(draft._localId, patch)}
                     onDeleteRequest={() => setDeleteTarget(draft)}
                   />

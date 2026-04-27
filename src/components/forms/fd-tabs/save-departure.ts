@@ -4,6 +4,7 @@ import {
   fdUpsertDeparturePricing,
   fdUpsertAddonDeparturePricing,
   fdUpsertFlightPricing,
+  fdReplaceDepartureCommissions,
 } from "@/data-access/fixed-departures";
 import type { FDAddon, FDDeparture } from "@/types/fixed-departures";
 import type { DepartureFormState } from "./departure-form";
@@ -43,12 +44,29 @@ export async function saveDeparture({
     departure_status: state.departure_status || null,
     availability_status: state.availability_status || null,
     internal_notes: state.internal_notes || null,
+    is_commissionable: state.commission.is_commissionable,
+    apply_land_commission_to_addons: state.commission.apply_land_commission_to_addons,
+    room_sharing_enabled: state.commission.room_sharing_enabled,
+    same_gender_sharing: state.commission.same_gender_sharing,
   };
 
   try {
     const saved = existingId
       ? await fdUpdateDeparture(existingId, departurePayload)
       : await fdCreateDeparture(packageId, departurePayload);
+
+    // Commission rows are saved unconditionally so values aren't lost across
+    // is_commissionable toggles. The flag alone gates whether commissions are
+    // applied at quote time.
+    await fdReplaceDepartureCommissions(
+      saved.id,
+      state.commission.rows.map((r) => ({
+        component: r.component,
+        age_band: r.age_band,
+        commission_type: r.commission_type,
+        commission_value: r.commission_value,
+      })),
+    );
 
     await fdUpsertDeparturePricing(saved.id, {
       pricing_type: "land_only",

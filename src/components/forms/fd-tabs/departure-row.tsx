@@ -21,6 +21,8 @@ import {
 import { saveDeparture, type DepartureSaveResult } from "./save-departure";
 import type { RateSource } from "./departure-pricing-section";
 import type { FDAddon, FDAgePolicy } from "@/types/fixed-departures";
+import type { CommissionCopyTarget } from "./copy-commissions-sheet";
+import type { CommissionState } from "./departure-commission-section";
 
 export interface DraftDeparture {
   _localId: string;
@@ -78,12 +80,28 @@ interface Props {
   packageBands?: FDAgePolicy[];
   rateSources?: RateSource[];
   flightGroups?: string[];
+  commissionCopyTargets?: CommissionCopyTarget[];
+  onCopyCommissionToTargets?: (targetIds: string[], state: CommissionState) => Promise<void>;
   onChange: (patch: Partial<DepartureFormState>) => void;
   onDeleteRequest: () => void;
 }
 
 export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function DepartureRow(
-  { packageId, draft, defaultOpen, isPast, currency, addons, packageBands, rateSources, flightGroups, onChange, onDeleteRequest },
+  {
+    packageId,
+    draft,
+    defaultOpen,
+    isPast,
+    currency,
+    addons,
+    packageBands,
+    rateSources,
+    flightGroups,
+    commissionCopyTargets,
+    onCopyCommissionToTargets,
+    onChange,
+    onDeleteRequest,
+  },
   ref,
 ) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -201,6 +219,8 @@ export const DepartureRow = forwardRef<DepartureRowHandle, Props>(function Depar
             rateSources={rateSources}
             excludeSourceId={draft.id}
             flightGroups={flightGroups}
+            commissionCopyTargets={(commissionCopyTargets ?? []).filter((t) => t.id !== draft.id)}
+            onCopyCommissionToTargets={onCopyCommissionToTargets}
           />
         </div>
       )}

@@ -32,6 +32,11 @@ import {
   type FDAddon,
   type FDAgePolicy,
 } from "@/types/fixed-departures";
+import {
+  DepartureCommissionSection,
+  type CommissionState,
+} from "./departure-commission-section";
+import type { CommissionCopyTarget } from "./copy-commissions-sheet";
 
 export interface DepartureFormState {
   departure_date: string;
@@ -47,6 +52,7 @@ export interface DepartureFormState {
   departure_status: string;
   availability_status: string;
   internal_notes: string;
+  commission: CommissionState;
   pricing: LandPricingState;
   addon_overrides: AddonOverrideState[];
   flight_pricing: FlightPricingRow[];
@@ -125,6 +131,8 @@ interface Props {
   rateSources?: RateSource[];
   excludeSourceId?: string;
   flightGroups?: string[];
+  commissionCopyTargets?: CommissionCopyTarget[];
+  onCopyCommissionToTargets?: (targetIds: string[], state: CommissionState) => Promise<void>;
 }
 
 export function DepartureForm({
@@ -137,6 +145,8 @@ export function DepartureForm({
   rateSources,
   excludeSourceId,
   flightGroups = [],
+  commissionCopyTargets = [],
+  onCopyCommissionToTargets,
 }: Props) {
   const handleDepartureDateChange = (newDate: string) => {
     const newReturn = computeReturnDate(newDate, value.duration);
@@ -324,7 +334,17 @@ export function DepartureForm({
         </Field>
       </div>
 
-      {/* Section 2: Land Pricing */}
+      {/* Section 2: Pricing & Room Config */}
+      <DepartureCommissionSection
+        value={value.commission}
+        onChange={(patch) => onChange({ commission: { ...value.commission, ...patch } })}
+        copyTargets={commissionCopyTargets}
+        onCopyToTargets={async (ids, state) => {
+          if (onCopyCommissionToTargets) await onCopyCommissionToTargets(ids, state);
+        }}
+      />
+
+      {/* Section 3: Land Pricing */}
       <DeparturePricingSection
         value={value.pricing}
         onChange={(patch) => onChange({ pricing: { ...value.pricing, ...patch } })}
@@ -334,7 +354,7 @@ export function DepartureForm({
         excludeSourceId={excludeSourceId}
       />
 
-      {/* Section 3: Flight Pricing — per group from Tab 5 */}
+      {/* Section 4: Flight Pricing — per group from Tab 5 */}
       <DepartureFlightPricingSection
         flightGroups={flightGroups}
         value={value.flight_pricing}
@@ -342,7 +362,7 @@ export function DepartureForm({
         currency={currency}
       />
 
-      {/* Section 4: Addon Pricing — only if package has add-ons */}
+      {/* Section 5: Addon Pricing — only if package has add-ons */}
       {addons.length > 0 && (
         <DepartureAddonPricingSection
           addons={addons}

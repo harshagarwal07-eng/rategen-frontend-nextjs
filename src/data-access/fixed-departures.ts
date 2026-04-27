@@ -22,6 +22,7 @@ import type {
   FDFlightPricing,
   FDVisa,
   FDTax,
+  FDDepartureCommission,
 } from "@/types/fixed-departures";
 import type {
   FDSearchResponse,
@@ -238,6 +239,26 @@ export async function fdUpsertAddonDeparturePricing(
   const { data } = await fdApi.put<FDAddonDeparturePricing[]>(
     `${BASE}/departures/${departureId}/addon-pricing`,
     rows,
+  );
+  return data;
+}
+
+export async function fdGetDepartureCommissions(
+  departureId: string,
+): Promise<{ rows: FDDepartureCommission[] }> {
+  const { data } = await fdApi.get<{ rows: FDDepartureCommission[] }>(
+    `${BASE}/departures/${departureId}/commissions`,
+  );
+  return data;
+}
+
+export async function fdReplaceDepartureCommissions(
+  departureId: string,
+  rows: Array<Pick<FDDepartureCommission, "component" | "age_band" | "commission_type" | "commission_value">>,
+): Promise<{ rows: FDDepartureCommission[] }> {
+  const { data } = await fdApi.put<{ rows: FDDepartureCommission[] }>(
+    `${BASE}/departures/${departureId}/commissions`,
+    { rows },
   );
   return data;
 }

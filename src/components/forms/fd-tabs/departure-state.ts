@@ -11,6 +11,11 @@ import {
   computeReturnDate,
   type DepartureFormState,
 } from "./departure-form";
+import {
+  EMPTY_COMMISSION_STATE,
+  normalizeCommissionRows,
+  type CommissionState,
+} from "./departure-commission-section";
 
 export const DEFAULT_DURATION = 7;
 export const DEFAULT_TOTAL_SEATS = 40;
@@ -57,6 +62,16 @@ export function addonOverridesFromServer(d: FDDeparture): AddonOverrideState[] {
   });
 }
 
+export function commissionFromServer(d: FDDeparture): CommissionState {
+  return {
+    is_commissionable: !!d.is_commissionable,
+    apply_land_commission_to_addons: !!d.apply_land_commission_to_addons,
+    room_sharing_enabled: !!d.room_sharing_enabled,
+    same_gender_sharing: !!d.same_gender_sharing,
+    rows: normalizeCommissionRows(d.fd_departure_commissions),
+  };
+}
+
 export function departureToFormState(d: FDDeparture): DepartureFormState {
   const duration =
     d.departure_date && d.return_date
@@ -79,6 +94,7 @@ export function departureToFormState(d: FDDeparture): DepartureFormState {
     departure_status: d.departure_status ?? "planned",
     availability_status: d.availability_status ?? "available",
     internal_notes: d.internal_notes ?? "",
+    commission: commissionFromServer(d),
     pricing: pricingFromServer(d),
     addon_overrides: addonOverridesFromServer(d),
     flight_pricing: flightPricingFromServer(d),
@@ -104,6 +120,7 @@ export function emptyDepartureFormState(
     departure_status: "planned",
     availability_status: "available",
     internal_notes: "",
+    commission: { ...EMPTY_COMMISSION_STATE, rows: EMPTY_COMMISSION_STATE.rows.map((r) => ({ ...r })) },
     pricing: { ...EMPTY_LAND_PRICING },
     addon_overrides: [],
     flight_pricing: [],

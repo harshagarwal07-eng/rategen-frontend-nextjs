@@ -165,6 +165,18 @@ export interface FDAddonDeparturePricing {
   override_price_total: number | null;
 }
 
+export type FDCommissionComponent = "land" | "flight";
+export type FDCommissionAgeBand = "adult" | "child" | "infant";
+
+export interface FDDepartureCommission {
+  id?: string;
+  departure_date_id?: string;
+  component: FDCommissionComponent;
+  age_band: FDCommissionAgeBand;
+  commission_type: FDValueType;
+  commission_value: number;
+}
+
 export interface FDDeparture {
   id: string;
   package_id: string;
@@ -180,10 +192,15 @@ export interface FDDeparture {
   departure_status: string | null;
   availability_status: string | null;
   internal_notes: string | null;
+  is_commissionable: boolean;
+  apply_land_commission_to_addons: boolean;
+  room_sharing_enabled: boolean;
+  same_gender_sharing: boolean;
   seats_available?: number;
   fd_departure_pricing?: FDDeparturePricing[];
   fd_addon_departure_pricing?: FDAddonDeparturePricing[];
   fd_flight_pricing?: FDFlightPricing[];
+  fd_departure_commissions?: FDDepartureCommission[];
 }
 
 export type FDValueType = "percentage" | "fixed";
