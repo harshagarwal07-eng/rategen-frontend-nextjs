@@ -412,6 +412,11 @@ export type TourDiscountType = "percent" | "fixed";
 
 export type TourVehicleRateType = "per_vehicle" | "per_hour" | "per_km";
 
+/** Drives which rate editor renders for a season — per-pax (band/private),
+ *  per-vehicle, or single total. Mutually exclusive; switching clears the
+ *  inactive shapes on save. */
+export type TourSeasonRateType = "per_pax" | "vehicle" | "total";
+
 export interface TourSeasonDateRange {
   id?: string;
   season_id?: string;
@@ -478,6 +483,8 @@ export interface TourPackageSeason {
   total_min_pax: number | null;
   total_max_pax: number | null;
   vehicle_rate_type: TourVehicleRateType | null;
+  /** Mutually exclusive shape: per_pax | vehicle | total. Defaults to per_pax. */
+  rate_type: TourSeasonRateType;
   /** "per_pax" | "tiered" — drives Pvt Per Pax editor mode. */
   private_rate_mode: TourPrivateRateMode | null;
   child_discount_type: TourDiscountType | null;

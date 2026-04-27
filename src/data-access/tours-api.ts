@@ -458,6 +458,7 @@ export async function patchSeason(
     exception_rules: string | null;
     vehicle_rate_type: string | null;
     private_rate_mode: "per_pax" | "tiered";
+    rate_type: "per_pax" | "vehicle" | "total";
     child_discount_type: string | null;
     child_discount_value: number | null;
     infant_discount_type: string | null;

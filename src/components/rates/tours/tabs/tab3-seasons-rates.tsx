@@ -36,6 +36,7 @@ import {
   deleteSeason,
   listPackageSeasons,
   listTourPackages,
+  listTourCurrencies,
   patchSeason,
   replaceSeasonBlackoutDates,
   replaceSeasonDateRanges,
@@ -107,6 +108,7 @@ function seasonFromServer(
     status: s.status || "active",
     exception_rules: s.exception_rules ?? "",
     vehicle_rate_type: s.vehicle_rate_type,
+    rate_type: s.rate_type ?? "per_pax",
     private_rate_mode: s.private_rate_mode ?? "per_pax",
     child_discount_type: s.child_discount_type,
     child_discount_value:
@@ -142,6 +144,7 @@ function snapshotPackage(
       id: s.id,
       exception_rules: s.exception_rules.trim(),
       vehicle_rate_type: s.vehicle_rate_type,
+      rate_type: s.rate_type,
       child_discount_type: s.child_discount_type,
       child_discount_value: s.child_discount_value.trim(),
       infant_discount_type: s.infant_discount_type,
@@ -182,6 +185,8 @@ interface PackageStateEntry {
 
 interface PackageRatesCardProps {
   entry: PackageStateEntry;
+  /** 3-letter currency code piped to season cards for header breakdowns. */
+  currency: string;
   isOpen: boolean;
   saving: boolean;
   onToggle: () => void;
@@ -194,6 +199,7 @@ interface PackageRatesCardProps {
 
 function PackageRatesCard({
   entry,
+  currency,
   isOpen,
   saving,
   onToggle,
@@ -394,6 +400,7 @@ function PackageRatesCard({
                     season={s}
                     salesMode={pkg.sales_mode}
                     ageBands={ageBandsForLabels}
+                    currency={currency}
                     isOpen={openSeasonIds.has(s._localId)}
                     isDirty={
                       s.id.startsWith("pending") ||
@@ -468,6 +475,25 @@ export default function Tab3SeasonsRates({
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [savingPkgId, setSavingPkgId] = useState<string | null>(null);
+  const [currencyCode, setCurrencyCode] = useState<string>("");
+
+  // Resolve the tour's currency_id → 3-letter code for header breakdowns.
+  useEffect(() => {
+    const id = initialData?.currency_id;
+    if (!id) {
+      setCurrencyCode("");
+      return;
+    }
+    let cancelled = false;
+    listTourCurrencies().then((res) => {
+      if (cancelled) return;
+      const match = res.data?.find((c) => c.id === id);
+      setCurrencyCode(match?.code ?? "");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialData?.currency_id]);
 
   const [copyDialog, setCopyDialog] = useState<{
     open: boolean;
@@ -707,16 +733,24 @@ export default function Tab3SeasonsRates({
             ? null
             : Number(s.infant_discount_value);
 
-        const totalRateNum =
-          s.total_rate.trim() === "" ? null : Number(s.total_rate);
-        const totalMaxNum =
-          s.total_max_capacity.trim() === ""
+        // Total fields only persist when rate_type === 'total'; other
+        // modes clear them so a stale value never resurfaces.
+        const isTotalMode = s.rate_type === "total";
+        const totalRateNum = isTotalMode
+          ? s.total_rate.trim() === ""
             ? null
-            : Number(s.total_max_capacity);
+            : Number(s.total_rate)
+          : null;
+        const totalMaxNum = isTotalMode
+          ? s.total_max_capacity.trim() === ""
+            ? null
+            : Number(s.total_max_capacity)
+          : null;
 
         const patchRes = await patchSeason(realId, {
           exception_rules: s.exception_rules.trim() || null,
           vehicle_rate_type: s.vehicle_rate_type as TourVehicleRateType | null,
+          rate_type: s.rate_type,
           private_rate_mode: s.private_rate_mode,
           child_discount_type: s.child_discount_type,
           child_discount_value: childVal,
@@ -738,41 +772,38 @@ export default function Tab3SeasonsRates({
         if (bdRes.error)
           throw new Error(`Season blackouts: ${bdRes.error}`);
 
-        // Section visibility per spec — see season-card.tsx for the same matrix.
+        // Rate-type-driven persistence: only the active shape's editor
+        // pushes data; the other two shapes are cleared (delete-all) so
+        // toggling modes can't leave stale rate rows behind.
+        const salesMode = entry.pkg.sales_mode;
         const isPrivateOrExclusive =
-          entry.pkg.sales_mode === "private" ||
-          entry.pkg.sales_mode === "exclusive";
-        const showBand =
-          entry.pkg.sales_mode === "ticket" ||
-          entry.pkg.sales_mode === "shared";
-        const showPrivate = isPrivateOrExclusive;
-        const showVehicle = isPrivateOrExclusive;
+          salesMode === "private" || salesMode === "exclusive";
 
-        if (showBand) {
-          const prRes = await replaceSeasonPaxRates(
-            realId,
-            rowsToPaxRates(s.pax_rows),
-          );
-          if (prRes.error)
-            throw new Error(`Season pax rates: ${prRes.error}`);
-        }
-        if (showPrivate) {
-          const payload =
-            s.private_rate_mode === "tiered"
-              ? tiersToPrivateRates(s.private_tier_rows)
-              : cellsToPrivateRates(s.private_cells);
-          const ppRes = await replaceSeasonPrivateRates(realId, payload);
-          if (ppRes.error)
-            throw new Error(`Season private rates: ${ppRes.error}`);
-        }
-        if (showVehicle) {
-          const vrRes = await replaceSeasonVehicleRates(
-            realId,
-            rowsToVehicleRates(s.vehicle_rows),
-          );
-          if (vrRes.error)
-            throw new Error(`Season vehicle rates: ${vrRes.error}`);
-        }
+        const writePax =
+          s.rate_type === "per_pax" &&
+          (salesMode === "ticket" || salesMode === "shared");
+        const writePrivate =
+          s.rate_type === "per_pax" && isPrivateOrExclusive;
+        const writeVehicle = s.rate_type === "vehicle";
+
+        const paxPayload = writePax ? rowsToPaxRates(s.pax_rows) : [];
+        const privatePayload = writePrivate
+          ? s.private_rate_mode === "tiered"
+            ? tiersToPrivateRates(s.private_tier_rows)
+            : cellsToPrivateRates(s.private_cells)
+          : [];
+        const vehiclePayload = writeVehicle
+          ? rowsToVehicleRates(s.vehicle_rows)
+          : [];
+
+        const prRes = await replaceSeasonPaxRates(realId, paxPayload);
+        if (prRes.error) throw new Error(`Season pax rates: ${prRes.error}`);
+        const ppRes = await replaceSeasonPrivateRates(realId, privatePayload);
+        if (ppRes.error)
+          throw new Error(`Season private rates: ${ppRes.error}`);
+        const vrRes = await replaceSeasonVehicleRates(realId, vehiclePayload);
+        if (vrRes.error)
+          throw new Error(`Season vehicle rates: ${vrRes.error}`);
 
         updatedSeasons.push({ ...s, id: realId, _localId: realId });
       }
@@ -858,6 +889,7 @@ export default function Tab3SeasonsRates({
           <PackageRatesCard
             key={entry.pkg.id}
             entry={entry}
+            currency={currencyCode}
             isOpen={openIds.has(entry.pkg.id)}
             saving={savingPkgId === entry.pkg.id}
             onToggle={() => toggleCard(entry.pkg.id)}

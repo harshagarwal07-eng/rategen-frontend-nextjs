@@ -36,9 +36,6 @@ import AddonAgePolicySection, {
   AddonAgeBandRow,
 } from "./addon-age-policy-section";
 import AddonRatesSection, { AddonRateMap } from "./addon-rates-section";
-import AddonTotalRateSection, {
-  AddonTotalRateRow,
-} from "./addon-total-rate-section";
 import AddonPackageLinksSection, {
   AddonLinkMap,
 } from "./addon-package-links-section";
@@ -60,9 +57,6 @@ interface AddonCardBodyProps {
   rateMap: AddonRateMap;
   setRateMap: (next: AddonRateMap) => void;
 
-  tierRows: AddonTotalRateRow[];
-  setTierRows: (next: AddonTotalRateRow[]) => void;
-
   linkMap: AddonLinkMap;
   setLinkMap: (next: AddonLinkMap) => void;
 
@@ -80,8 +74,6 @@ export default function AddonCardBody({
   sortedBands,
   rateMap,
   setRateMap,
-  tierRows,
-  setTierRows,
   linkMap,
   setLinkMap,
   images,
@@ -191,56 +183,6 @@ export default function AddonCardBody({
           )}
         />
 
-        {/* Section D — Default total rate + Max participants */}
-        <div className="grid grid-cols-2 gap-4 max-w-md">
-          <FormField
-            control={form.control}
-            name="total_rate"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Default Total Rate</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={field.value ?? ""}
-                    onChange={(e) =>
-                      field.onChange(
-                        e.target.value === ""
-                          ? null
-                          : parseFloat(e.target.value),
-                      )
-                    }
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="max_participants"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Max Participants</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={field.value ?? ""}
-                    onChange={(e) =>
-                      field.onChange(
-                        e.target.value === ""
-                          ? null
-                          : parseInt(e.target.value, 10),
-                      )
-                    }
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-        </div>
       </Form>
 
       {/* Section E — Images (self-persisting) */}
@@ -348,17 +290,82 @@ export default function AddonCardBody({
       {/* Section F — Age Policy */}
       <AddonAgePolicySection rows={ageBandRows} onChange={setAgeBandRows} />
 
-      {/* Section G — Per-age-band rates */}
+      {/* Per Pax — band-driven rates (matches season SIC layout) */}
       <AddonRatesSection
         bands={sortedBands}
         values={rateMap}
         onChange={setRateMap}
       />
 
-      {/* Section H — Total Rate slabs */}
-      <AddonTotalRateSection rows={tierRows} onChange={setTierRows} />
+      {/* Total Rate — single rate + max capacity, bottom of rates area.
+          Mirrors the season Total Rate UI; backed by addon row columns
+          total_rate + max_participants. */}
+      <Form {...form}>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Total Rate
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <FormField
+              control={form.control}
+              name="total_rate"
+              render={({ field }) => (
+                <FormItem className="flex flex-col gap-0.5 space-y-0">
+                  <FormLabel className="text-[10px] font-medium text-muted-foreground">
+                    Rate
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={field.value ?? ""}
+                      onChange={(e) =>
+                        field.onChange(
+                          e.target.value === ""
+                            ? null
+                            : parseFloat(e.target.value),
+                        )
+                      }
+                      placeholder="0"
+                      className="h-7 w-32 text-xs"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="max_participants"
+              render={({ field }) => (
+                <FormItem className="flex flex-col gap-0.5 space-y-0">
+                  <FormLabel className="text-[10px] font-medium text-muted-foreground">
+                    Max Capacity
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={field.value ?? ""}
+                      onChange={(e) =>
+                        field.onChange(
+                          e.target.value === ""
+                            ? null
+                            : parseInt(e.target.value, 10),
+                        )
+                      }
+                      placeholder="—"
+                      className="h-7 w-32 text-xs"
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+      </Form>
 
-      {/* Section I — Package Links */}
+      {/* Package Links */}
       <AddonPackageLinksSection
         packages={packages}
         value={linkMap}

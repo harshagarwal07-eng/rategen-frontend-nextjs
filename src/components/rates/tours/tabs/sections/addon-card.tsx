@@ -2,18 +2,22 @@
 
 // AddonCard — collapsible per-add-on card for Tab 4.
 // Owns its RHF form (header fields), section state (age policy bands,
-// per-band rates, total-rate tiers, package links, images), and an
-// imperative `save()` handle that Tab4Addons calls once per card.
+// per-band rates, package links, images), and an imperative `save()`
+// handle that Tab4Addons calls once per card.
 //
 // Save sequence (parent invokes via formRef → onSubmit):
-//   1. createTourAddon() | updateTourAddon()
+//   1. createTourAddon() | updateTourAddon()  — also writes total_rate +
+//      max_participants (bottom-of-card "Total Rate" section)
 //   2. replaceAddonAgePolicies()
-//   3. replaceAddonRates()
-//   4. replaceAddonTotalRates()
-//   5. For each package whose link state changed, recompute the FULL
+//   3. replaceAddonRates()                    — Per Pax band rates
+//   4. For each package whose link state changed, recompute the FULL
 //      list of addons currently linked to that package (via the
 //      tab-level snapshot of all OTHER addons' link maps) and call
 //      replacePackageAddons(packageId, fullList).
+//
+// The legacy tiered Total Rate table (`tour_addon_total_rates`) is no
+// longer written from this card — UI removed per Phase 2 spec. Backend
+// table kept for now; deferred cleanup.
 
 import {
   forwardRef,
@@ -39,7 +43,6 @@ import {
   TourAddonDetail,
   TourAddonImage,
   TourAddonRate,
-  TourAddonTotalRateTier,
   TourPackageAddonLink,
   TourPackageDetail,
 } from "@/types/tours";
@@ -48,7 +51,6 @@ import {
   deleteTourAddon,
   replaceAddonAgePolicies,
   replaceAddonRates,
-  replaceAddonTotalRates,
   replacePackageAddons,
   updateTourAddon,
 } from "@/data-access/tours-api";
@@ -64,11 +66,6 @@ import {
   mapToRates,
   ratesToMap,
 } from "./addon-rates-section";
-import {
-  AddonTotalRateRow,
-  rowsToTiers,
-  tiersToRows,
-} from "./addon-total-rate-section";
 import {
   AddonLinkMap,
   initLinkMap,
@@ -151,14 +148,6 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(
     );
     const [rateMap, setRateMap] = useState<AddonRateMap>(initialRates);
 
-    const initialTiers = useMemo(
-      () => tiersToRows(addon.tour_addon_total_rates ?? []),
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      [addon.id],
-    );
-    const [tierRows, setTierRows] =
-      useState<AddonTotalRateRow[]>(initialTiers);
-
     const initialLinks = useMemo(
       () => initLinkMap(packages, addon.id),
       [packages, addon.id],
@@ -180,7 +169,6 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(
     // Snapshot baselines for non-RHF dirty detection.
     const baselineBands = useRef(JSON.stringify(initialBands));
     const baselineRates = useRef(JSON.stringify(initialRates));
-    const baselineTiers = useRef(JSON.stringify(initialTiers));
     const baselineLinks = useRef(JSON.stringify(initialLinks));
 
     // ── Form ──────────────────────────────────────────────────────────
@@ -204,7 +192,6 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(
     const sectionsDirty =
       JSON.stringify(ageBandRows) !== baselineBands.current ||
       JSON.stringify(rateMap) !== baselineRates.current ||
-      JSON.stringify(tierRows) !== baselineTiers.current ||
       JSON.stringify(linkMap) !== baselineLinks.current;
     const isDirty = formDirty || sectionsDirty || isPending;
 
@@ -274,7 +261,9 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(
           const apRes = await replaceAddonAgePolicies(saved.id, bandsPayload);
           if (apRes.error) throw new Error(`Age policy: ${apRes.error}`);
 
-          // 3. Per-age-band rates
+          // 3. Per-age-band rates (Per Pax). Tiered Total Rate table is
+          //    no longer written from this card — UI removed; backend
+          //    table kept as deferred cleanup.
           const ratesPayload: TourAddonRate[] = mapToRates(
             bandsPayload,
             rateMap,
@@ -282,12 +271,7 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(
           const rRes = await replaceAddonRates(saved.id, ratesPayload);
           if (rRes.error) throw new Error(`Rates: ${rRes.error}`);
 
-          // 4. Total-rate tiers
-          const tiersPayload: TourAddonTotalRateTier[] = rowsToTiers(tierRows);
-          const tRes = await replaceAddonTotalRates(saved.id, tiersPayload);
-          if (tRes.error) throw new Error(`Total rates: ${tRes.error}`);
-
-          // 5. Package links — for each package whose link state for
+          // 4. Package links — for each package whose link state for
           //    THIS addon differs from the server, recompute the full
           //    list (combining all addons that link to it) and PUT.
           const baseline = JSON.parse(baselineLinks.current) as AddonLinkMap;
@@ -333,7 +317,6 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(
           form.reset(v);
           baselineBands.current = JSON.stringify(ageBandRows);
           baselineRates.current = JSON.stringify(rateMap);
-          baselineTiers.current = JSON.stringify(tierRows);
           baselineLinks.current = JSON.stringify(linkMap);
 
           const updated: AddonStateEntry = {
@@ -460,8 +443,6 @@ const AddonCard = forwardRef<AddonCardHandle, AddonCardProps>(
               sortedBands={sortedBands}
               rateMap={rateMap}
               setRateMap={setRateMap}
-              tierRows={tierRows}
-              setTierRows={setTierRows}
               linkMap={linkMap}
               setLinkMap={setLinkMap}
               images={images}

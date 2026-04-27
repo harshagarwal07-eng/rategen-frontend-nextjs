@@ -1,9 +1,9 @@
 "use client";
 
-// Per-age-band rate editor for an add-on. Renders a row per age band
-// defined in the parent's age-policy section. The user enters a flat
-// rate (or leaves it blank → null) per band. The parent owns persist
-// via `replaceAddonRates(addonId, rates)`.
+// Per-age-band rate editor for an add-on. Mirrors the SIC rate row in
+// season cards (flex-wrap of {band (age_from-age_to)} / Input). Title
+// is "Per Pax" — the same data shape, different context. Parent owns
+// persist via `replaceAddonRates(addonId, rates)`.
 
 import { Input } from "@/components/ui/input";
 import { TourAddonAgePolicyBand } from "@/types/tours";
@@ -50,60 +50,38 @@ export default function AddonRatesSection({
 
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-        Per Age Band Rates
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+        Per Pax
       </p>
-      <p className="text-xs text-muted-foreground mb-3">
-        Rate per age band — fill only the bands that apply.
-      </p>
-      {sorted.length === 0 ? (
-        <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2.5 py-1.5">
-          No age bands defined. Add age bands in the Age Policy section above
-          first.
-        </p>
-      ) : (
-        <table className="w-full text-xs border-collapse">
-          <thead>
-            <tr className="border-b">
-              <th className="py-1.5 pr-3 text-left font-medium text-muted-foreground w-1/2">
-                Age Band
-              </th>
-              <th className="py-1.5 pr-2 text-left font-medium text-muted-foreground w-1/4">
-                Age Range
-              </th>
-              <th className="py-1.5 text-left font-medium text-muted-foreground">
-                Rate
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {sorted.map((band) => (
-              <tr key={`${band.band_name}-${band.band_order ?? 0}`}>
-                <td className="py-1.5 pr-3">{band.band_name}</td>
-                <td className="py-1.5 pr-2 text-muted-foreground">
-                  {band.age_from}–{band.age_to} yrs
-                </td>
-                <td className="py-1.5">
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={values[band.band_name] ?? ""}
-                    onChange={(e) =>
-                      onChange({
-                        ...values,
-                        [band.band_name]: e.target.value,
-                      })
-                    }
-                    placeholder="0"
-                    className="h-7 w-28 text-xs"
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      <div className="flex flex-wrap gap-3">
+        {sorted.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            Define age bands above first to set per-pax rates.
+          </p>
+        ) : (
+          sorted.map((band) => (
+            <div
+              key={`${band.band_name}-${band.band_order ?? 0}`}
+              className="flex flex-col gap-0.5"
+            >
+              <label className="text-[10px] font-medium text-muted-foreground">
+                {band.band_name} ({band.age_from}–{band.age_to})
+              </label>
+              <Input
+                type="number"
+                min={0}
+                step={0.01}
+                value={values[band.band_name] ?? ""}
+                onChange={(e) =>
+                  onChange({ ...values, [band.band_name]: e.target.value })
+                }
+                placeholder="0"
+                className="h-7 w-28 text-xs"
+              />
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

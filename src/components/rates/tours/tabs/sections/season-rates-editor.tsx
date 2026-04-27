@@ -73,6 +73,18 @@ async function loadVehicleTypes(): Promise<VehicleType[]> {
   return vehicleTypesPromise;
 }
 
+/** Public read-only hook: subscribes to the shared cache. Used by
+ *  SeasonCard to resolve vehicle labels for the collapsed-header
+ *  breakdown without needing the full upsert/replaceAll surface. */
+export function useVehicleTypesLookup(): (id: string) => string | null {
+  const { types } = useVehicleTypes();
+  return (id: string) => {
+    const vt = types.find((v) => v.id === id);
+    if (!vt) return null;
+    return vt.brand ? `${vt.brand} — ${vt.label}` : vt.label;
+  };
+}
+
 function useVehicleTypes(): {
   types: VehicleType[];
   upsert: (v: VehicleType) => void;
