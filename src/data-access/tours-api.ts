@@ -155,7 +155,7 @@ export async function deleteTourImage(
 
 export async function searchMasterCatalog(
   q: string,
-  kind?: "venue" | "activity",
+  kind?: string,
   countryId?: string | null,
 ): Promise<Result<TourMasterCatalogItem[]>> {
   const params = new URLSearchParams({ q });
@@ -169,7 +169,7 @@ export async function searchMasterCatalog(
 
 export async function listMasterCatalog(opts: {
   geo_id?: string;
-  kind?: "venue" | "activity";
+  kind?: string;
   parent_id?: string;
   country_id?: string | null;
 }): Promise<Result<TourMasterCatalogItem[]>> {

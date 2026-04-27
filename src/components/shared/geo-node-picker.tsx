@@ -15,9 +15,9 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { X, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import http from "@/lib/api";
 
 interface GeoNode {
   id: string;
@@ -25,6 +25,16 @@ interface GeoNode {
   type: string;
   parent_id: string | null;
   ancestors?: Array<{ id: string; name: string; type: string }>;
+}
+
+function isErrorResponse(r: unknown): boolean {
+  return (
+    !!r &&
+    typeof r === "object" &&
+    !Array.isArray(r) &&
+    "error" in r &&
+    !!(r as { error?: unknown }).error
+  );
 }
 
 interface GeoNodePickerProps {
@@ -52,23 +62,24 @@ export default function GeoNodePicker({
   const debounceTimer = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const loadSelectedNode = async () => {
       if (!value) {
         setSelectedNode(null);
         return;
       }
       try {
-        const res = await fetch(`/api/geo/nodes/${value}`);
-        if (res.ok) {
-          const node = await res.json();
-          setSelectedNode(node);
-        }
+        const res = await http.get<GeoNode>(`/api/geo/nodes/${value}`);
+        if (cancelled || isErrorResponse(res)) return;
+        setSelectedNode(res as GeoNode);
       } catch (e) {
         console.error("Failed to load selected node:", e);
       }
     };
-
     loadSelectedNode();
+    return () => {
+      cancelled = true;
+    };
   }, [value]);
 
   const performSearch = async (query: string) => {
@@ -76,14 +87,16 @@ export default function GeoNodePicker({
       setResults([]);
       return;
     }
-
     setLoading(true);
     try {
       const params = new URLSearchParams({ q: query });
-      const res = await fetch(`/api/geo/nodes/search?${params}`);
-      if (res.ok) {
-        const nodes = await res.json();
-        setResults(nodes);
+      const res = await http.get<GeoNode[]>(
+        `/api/geo/nodes/search?${params}`,
+      );
+      if (isErrorResponse(res)) {
+        setResults([]);
+      } else {
+        setResults((res as GeoNode[]) ?? []);
       }
     } catch (e) {
       console.error("Search failed:", e);

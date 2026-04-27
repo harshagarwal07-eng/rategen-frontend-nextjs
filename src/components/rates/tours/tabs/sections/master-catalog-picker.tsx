@@ -18,8 +18,8 @@ import {
 import { TourMasterCatalogItem } from "@/types/tours";
 
 interface MasterCatalogPickerProps {
-  /** When `kind === undefined` we accept both venues and activities. */
-  kind?: "venue" | "activity";
+  /** When `kind === undefined` we accept all kinds. */
+  kind?: string;
   /** Currently picked items (for badges + dropdown highlight). */
   selected: TourMasterCatalogItem[];
   /** Single-select picker if 1, multi otherwise. */
@@ -154,11 +154,11 @@ export default function MasterCatalogPicker({
         <Input
           className="h-8 text-xs"
           placeholder={
-            kind === "venue"
+            kind === "attraction"
               ? "Search attractions…"
               : kind === "activity"
                 ? "Search activities…"
-                : "Search venues & activities…"
+                : "Search catalog…"
           }
           value={search}
           onChange={(e) => setSearch(e.target.value)}

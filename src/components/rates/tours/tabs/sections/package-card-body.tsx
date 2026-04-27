@@ -51,6 +51,7 @@ import PackageSalesModeToggle, {
 } from "./package-sales-mode-toggle";
 import { toast } from "sonner";
 import MasterCatalogPicker from "./master-catalog-picker";
+import SmartSuggestChips from "./smart-suggest-chips";
 import ComboPoolBuilder from "./combo-pool-builder";
 import ComboPrimaryLocationsSection from "./combo-primary-locations-section";
 import MultiDayItineraryBuilder, {
@@ -359,34 +360,67 @@ export default function PackageCardBody({
 
         {/* Section D — Master catalog / Combo / Day-trip multi-pick */}
         {(category === "attraction" || category === "activity") && (
-          <MasterCatalogPicker
-            kind={category === "attraction" ? "venue" : "activity"}
-            countryId={countryId}
-            selected={linkedMasters}
-            maxSelections={1}
-            onChange={(next) => {
-              setLinkedMasters(next);
-              onSectionDirty();
-              if (next.length === 1) applyMasterFill(next[0]);
-            }}
-          />
+          <div className="flex flex-col gap-2">
+            <MasterCatalogPicker
+              kind={category}
+              countryId={countryId}
+              selected={linkedMasters}
+              maxSelections={1}
+              onChange={(next) => {
+                setLinkedMasters(next);
+                onSectionDirty();
+                if (next.length === 1) applyMasterFill(next[0]);
+              }}
+            />
+            <SmartSuggestChips
+              packageName={form.watch("name")}
+              countryId={countryId}
+              primaryGeoId={form.watch("primary_geo_id") ?? null}
+              selected={linkedMasters}
+              maxSelections={1}
+              onChange={(next) => {
+                setLinkedMasters(next);
+                onSectionDirty();
+                if (next.length === 1) applyMasterFill(next[0]);
+              }}
+            />
+          </div>
         )}
         {category === "day_trip" && (
-          <MasterCatalogPicker
-            countryId={countryId}
-            selected={linkedMasters}
-            maxSelections={10}
-            onChange={(next) => {
-              setLinkedMasters(next);
-              onSectionDirty();
-              if (next.length > linkedMasters.length) {
-                const added = next.find(
-                  (n) => !linkedMasters.some((p) => p.id === n.id),
-                );
-                if (added) applyMasterFill(added);
-              }
-            }}
-          />
+          <div className="flex flex-col gap-2">
+            <MasterCatalogPicker
+              countryId={countryId}
+              selected={linkedMasters}
+              maxSelections={10}
+              onChange={(next) => {
+                setLinkedMasters(next);
+                onSectionDirty();
+                if (next.length > linkedMasters.length) {
+                  const added = next.find(
+                    (n) => !linkedMasters.some((p) => p.id === n.id),
+                  );
+                  if (added) applyMasterFill(added);
+                }
+              }}
+            />
+            <SmartSuggestChips
+              packageName={form.watch("name")}
+              countryId={countryId}
+              primaryGeoId={form.watch("primary_geo_id") ?? null}
+              selected={linkedMasters}
+              maxSelections={10}
+              onChange={(next) => {
+                setLinkedMasters(next);
+                onSectionDirty();
+                if (next.length > linkedMasters.length) {
+                  const added = next.find(
+                    (n) => !linkedMasters.some((p) => p.id === n.id),
+                  );
+                  if (added) applyMasterFill(added);
+                }
+              }}
+            />
+          </div>
         )}
         {category === "combo" && (
           <ComboPoolBuilder
