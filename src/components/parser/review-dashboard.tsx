@@ -30,10 +30,15 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
+import { Info, Loader2, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -441,11 +446,7 @@ function PackageRow({
       </TableCell>
       <TableCell className="max-w-[28%] truncate" title={name}>
         <div className="font-medium">{name}</div>
-        {pkg.save_error ? (
-          <div className="text-xs text-red-700" title={pkg.save_error}>
-            save error: {truncate(pkg.save_error, 80)}
-          </div>
-        ) : null}
+        {pkg.save_error ? <SaveErrorBlock raw={pkg.save_error} /> : null}
       </TableCell>
       <TableCell className="text-xs text-muted-foreground">
         {sourceEntry === "tours" ? tourName : subType}
@@ -587,4 +588,84 @@ function MatchSummary({
 
 function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+interface InterpretedSaveError {
+  headline: string;
+  remediation: string | null;
+}
+
+/**
+ * Map raw save_error strings (from save.service.ts) to a short headline +
+ * actionable remediation. Unknown patterns fall through with the original
+ * message as headline. Patterns intentionally match the *current* messages
+ * those error sites emit — if those strings change, this falls back to
+ * raw display, no functional regression.
+ */
+function interpretSaveError(raw: string): InterpretedSaveError {
+  const m = raw.match(/vehicle_type_text\s+"([^"]+)"\s+does not match/i);
+  if (m) {
+    return {
+      headline: `Missing vehicle type: "${m[1]}"`,
+      remediation:
+        "Add this vehicle type to your fleet, then re-tick this row and click Save again. " +
+        "Vehicle types are managed from any transfer's Tab 3 → Edit Vehicles.",
+    };
+  }
+  if (/vehicle_type_text is required for vehicle_rates/i.test(raw)) {
+    return {
+      headline: "A rate row has no vehicle type",
+      remediation:
+        "Edit this package's seasons and pick a vehicle type for every rate row, then save again.",
+    };
+  }
+  if (/empty tour_name/i.test(raw)) {
+    return {
+      headline: "Tour name is empty",
+      remediation:
+        "This package needs a tour name to be grouped under a tour. Edit the package's tour_name field before saving.",
+    };
+  }
+  if (/RPC (returned no|missed)/i.test(raw)) {
+    return {
+      headline: "Save backend missed this row",
+      remediation:
+        "Re-run save. If the error persists, the package's raw_index drifted from the RPC's expectations — contact support.",
+    };
+  }
+  return { headline: raw, remediation: null };
+}
+
+function SaveErrorBlock({ raw }: { raw: string }) {
+  const { headline, remediation } = interpretSaveError(raw);
+  return (
+    <div className="mt-1 flex items-start gap-1 text-xs text-red-700">
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 rounded px-1 hover:bg-red-100"
+            aria-label="Show full save error"
+          >
+            <Info className="h-3 w-3 shrink-0" />
+            <span className="truncate" title={headline}>
+              save error: {truncate(headline, 80)}
+            </span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-96 text-sm">
+          <div className="font-medium text-red-700">{headline}</div>
+          {remediation ? (
+            <div className="mt-2 text-foreground">{remediation}</div>
+          ) : null}
+          <div className="mt-3 border-t pt-2 text-xs text-muted-foreground">
+            Raw error
+          </div>
+          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-2 font-mono text-xs">
+            {raw}
+          </pre>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
 }
