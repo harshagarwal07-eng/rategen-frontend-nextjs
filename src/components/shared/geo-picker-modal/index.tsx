@@ -26,10 +26,7 @@ import { listCountries } from "@/data-access/geo-picker-api";
 import type { TransferCountryOption } from "@/types/transfers";
 import CityKindContent from "./kinds/city-kind";
 import CustomPointKindContent from "./kinds/custom-point-kind";
-import {
-  AttractionKindContent,
-  ActivityKindContent,
-} from "./kinds/master-catalog-kind";
+import ToursKindContent from "./kinds/master-catalog-kind";
 import {
   MASTER_DATA_COUNTRIES,
   type GeoPickerKind,
@@ -93,26 +90,25 @@ const KINDS: KindRegistryEntry[] = [
     comingSoonHint: "Port pick coming soon — needs seeded master data",
   },
   {
-    id: "attraction",
-    label: "Attraction",
+    // "Tours" tab — single picker for both attractions and activities.
+    // Each row in the list shows a kind Badge so users can tell them
+    // apart even though they share a tab. Selection still records the
+    // row's actual kind (attraction | activity) on the GeoSelection.
+    id: "tours",
+    label: "Tours",
     Icon: TreePine,
     requiresMasterData: true,
     comingSoonHint:
-      "Attraction pick available for UAE / Singapore / Bali / Mauritius",
-    Content: AttractionKindContent,
-  },
-  {
-    id: "activity",
-    label: "Activity",
-    Icon: TreePine,
-    requiresMasterData: true,
-    comingSoonHint:
-      "Activity pick available for UAE / Singapore / Bali / Mauritius",
-    Content: ActivityKindContent,
+      "Tours pick available for UAE / Singapore / Bali / Mauritius",
+    Content: ToursKindContent,
   },
 ];
 
-const DEFAULT_ENABLED_KINDS: string[] = ["city", "custom_point"];
+// Default exposes city, custom point, and the master-data-gated Tours
+// tab — every consumer (tours, transfers) gets country-based activation
+// out of the box. Hotel/Airport/Station/Port stay opt-in and disabled
+// for now (no master data yet).
+const DEFAULT_ENABLED_KINDS: string[] = ["city", "custom_point", "tours"];
 
 export interface GeoPickerModalProps {
   open: boolean;

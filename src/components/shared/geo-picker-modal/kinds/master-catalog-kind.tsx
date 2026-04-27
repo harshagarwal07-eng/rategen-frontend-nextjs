@@ -1,9 +1,11 @@
 "use client";
 
-// Master-catalog kind content (attraction | activity). Fetches
-// /api/tours/master-catalog scoped to the active country and the kind
-// passed in, then renders a flat search-aware list. Click toggles
-// selection; the wrapper modal owns chip rendering.
+// "Tours" tab content. Pulls master_catalog rows for the active country
+// with NO kind filter — both attractions and activities are mixed in
+// one list, each row tagged with a Badge so the user can tell them
+// apart. Selection still records the row's actual kind on the
+// GeoSelection (`attraction` or `activity`) so downstream resolvers
+// (e.g. tour primary_geo_id) can branch if they need to.
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, Loader2 } from "lucide-react";
@@ -17,41 +19,40 @@ import type {
   GeoSelection,
 } from "../types";
 
-// Per-country, per-kind cache. Modal is opened/closed often; refetching
-// every open is wasteful when the data is static.
-type CacheKey = `${string}:${string}`;
-const cache = new Map<CacheKey, TourMasterCatalogItem[]>();
+const cache = new Map<string, TourMasterCatalogItem[]>();
 
-interface MasterCatalogKindProps extends GeoPickerKindContentProps {
-  kind: "attraction" | "activity";
+function rowKind(item: TourMasterCatalogItem): "attraction" | "activity" {
+  // master_catalog.kind is text; treat anything that isn't 'activity' as
+  // attraction so unknown values still render a chip kind.
+  return item.kind === "activity" ? "activity" : "attraction";
 }
 
-export function MasterCatalogKindContent({
-  kind,
+export default function ToursKindContent({
   activeCountryId,
   selections,
   onChange,
   search,
-}: MasterCatalogKindProps) {
+}: GeoPickerKindContentProps) {
   const [items, setItems] = useState<TourMasterCatalogItem[] | null>(
-    cache.get(`${kind}:${activeCountryId}`) ?? null,
+    cache.get(activeCountryId) ?? null,
   );
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const key = `${kind}:${activeCountryId}` as CacheKey;
-    const cached = cache.get(key);
+    const cached = cache.get(activeCountryId);
     if (cached) {
       setItems(cached);
       return;
     }
     let cancelled = false;
     setLoading(true);
-    listMasterCatalog({ kind, country_id: activeCountryId })
+    // No kind filter — backend returns both attractions and activities
+    // for the country.
+    listMasterCatalog({ country_id: activeCountryId })
       .then((res) => {
         if (cancelled) return;
         const data = res.data ?? [];
-        cache.set(key, data);
+        cache.set(activeCountryId, data);
         setItems(data);
       })
       .finally(() => {
@@ -60,12 +61,15 @@ export function MasterCatalogKindContent({
     return () => {
       cancelled = true;
     };
-  }, [kind, activeCountryId]);
+  }, [activeCountryId]);
 
-  const selectedIds = useMemo(
-    () => new Set(selections.filter((s) => s.kind === kind).map((s) => s.id)),
-    [selections, kind],
-  );
+  const selectedIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of selections) {
+      if (s.kind === "attraction" || s.kind === "activity") set.add(s.id);
+    }
+    return set;
+  }, [selections]);
 
   const filtered = useMemo(() => {
     if (!items) return [];
@@ -75,14 +79,21 @@ export function MasterCatalogKindContent({
   }, [items, search]);
 
   function toggle(item: TourMasterCatalogItem) {
+    const k = rowKind(item);
     if (selectedIds.has(item.id)) {
       onChange(
-        selections.filter((s) => !(s.kind === kind && s.id === item.id)),
+        selections.filter(
+          (s) =>
+            !(
+              (s.kind === "attraction" || s.kind === "activity") &&
+              s.id === item.id
+            ),
+        ),
       );
       return;
     }
     const sel: GeoSelection = {
-      kind,
+      kind: k,
       id: item.id,
       label: item.name,
       geo_id: item.geo_id ?? null,
@@ -93,7 +104,7 @@ export function MasterCatalogKindContent({
   if (loading && (!items || items.length === 0)) {
     return (
       <div className="flex items-center gap-2 py-12 text-sm text-muted-foreground justify-center">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading {kind}s…
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading tours…
       </div>
     );
   }
@@ -101,7 +112,7 @@ export function MasterCatalogKindContent({
   if (!items || items.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">
-        No {kind}s for this country.
+        No tours for this country yet.
       </div>
     );
   }
@@ -109,7 +120,7 @@ export function MasterCatalogKindContent({
   if (filtered.length === 0) {
     return (
       <div className="py-12 text-center text-sm text-muted-foreground">
-        No {kind}s match &quot;{search}&quot;.
+        No tours match &quot;{search}&quot;.
       </div>
     );
   }
@@ -119,6 +130,7 @@ export function MasterCatalogKindContent({
       <div className="flex flex-col">
         {filtered.map((item) => {
           const isSelected = selectedIds.has(item.id);
+          const k = rowKind(item);
           return (
             <button
               type="button"
@@ -144,7 +156,7 @@ export function MasterCatalogKindContent({
                 variant="secondary"
                 className="text-[10px] capitalize shrink-0"
               >
-                {kind}
+                {k}
               </Badge>
             </button>
           );
@@ -152,12 +164,4 @@ export function MasterCatalogKindContent({
       </div>
     </ScrollArea>
   );
-}
-
-export function AttractionKindContent(props: GeoPickerKindContentProps) {
-  return <MasterCatalogKindContent {...props} kind="attraction" />;
-}
-
-export function ActivityKindContent(props: GeoPickerKindContentProps) {
-  return <MasterCatalogKindContent {...props} kind="activity" />;
 }

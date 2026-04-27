@@ -148,7 +148,7 @@ export default function PrimaryLocationPicker({
         countryId={countryId}
         fieldLabel="Primary Location"
         initialSelections={[]}
-        enabledKinds={["city", "custom_point", "attraction", "activity"]}
+        enabledKinds={["city", "custom_point", "tours"]}
         singleSelect
         onApply={handleApply}
       />
