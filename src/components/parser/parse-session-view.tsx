@@ -27,6 +27,7 @@ import {
   type ParseJobPackageRow,
   type SourceEntry,
 } from "@/data-access/parser-api";
+import { ReviewDashboard } from "./review-dashboard";
 
 const PHASES = ["file", "destination", "classify", "rates", "inclusions"] as const;
 type PhaseName = (typeof PHASES)[number];
@@ -207,7 +208,7 @@ export function ParseSessionView({ jobId, sourceEntry }: Props) {
           <PhaseSummaryPanel phases={state.phases} />
         </div>
       ) : (
-        <ReviewPlaceholder
+        <ReviewDashboard
           jobId={jobId}
           sourceEntry={sourceEntry}
           packages={jobData?.packages ?? []}
@@ -303,86 +304,6 @@ function PhaseSummaryPanel({ phases }: { phases: Record<PhaseName, PhaseSlot> })
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function ReviewPlaceholder({
-  jobId,
-  sourceEntry,
-  packages,
-}: {
-  jobId: string;
-  sourceEntry: SourceEntry;
-  packages: ParseJobPackageRow[];
-}) {
-  // Phase 3 (review dashboard) replaces this block. For now, just show a
-  // count-by-status summary so the user sees something useful.
-  const buckets = useMemo(() => {
-    const high: ParseJobPackageRow[] = [];
-    const medium: ParseJobPackageRow[] = [];
-    const low: ParseJobPackageRow[] = [];
-    for (const p of packages) {
-      const s = p.confidence_score;
-      if (s >= 0.85) high.push(p);
-      else if (s >= 0.6) medium.push(p);
-      else low.push(p);
-    }
-    return { high, medium, low };
-  }, [packages]);
-
-  return (
-    <div className="mt-4 rounded-md border bg-background p-6">
-      <div className="mb-4 text-sm font-medium">Review dashboard (preview)</div>
-      <div className="mb-3 text-sm text-muted-foreground">
-        Parse complete — {packages.length} package{packages.length === 1 ? "" : "s"} extracted.
-        The full review dashboard ships in Phase 3; this is a placeholder summary.
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <BucketCard label="High confidence" count={buckets.high.length} className="bg-emerald-50 text-emerald-800 border-emerald-200" />
-        <BucketCard label="Medium" count={buckets.medium.length} className="bg-amber-50 text-amber-800 border-amber-200" />
-        <BucketCard label="Low" count={buckets.low.length} className="bg-red-50 text-red-800 border-red-200" />
-      </div>
-      {packages.length > 0 ? (
-        <div className="mt-4 max-h-72 overflow-y-auto rounded-md border">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="px-2 py-1 text-left">Name</th>
-                <th className="px-2 py-1 text-left">Type</th>
-                <th className="px-2 py-1 text-left">Confidence</th>
-                <th className="px-2 py-1 text-left">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {packages.map((p) => {
-                const parsed = (p.parsed_data ?? {}) as { name?: string; tour_name?: string };
-                const name = parsed.name ?? parsed.tour_name ?? "(unnamed)";
-                return (
-                  <tr key={p.id} className="border-t">
-                    <td className="px-2 py-1">{name}</td>
-                    <td className="px-2 py-1">{p.package_type}</td>
-                    <td className="px-2 py-1">{(p.confidence_score * 100).toFixed(0)}%</td>
-                    <td className="px-2 py-1">{p.review_status}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-      <div className="mt-4 text-xs text-muted-foreground">
-        Job ID: <code>{jobId}</code> · Source: {sourceEntry}
-      </div>
-    </div>
-  );
-}
-
-function BucketCard({ label, count, className }: { label: string; count: number; className?: string }) {
-  return (
-    <div className={["rounded-md border p-3", className ?? ""].join(" ")}>
-      <div className="text-xs">{label}</div>
-      <div className="text-2xl font-semibold">{count}</div>
     </div>
   );
 }
