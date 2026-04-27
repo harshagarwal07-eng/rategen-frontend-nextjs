@@ -387,7 +387,14 @@ function RoomCard({
             {titleText}
           </span>
           {room.rate_type && (
-            <span className="shrink-0 rounded-full border border-primary/30 bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                room.rate_type === "PPPN"
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-green-100 text-green-800"
+              )}
+            >
               {room.rate_type}
             </span>
           )}

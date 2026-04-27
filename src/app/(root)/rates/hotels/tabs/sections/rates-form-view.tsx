@@ -154,6 +154,21 @@ function RoomCard({
     return n;
   }, [seasons, rates, room.id, contractRateBasis]);
 
+  // Representative rate: walk seasons in display order, return the first
+  // season's rate value. PRPN → room_rate, PPPN → double_rate.
+  const representativeRate = useMemo<number | null>(() => {
+    for (const s of seasons) {
+      const r = rates.find(
+        (rr) => rr.room_category_id === room.id && rr.season_id === s.id
+      );
+      if (!r) continue;
+      const v =
+        room.rate_type === "PPPN" ? r.double_rate : r.room_rate;
+      if (v != null) return v;
+    }
+    return null;
+  }, [seasons, rates, room.id, room.rate_type]);
+
   const pillClass =
     room.rate_type === "PPPN" ? "bg-blue-100 text-blue-800" : "bg-green-100 text-green-800";
 
@@ -170,6 +185,21 @@ function RoomCard({
       <Badge variant="secondary" className={cn("text-[10px] shrink-0", pillClass)}>
         {room.rate_type === "PPPN" ? "PPPN" : "PRPN"}
       </Badge>
+      {representativeRate != null ? (
+        <Badge
+          variant="secondary"
+          className="text-[10px] shrink-0 bg-green-100 text-green-700"
+        >
+          ${representativeRate.toLocaleString()}
+        </Badge>
+      ) : (
+        <Badge
+          variant="secondary"
+          className="text-[10px] shrink-0 bg-muted text-muted-foreground"
+        >
+          —
+        </Badge>
+      )}
       {(room.max_total_occupancy ?? 0) > 0 && (
         <span className="text-[11px] font-normal text-muted-foreground shrink-0">
           Max {room.max_total_occupancy} pax

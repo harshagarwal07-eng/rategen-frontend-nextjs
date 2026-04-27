@@ -15,6 +15,7 @@ import { RateDrawer } from "./rate-drawer";
 import {
   ageBandLabel,
   bySortOrder,
+  computeNetFromBar,
   fmtDay,
   formatDaysLabel,
   formatTaxesSummary,
@@ -332,6 +333,41 @@ function CellTooltip({
 
   const filteredTaxes = taxesForRoom(contractTaxes, room.id ?? "");
 
+  const fmtMoney = (v: number | null | undefined) =>
+    v == null ? "—" : `$${v.toLocaleString()}`;
+  const fmtSupp = () => {
+    if (rate.extra_adult_supplement == null) return "—";
+    return rate.extra_adult_supplement_type === "percentage"
+      ? `${rate.extra_adult_supplement}%`
+      : `$${rate.extra_adult_supplement}`;
+  };
+
+  const isBar = contractRateBasis === "bar" && rate.rate_type === "PRPN";
+  const ratesGrid: Array<[string, string]> = [];
+  if (rate.rate_type === "PRPN") {
+    if (isBar) {
+      ratesGrid.push(["BAR", fmtMoney(rate.bar_rate)]);
+      ratesGrid.push([
+        "Commission",
+        rate.commission_percentage != null
+          ? `${rate.commission_percentage}%`
+          : "—",
+      ]);
+      const net = computeNetFromBar(rate.bar_rate, rate.commission_percentage);
+      ratesGrid.push(["Net", net != null ? `$${net.toFixed(2)}` : "—"]);
+    } else {
+      ratesGrid.push(["Room rate", fmtMoney(rate.room_rate)]);
+    }
+    ratesGrid.push(["Single", fmtMoney(rate.single_rate)]);
+    ratesGrid.push(["Extra adult", fmtSupp()]);
+  } else {
+    ratesGrid.push(["Single", fmtMoney(rate.single_rate)]);
+    ratesGrid.push(["Double", fmtMoney(rate.double_rate)]);
+    ratesGrid.push(["Triple", fmtMoney(rate.triple_rate)]);
+    ratesGrid.push(["Quad", fmtMoney(rate.quad_rate)]);
+    ratesGrid.push(["Extra adult", fmtSupp()]);
+  }
+
   const childSummary = rate.age_pricing
     .map((c) => {
       const band = agePolicies.find((b) => b.id === c.age_policy_id);
@@ -345,10 +381,18 @@ function CellTooltip({
     .join("  ·  ");
 
   return (
-    <div className="space-y-1 text-xs">
+    <div className="space-y-1.5 text-xs">
       {cellValue != null && (
         <div className="text-base font-bold">${cellValue.toLocaleString()}</div>
       )}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 pt-0.5">
+        {ratesGrid.map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-2">
+            <span className="text-muted-foreground/80">{label}:</span>
+            <span className="font-medium">{value}</span>
+          </div>
+        ))}
+      </div>
       <div>
         <span className="text-muted-foreground/80">Meal:</span> {mealLabel}
       </div>
@@ -356,14 +400,6 @@ function CellTooltip({
         <span className="text-muted-foreground/80">Days:</span>{" "}
         {formatDaysLabel(rate.valid_days)}
       </div>
-      {rate.extra_adult_supplement != null && (
-        <div>
-          <span className="text-muted-foreground/80">Extra adult:</span>{" "}
-          {rate.extra_adult_supplement_type === "percentage"
-            ? `${rate.extra_adult_supplement}%`
-            : `$${rate.extra_adult_supplement}`}
-        </div>
-      )}
       <div>
         <span className="text-muted-foreground/80">Status:</span>{" "}
         <span

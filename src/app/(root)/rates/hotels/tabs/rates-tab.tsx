@@ -313,6 +313,25 @@ function RatesEditor({
     onSavingChange?.(saving);
   }, [saving, onSavingChange]);
 
+  // Unmount cleanup: clear the parent's saving/dirty flags. If RatesEditor
+  // unmounts mid-save (user switches tabs while a matrix/calendar drawer
+  // save is in flight), the local setSaving(false) in persistAll's finally
+  // never propagates upward — the [saving, onSavingChange] effect above
+  // can't re-run on an unmounted component — leaving parent's tab3Saving
+  // stuck true. Global isSaving = formSaving || ... || tab3Saving then
+  // surfaces a stuck "Saving…" spinner on every tab. Refs avoid resetting
+  // mid-render when callbacks change identity.
+  const onSavingChangeRef = useRef(onSavingChange);
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  onSavingChangeRef.current = onSavingChange;
+  onDirtyChangeRef.current = onDirtyChange;
+  useEffect(() => {
+    return () => {
+      onSavingChangeRef.current?.(false);
+      onDirtyChangeRef.current(false);
+    };
+  }, []);
+
   // ── Save coordinator ──
   const persistAll = useCallback(
     async (nextRates: LocalRate[]): Promise<boolean> => {

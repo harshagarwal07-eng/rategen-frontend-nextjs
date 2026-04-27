@@ -463,8 +463,12 @@ function ContractEditor({
       return;
     }
 
-    onSavingChange?.(true);
+    // Wrap the entire body in try/finally so isSaving always clears even if
+    // a section save throws an unexpected error type (one not caught by the
+    // catch below) — defense-in-depth against the saving spinner getting
+    // stuck and forcing a tab-switch reset.
     try {
+      onSavingChange?.(true);
       // 1. Age policies
       if (ageDirty) {
         const payload = stripAgePolicies(ageState);

@@ -24,6 +24,7 @@ const SEASON_COLORS = [
 ];
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
+const MONTHS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 
 function fmtIso(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -73,28 +74,10 @@ export function RatesCalendarView({
   const [drawerSeason, setDrawerSeason] = useState<ContractSeasonRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const firstDate = seasons
-      .flatMap((s) => (s.season_date_ranges ?? []).map((r) => r.date_from))
-      .sort()[0];
-    if (firstDate) {
-      const d = new Date(firstDate + "T12:00:00");
-      return { year: d.getFullYear(), month: d.getMonth() };
-    }
-    const now = new Date();
-    return { year: now.getFullYear(), month: now.getMonth() };
-  });
-
-  const dates = useMemo(
-    () => getDaysInMonth(currentMonth.year, currentMonth.month),
-    [currentMonth]
-  );
+  const [year, setYear] = useState<number>(() => new Date().getFullYear());
 
   const todayStr = useMemo(() => fmtIso(new Date()), []);
 
-  // Sort by user-defined sort_order ASC. The 10-color palette below is
-  // therefore keyed on the user's chosen season order, not chronological
-  // first-date order.
   const sortedSeasons = useMemo(() => bySortOrder(seasons), [seasons]);
   const sortedRooms = useMemo(() => bySortOrder(rooms), [rooms]);
 
@@ -126,26 +109,6 @@ export function RatesCalendarView({
     return map;
   }, [rates]);
 
-  function prev() {
-    setCurrentMonth((p) =>
-      p.month === 0 ? { year: p.year - 1, month: 11 } : { year: p.year, month: p.month - 1 }
-    );
-  }
-  function next() {
-    setCurrentMonth((p) =>
-      p.month === 11 ? { year: p.year + 1, month: 0 } : { year: p.year, month: p.month + 1 }
-    );
-  }
-  function goToday() {
-    const n = new Date();
-    setCurrentMonth({ year: n.getFullYear(), month: n.getMonth() });
-  }
-
-  const monthLabel = new Date(
-    currentMonth.year,
-    currentMonth.month
-  ).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-
   const drawerRate =
     drawerRoom && drawerSeason
       ? rateMap.get(`${drawerRoom.id}-${drawerSeason.id}`) ?? null
@@ -164,20 +127,27 @@ export function RatesCalendarView({
   }
 
   return (
-    <div className="space-y-3">
-      {/* Month nav */}
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" onClick={prev}>
+    <div className="space-y-4">
+      {/* Year nav (centered) */}
+      <div className="flex items-center justify-center gap-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setYear((y) => y - 1)}
+          aria-label="Previous year"
+        >
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="min-w-[160px] text-center text-sm font-semibold">
-          {monthLabel}
+        <span className="min-w-[80px] text-center text-base font-semibold">
+          {year}
         </span>
-        <Button variant="outline" size="sm" onClick={next}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setYear((y) => y + 1)}
+          aria-label="Next year"
+        >
           <ChevronRight className="h-4 w-4" />
-        </Button>
-        <Button variant="outline" size="sm" onClick={goToday} className="ml-2 text-xs">
-          Today
         </Button>
       </div>
 
@@ -200,8 +170,90 @@ export function RatesCalendarView({
         ))}
       </div>
 
-      {/* Calendar */}
-      <div className="overflow-auto rounded-lg border max-h-[72vh]">
+      {/* 12 stacked month blocks. Sticky room column is per-month — cross-
+          month sticky would require one giant 365-column table or synced
+          horizontal scroll across 12 tables; both add significant complexity
+          for marginal benefit, so we keep sticky scope per-month. */}
+      <div className="space-y-6">
+        {MONTHS.map((m) => (
+          <MonthBlock
+            key={m}
+            year={year}
+            month={m}
+            sortedRooms={sortedRooms}
+            dateToSeason={dateToSeason}
+            seasonColor={seasonColor}
+            rateMap={rateMap}
+            contractRateBasis={contractRateBasis}
+            todayStr={todayStr}
+            disabled={disabled}
+            onCellClick={(room, season) => {
+              setDrawerRoom(room);
+              setDrawerSeason(season);
+              setDrawerOpen(true);
+            }}
+          />
+        ))}
+      </div>
+
+      <RateDrawer
+        open={drawerOpen}
+        onOpenChange={(o) => {
+          setDrawerOpen(o);
+          if (!o) {
+            setDrawerRoom(null);
+            setDrawerSeason(null);
+          }
+        }}
+        room={drawerRoom}
+        season={drawerSeason}
+        existingRate={drawerRate}
+        mealPlans={mealPlans}
+        agePolicies={agePolicies}
+        contractTaxes={contractTaxes}
+        contractRateBasis={contractRateBasis}
+        onSave={onPersistOne}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+function MonthBlock({
+  year,
+  month,
+  sortedRooms,
+  dateToSeason,
+  seasonColor,
+  rateMap,
+  contractRateBasis,
+  todayStr,
+  disabled,
+  onCellClick,
+}: {
+  year: number;
+  month: number;
+  sortedRooms: ContractRoom[];
+  dateToSeason: Map<string, ContractSeasonRow>;
+  seasonColor: Map<string, string>;
+  rateMap: Map<string, LocalRate>;
+  contractRateBasis: "net" | "bar";
+  todayStr: string;
+  disabled?: boolean;
+  onCellClick: (room: ContractRoom, season: ContractSeasonRow) => void;
+}) {
+  const dates = useMemo(() => getDaysInMonth(year, month), [year, month]);
+  const monthLabel = new Date(year, month).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+
+  return (
+    <div className="space-y-1.5">
+      <h3 className="text-sm font-semibold text-foreground/90 px-1">
+        {monthLabel}
+      </h3>
+      <div className="overflow-x-auto rounded-lg border">
         <table
           className="border-collapse"
           style={{ tableLayout: "fixed", width: "max-content", minWidth: "100%" }}
@@ -214,7 +266,7 @@ export function RatesCalendarView({
           </colgroup>
           <thead>
             <tr>
-              <th className="sticky left-0 top-0 z-30 bg-background border-r-2 border-b-2 px-2 py-1.5 text-left text-xs font-semibold">
+              <th className="sticky left-0 z-20 bg-background border-r-2 border-b-2 px-2 py-1.5 text-left text-xs font-semibold">
                 Room
               </th>
               {dates.map((d) => {
@@ -224,7 +276,7 @@ export function RatesCalendarView({
                 return (
                   <th
                     key={dateStr}
-                    className="sticky top-0 z-20 bg-background border-b-2 border-r px-0 py-1 text-center"
+                    className="bg-background border-b-2 border-r px-0 py-1 text-center"
                   >
                     <div
                       className={cn(
@@ -274,13 +326,13 @@ export function RatesCalendarView({
                       key={dateStr}
                       onClick={() => {
                         if (!clickable || !season) return;
-                        setDrawerRoom(room);
-                        setDrawerSeason(season);
-                        setDrawerOpen(true);
+                        onCellClick(room, season);
                       }}
                       className={cn(
                         "border-b border-r text-center align-middle",
-                        clickable ? "cursor-pointer hover:brightness-95" : "cursor-default"
+                        clickable
+                          ? "cursor-pointer hover:brightness-95"
+                          : "cursor-default"
                       )}
                       style={{
                         height: 44,
@@ -307,26 +359,6 @@ export function RatesCalendarView({
           </tbody>
         </table>
       </div>
-
-      <RateDrawer
-        open={drawerOpen}
-        onOpenChange={(o) => {
-          setDrawerOpen(o);
-          if (!o) {
-            setDrawerRoom(null);
-            setDrawerSeason(null);
-          }
-        }}
-        room={drawerRoom}
-        season={drawerSeason}
-        existingRate={drawerRate}
-        mealPlans={mealPlans}
-        agePolicies={agePolicies}
-        contractTaxes={contractTaxes}
-        contractRateBasis={contractRateBasis}
-        onSave={onPersistOne}
-        disabled={disabled}
-      />
     </div>
   );
 }
