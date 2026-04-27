@@ -8,10 +8,14 @@
  * reject parsed packages individually and save the approved ones to real
  * tours/transfers tables atomically via /api/parser/jobs/:id/save.
  *
- * v1 scope (per parser-followups.md):
+ * Scope:
  * - Stats strip (counts by review_status + confidence bucket)
  * - Single sortable table of all packages, with checkbox + row-level
  *   approve/reject + edit-status display
+ * - Bulk approve / reject (footer) operating on selected non-terminal rows;
+ *   bulk-approve is blocked when any selected pending row has
+ *   confidence_score < 0.6 (per brief — those must be approved individually
+ *   after edit)
  * - Bulk save of approved + selected
  * - Catalog/geo match readout (display-only; the change action — opening
  *   the master catalog picker / geo picker — is deferred to Phase 4 polish)
@@ -51,11 +55,18 @@ interface Props {
   packages: ParseJobPackageRow[];
 }
 
+const LOW_CONF_THRESHOLD = 0.6;
+
+function isTerminalStatus(s: ParseJobPackageRow["review_status"]): boolean {
+  return s === "saved" || s === "rejected";
+}
+
 export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState<null | "approve" | "reject">(null);
 
   const stats = useMemo(() => {
     const total = packages.length;
@@ -79,26 +90,36 @@ export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
   const ordered = useMemo(() => {
     const arr = [...packages];
     arr.sort((a, b) => {
-      const aTerm = a.review_status === "saved" || a.review_status === "rejected" ? 1 : 0;
-      const bTerm = b.review_status === "saved" || b.review_status === "rejected" ? 1 : 0;
+      const aTerm = isTerminalStatus(a.review_status) ? 1 : 0;
+      const bTerm = isTerminalStatus(b.review_status) ? 1 : 0;
       if (aTerm !== bTerm) return aTerm - bTerm;
       return a.confidence_score - b.confidence_score;
     });
     return arr;
   }, [packages]);
 
-  const eligibleForSave = useMemo(
-    () => ordered.filter((p) => p.review_status === "approved").map((p) => p.id),
+  // Any non-terminal row is selectable for bulk actions.
+  const selectableIds = useMemo(
+    () => ordered.filter((p) => !isTerminalStatus(p.review_status)).map((p) => p.id),
     [ordered],
   );
 
-  const selectedApprovedCount = useMemo(() => {
-    let n = 0;
-    for (const id of eligibleForSave) {
-      if (selectedIds.has(id)) n++;
+  // Selection bucketed by status — drives which bulk actions enable.
+  const selection = useMemo(() => {
+    const pending: ParseJobPackageRow[] = [];
+    const approved: ParseJobPackageRow[] = [];
+    const lowConfPending: ParseJobPackageRow[] = [];
+    for (const p of packages) {
+      if (!selectedIds.has(p.id)) continue;
+      if (p.review_status === "pending") {
+        pending.push(p);
+        if (p.confidence_score < LOW_CONF_THRESHOLD) lowConfPending.push(p);
+      } else if (p.review_status === "approved") {
+        approved.push(p);
+      }
     }
-    return n;
-  }, [eligibleForSave, selectedIds]);
+    return { pending, approved, lowConfPending };
+  }, [packages, selectedIds]);
 
   function toggleSelect(id: string) {
     const next = new Set(selectedIds);
@@ -107,8 +128,8 @@ export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
     setSelectedIds(next);
   }
 
-  function selectAllApproved() {
-    setSelectedIds(new Set(eligibleForSave));
+  function selectAllSelectable() {
+    setSelectedIds(new Set(selectableIds));
   }
 
   async function setStatus(id: string, status: "approved" | "rejected") {
@@ -127,8 +148,50 @@ export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
     await qc.invalidateQueries({ queryKey: ["parser", "job", jobId] });
   }
 
+  async function onBulkApprove() {
+    if (selection.lowConfPending.length > 0) {
+      // Brief §3.3: bulk-approve blocked when any selected row has confidence < 0.6.
+      // Belt-and-braces: the button is also disabled in this case.
+      toast.error(
+        `${selection.lowConfPending.length} selected row${selection.lowConfPending.length === 1 ? "" : "s"} below ${LOW_CONF_THRESHOLD * 100}% confidence — approve those individually after editing.`,
+      );
+      return;
+    }
+    if (selection.pending.length === 0) return;
+    setBulkBusy("approve");
+    const results = await Promise.all(
+      selection.pending.map((p) => patchParserPackageStatus(jobId, p.id, "approved")),
+    );
+    setBulkBusy(null);
+    const errs = results.filter((r) => r.error);
+    if (errs.length === 0) {
+      toast.success(`Approved ${results.length} package${results.length === 1 ? "" : "s"}.`);
+    } else {
+      toast.error(`Approved ${results.length - errs.length}/${results.length}; ${errs.length} failed.`);
+    }
+    await qc.invalidateQueries({ queryKey: ["parser", "job", jobId] });
+  }
+
+  async function onBulkReject() {
+    const targets = [...selection.pending, ...selection.approved];
+    if (targets.length === 0) return;
+    setBulkBusy("reject");
+    const results = await Promise.all(
+      targets.map((p) => patchParserPackageStatus(jobId, p.id, "rejected")),
+    );
+    setBulkBusy(null);
+    const errs = results.filter((r) => r.error);
+    if (errs.length === 0) {
+      toast.success(`Rejected ${results.length} package${results.length === 1 ? "" : "s"}.`);
+    } else {
+      toast.error(`Rejected ${results.length - errs.length}/${results.length}; ${errs.length} failed.`);
+    }
+    setSelectedIds(new Set());
+    await qc.invalidateQueries({ queryKey: ["parser", "job", jobId] });
+  }
+
   async function onBulkSave() {
-    const ids = eligibleForSave.filter((id) => selectedIds.has(id));
+    const ids = selection.approved.map((p) => p.id);
     if (ids.length === 0) {
       toast.error("Pick at least one approved package to save.");
       return;
@@ -153,9 +216,14 @@ export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
     await qc.invalidateQueries({ queryKey: ["parser", "job", jobId] });
   }
 
-  const allApprovedSelected =
-    eligibleForSave.length > 0 &&
-    eligibleForSave.every((id) => selectedIds.has(id));
+  const allSelectableSelected =
+    selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+  const anySelectableSelected = selectableIds.some((id) => selectedIds.has(id));
+  const selectedCount = selection.pending.length + selection.approved.length;
+  const canBulkApprove =
+    bulkBusy === null && selection.pending.length > 0 && selection.lowConfPending.length === 0;
+  const canBulkReject = bulkBusy === null && selectedCount > 0;
+  const canBulkSave = !saving && selection.approved.length > 0;
 
   return (
     <div className="mt-4">
@@ -168,18 +236,18 @@ export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
               <TableHead className="w-[40px]">
                 <Checkbox
                   checked={
-                    allApprovedSelected
+                    allSelectableSelected
                       ? true
-                      : selectedApprovedCount > 0
+                      : anySelectableSelected
                       ? "indeterminate"
                       : false
                   }
                   onCheckedChange={(v) => {
-                    if (v === true) selectAllApproved();
+                    if (v === true) selectAllSelectable();
                     else setSelectedIds(new Set());
                   }}
-                  disabled={eligibleForSave.length === 0}
-                  aria-label="Select all approved"
+                  disabled={selectableIds.length === 0}
+                  aria-label="Select all reviewable"
                 />
               </TableHead>
               <TableHead className="w-[28%]">Name</TableHead>
@@ -214,24 +282,74 @@ export function ReviewDashboard({ jobId, sourceEntry, packages }: Props) {
         </Table>
       </div>
 
-      <div className="sticky bottom-0 mt-4 flex items-center justify-between rounded-md border bg-background px-4 py-3 shadow">
+      <div className="sticky bottom-0 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-4 py-3 shadow">
         <div className="text-sm text-muted-foreground">
-          {selectedApprovedCount} of {eligibleForSave.length} approved package
-          {eligibleForSave.length === 1 ? "" : "s"} selected
-        </div>
-        <Button
-          onClick={onBulkSave}
-          disabled={saving || selectedApprovedCount === 0}
-        >
-          {saving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
+          {selectedCount === 0 ? (
+            "No packages selected"
           ) : (
-            <>Save {selectedApprovedCount} to {sourceEntry === "tours" ? "Tours" : "Transfers"}</>
+            <>
+              {selectedCount} selected
+              {selection.lowConfPending.length > 0 ? (
+                <span className="ml-2 text-amber-700">
+                  ({selection.lowConfPending.length} below {LOW_CONF_THRESHOLD * 100}%)
+                </span>
+              ) : null}
+            </>
           )}
-        </Button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onBulkReject}
+            disabled={!canBulkReject}
+          >
+            {bulkBusy === "reject" ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Rejecting...
+              </>
+            ) : (
+              <>Reject {selectedCount > 0 ? selectedCount : ""}</>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onBulkApprove}
+            disabled={!canBulkApprove}
+            title={
+              selection.lowConfPending.length > 0
+                ? `${selection.lowConfPending.length} selected row${selection.lowConfPending.length === 1 ? "" : "s"} below ${LOW_CONF_THRESHOLD * 100}% confidence — approve individually after editing`
+                : undefined
+            }
+          >
+            {bulkBusy === "approve" ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Approving...
+              </>
+            ) : (
+              <>Approve {selection.pending.length > 0 ? selection.pending.length : ""}</>
+            )}
+          </Button>
+          <Button
+            onClick={onBulkSave}
+            disabled={!canBulkSave}
+          >
+            {saving ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                Save {selection.approved.length} to{" "}
+                {sourceEntry === "tours" ? "Tours" : "Transfers"}
+              </>
+            )}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -317,7 +435,7 @@ function PackageRow({
         <Checkbox
           checked={selected}
           onCheckedChange={onToggleSelect}
-          disabled={!isApproved}
+          disabled={isTerminal}
           aria-label={`Select ${name}`}
         />
       </TableCell>
