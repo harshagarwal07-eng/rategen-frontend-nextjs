@@ -42,7 +42,6 @@ import {
   replaceSeasonPaxRates,
   replaceSeasonPrivateRates,
   replaceSeasonVehicleRates,
-  replacePackageAgePolicies,
   replacePackageTaxes,
   getPackageTaxes,
 } from "@/data-access/tours-api";
@@ -51,11 +50,6 @@ import SeasonCard, {
   TourSeasonEditState,
   defaultTourSeasonState,
 } from "./sections/season-card";
-import AgePolicySection, {
-  AgeBandRow,
-  bandsToRows,
-  rowsToBands,
-} from "./sections/age-policy-section";
 import TaxesEditor, {
   TaxRow,
   rowsToTaxes,
@@ -131,12 +125,10 @@ function seasonFromServer(
 
 // Stable JSON snapshot for dirty detection.
 function snapshotPackage(
-  bands: AgeBandRow[],
   taxes: TaxRow[],
   seasons: TourSeasonEditState[],
 ): string {
   return JSON.stringify({
-    bands: rowsToBands(bands),
     taxes: rowsToTaxes(taxes),
     seasons: seasons.map((s) => ({
       id: s.id,
@@ -172,7 +164,8 @@ function snapshotPackage(
 
 interface PackageStateEntry {
   pkg: TourPackageDetail;
-  bands: AgeBandRow[];
+  /** Read-only — sourced from pkg.tour_package_age_policies (Tab 2 owns edits). */
+  bands: TourAgePolicyBand[];
   taxes: TaxRow[];
   seasons: TourSeasonEditState[];
   snapshot: string;
@@ -204,8 +197,8 @@ function PackageRatesCard({
   const { pkg, bands, taxes, seasons, snapshot } = entry;
   const [openSeasonIds, setOpenSeasonIds] = useState<Set<string>>(new Set());
 
-  const ageBandsForLabels = useMemo(() => rowsToBands(bands), [bands]);
-  const currentSnapshot = snapshotPackage(bands, taxes, seasons);
+  const ageBandsForLabels = bands;
+  const currentSnapshot = snapshotPackage(taxes, seasons);
   const isDirty = currentSnapshot !== snapshot;
 
   // Overlap detection.
@@ -355,12 +348,6 @@ function PackageRatesCard({
 
       {isOpen && (
         <div className="px-4 pb-4 pt-3 border-t flex flex-col gap-5">
-          {/* Age Policy */}
-          <AgePolicySection
-            rows={bands}
-            onChange={(rows) => onChange({ bands: rows })}
-          />
-
           {/* Seasons */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -484,7 +471,7 @@ export default function Tab3SeasonsRates({
   const anyDirty = useMemo(
     () =>
       entries.some(
-        (e) => snapshotPackage(e.bands, e.taxes, e.seasons) !== e.snapshot,
+        (e) => snapshotPackage(e.taxes, e.seasons) !== e.snapshot,
       ),
     [entries],
   );
@@ -521,10 +508,9 @@ export default function Tab3SeasonsRates({
             listPackageSeasons(pkg.id),
             getPackageTaxes(pkg.id),
           ]);
-          const bandsRaw = readBands(pkg);
-          const bands = bandsToRows(bandsRaw);
+          const bands = readBands(pkg);
           const seasons = (seasonsRes.data ?? []).map((s) =>
-            seasonFromServer(s, bandsRaw),
+            seasonFromServer(s, bands),
           );
           const taxes = taxesToRows(taxesRes.data ?? []);
           return {
@@ -532,7 +518,7 @@ export default function Tab3SeasonsRates({
             bands,
             taxes,
             seasons,
-            snapshot: snapshotPackage(bands, taxes, seasons),
+            snapshot: snapshotPackage(taxes, seasons),
           };
         }),
       );
@@ -585,7 +571,7 @@ export default function Tab3SeasonsRates({
             ...e,
             seasons: nextSeasons,
             snapshot: isPersisted
-              ? snapshotPackage(e.bands, e.taxes, nextSeasons)
+              ? snapshotPackage(e.taxes, nextSeasons)
               : e.snapshot,
           };
         }),
@@ -672,21 +658,16 @@ export default function Tab3SeasonsRates({
 
     setSavingPkgId(pkgId);
     try {
-      // 1. Age policies
-      const apRes = await replacePackageAgePolicies(
-        entry.pkg.id,
-        rowsToBands(entry.bands),
-      );
-      if (apRes.error) throw new Error(`Age policy: ${apRes.error}`);
+      // Age policies live on the package (Tab 2) — Tab 3 does not edit them.
 
-      // 2. Taxes
+      // 1. Taxes
       const taxRes = await replacePackageTaxes(
         entry.pkg.id,
         rowsToTaxes(entry.taxes),
       );
       if (taxRes.error) throw new Error(`Taxes: ${taxRes.error}`);
 
-      // 3. Seasons (POST first when pending, then PATCH + PUT children).
+      // 2. Seasons (POST first when pending, then PATCH + PUT children).
       const updatedSeasons: TourSeasonEditState[] = [];
       for (const s of entry.seasons) {
         let realId = s.id;
@@ -773,7 +754,7 @@ export default function Tab3SeasonsRates({
       const fresh: PackageStateEntry = {
         ...entry,
         seasons: updatedSeasons,
-        snapshot: snapshotPackage(entry.bands, entry.taxes, updatedSeasons),
+        snapshot: snapshotPackage(entry.taxes, updatedSeasons),
       };
       setEntries((prev) =>
         prev.map((e) => (e.pkg.id === pkgId ? fresh : e)),
