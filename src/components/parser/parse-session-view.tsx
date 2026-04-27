@@ -16,13 +16,16 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, Sparkles, Loader2, X } from "lucide-react";
+import { toast } from "sonner";
+import { ChevronLeft, Sparkles, Loader2, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   getParserJob,
   parserStreamUrl,
+  retryParserJob,
   type ParseJobRow,
   type ParseJobPackageRow,
   type SourceEntry,
@@ -75,8 +78,10 @@ interface Props {
 }
 
 export function ParseSessionView({ jobId, sourceEntry }: Props) {
+  const router = useRouter();
   const [state, setState] = useState<ParseState>(() => emptyState());
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [retrying, setRetrying] = useState(false);
   const startedAt = useRef<number>(Date.now());
 
   // Initial fetch — gives us the job row so we can populate the header
@@ -190,8 +195,37 @@ export function ParseSessionView({ jobId, sourceEntry }: Props) {
       <PhaseChips phases={state.phases} />
 
       {state.jobStatus === "failed" ? (
-        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
-          {state.globalError ?? "Parse failed. Check the backend logs for details."}
+        <div className="mt-4 flex items-start justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800">
+          <div className="flex-1">
+            {state.globalError ?? "Parse failed. Check the backend logs for details."}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={retrying}
+            onClick={async () => {
+              setRetrying(true);
+              const r = await retryParserJob(jobId);
+              setRetrying(false);
+              if (r.error || !r.data) {
+                toast.error(r.error ?? "Retry failed");
+                return;
+              }
+              toast.success("Re-parsing started");
+              const dest =
+                sourceEntry === "tours"
+                  ? `/rates/tours/parser/jobs/${r.data.job_id}`
+                  : `/rates/transfers/parser/jobs/${r.data.job_id}`;
+              router.push(dest);
+            }}
+          >
+            {retrying ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="mr-2 h-4 w-4" />
+            )}
+            Retry
+          </Button>
         </div>
       ) : null}
       <SiblingBanner

@@ -18,7 +18,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Sparkles, UploadCloud, X } from "lucide-react";
+import { Loader2, RotateCcw, Sparkles, UploadCloud, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -40,6 +40,7 @@ import {
 import {
   createParserJob,
   listParserJobs,
+  retryParserJob,
   type ParseJobRow,
   type SourceEntry,
 } from "@/data-access/parser-api";
@@ -249,7 +250,14 @@ export function AddUsingAiModal({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  history.map((j) => <HistoryRow key={j.id} job={j} sourceEntry={sourceEntry} />)
+                  history.map((j) => (
+                    <HistoryRow
+                      key={j.id}
+                      job={j}
+                      sourceEntry={sourceEntry}
+                      onRetried={() => refetchHistory()}
+                    />
+                  ))
                 )}
               </TableBody>
             </Table>
@@ -342,11 +350,40 @@ function FileDropArea({
   );
 }
 
-function HistoryRow({ job, sourceEntry }: { job: ParseJobRow; sourceEntry: SourceEntry }) {
+function HistoryRow({
+  job,
+  sourceEntry,
+  onRetried,
+}: {
+  job: ParseJobRow;
+  sourceEntry: SourceEntry;
+  onRetried: () => void;
+}) {
+  const [retrying, setRetrying] = useState(false);
+
   const reviewHref =
     sourceEntry === "tours"
       ? `/rates/tours/parser/jobs/${job.id}`
       : `/rates/transfers/parser/jobs/${job.id}`;
+
+  async function onRetry() {
+    setRetrying(true);
+    const r = await retryParserJob(job.id);
+    setRetrying(false);
+    if (r.error || !r.data) {
+      toast.error(r.error ?? "Retry failed");
+      return;
+    }
+    toast.success("Re-parsing started");
+    onRetried();
+    const newHref =
+      sourceEntry === "tours"
+        ? `/rates/tours/parser/jobs/${r.data.job_id}`
+        : `/rates/transfers/parser/jobs/${r.data.job_id}`;
+    if (typeof window !== "undefined") {
+      window.open(newHref, "_blank", "noopener,noreferrer");
+    }
+  }
 
   return (
     <TableRow>
@@ -364,9 +401,29 @@ function HistoryRow({ job, sourceEntry }: { job: ParseJobRow; sourceEntry: Sourc
         {formatDate(job.created_at)}
       </TableCell>
       <TableCell className="text-right">
-        <Link href={reviewHref} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">
-          Open
-        </Link>
+        <div className="flex justify-end gap-2">
+          {job.status === "failed" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              disabled={retrying}
+              className="h-7 px-2"
+            >
+              {retrying ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <>
+                  <RotateCcw className="mr-1 h-3 w-3" />
+                  Retry
+                </>
+              )}
+            </Button>
+          ) : null}
+          <Link href={reviewHref} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline">
+            Open
+          </Link>
+        </div>
       </TableCell>
     </TableRow>
   );

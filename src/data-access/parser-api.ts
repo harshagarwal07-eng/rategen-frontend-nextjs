@@ -166,6 +166,21 @@ export async function getParserJob(jobId: string): Promise<
   return unwrap<{ job: ParseJobRow; packages: ParseJobPackageRow[] }>(raw);
 }
 
+/**
+ * Retry a failed parse job. Creates a new parse_jobs row by re-reading the
+ * original file from storage and starting the pipeline again. The original
+ * failed row is left intact for audit.
+ */
+export async function retryParserJob(
+  jobId: string,
+): Promise<Result<CreateJobResponse>> {
+  const raw = await http.post<CreateJobResponse>(
+    `/api/parser/jobs/${jobId}/retry`,
+    {},
+  );
+  return unwrap<CreateJobResponse>(raw);
+}
+
 // ─── Save & PATCH ─────────────────────────────────────────────
 
 export async function saveApprovedPackages(
