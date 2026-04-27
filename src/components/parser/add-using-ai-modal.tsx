@@ -9,12 +9,13 @@
  * page's source_entry, filterable by job status and live-refreshing while
  * a parse is in flight.
  *
- * Country/state/cities form (per brief §2.1) is currently country-only.
- * State and cities multi-select are tracked in parser-followups.md and are
- * additive — the backend already accepts them in declared_context_json.
+ * Country/state/cities form (per brief §2.1): country is required, state is
+ * shown only when the country has registered states (Autocomplete hidden
+ * otherwise), and cities are an optional multi-select used as parser hints
+ * — the cities are scoped to the active country (and state, when set).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -28,6 +29,10 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Autocomplete } from "@/components/ui/autocomplete";
+import {
+  MultiSelectSearch,
+  type MultiSelectOption,
+} from "@/components/ui/multi-select-search";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -61,12 +66,21 @@ interface AddUsingAiModalProps {
   sourceEntry: SourceEntry;
 }
 
+interface SimpleOption {
+  value: string;
+  label: string;
+}
+
 export function AddUsingAiModal({
   open,
   onOpenChange,
   sourceEntry,
 }: AddUsingAiModalProps) {
-  const [countryName, setCountryName] = useState<string>("");
+  const [countryId, setCountryId] = useState<string>("");
+  const [stateId, setStateId] = useState<string>("");
+  const [stateOptions, setStateOptions] = useState<SimpleOption[]>([]);
+  const [cityIds, setCityIds] = useState<string[]>([]);
+  const [cityLabelMap, setCityLabelMap] = useState<Record<string, string>>({});
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -84,10 +98,62 @@ export function AddUsingAiModal({
   const countryOptions = useMemo(
     () =>
       countries.map((c: TourCountryOption) => ({
-        value: c.country_name,
+        value: c.id,
         label: c.country_name,
       })),
     [countries],
+  );
+  const country = useMemo(
+    () => countries.find((c: TourCountryOption) => c.id === countryId) ?? null,
+    [countries, countryId],
+  );
+
+  // States are fetched lazily per-country. Most countries return zero;
+  // hide the field unless we got at least one row back.
+  useEffect(() => {
+    if (!countryId) {
+      setStateOptions([]);
+      setStateId("");
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const { fetchStatesByCountryId } = await import("@/data-access/datastore");
+      const rows = await fetchStatesByCountryId(countryId);
+      if (cancelled) return;
+      setStateOptions(rows.map((r) => ({ value: r.value, label: r.label })));
+      setStateId("");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [countryId]);
+
+  // Reset cities when country or state changes — labels are scoped to the
+  // current geography so stale chips would mislead.
+  useEffect(() => {
+    setCityIds([]);
+    setCityLabelMap({});
+  }, [countryId, stateId]);
+
+  const fetchCities = useCallback(
+    async (search: string): Promise<MultiSelectOption[]> => {
+      if (!countryId) return [];
+      const { fetchCitiesByCountryId, fetchCitiesByStateId } = await import(
+        "@/data-access/datastore"
+      );
+      const rows = stateId
+        ? await fetchCitiesByStateId(stateId, search)
+        : await fetchCitiesByCountryId(countryId, search);
+      const opts: MultiSelectOption[] = rows.map((r) => ({ id: r.value, label: r.label }));
+      setCityLabelMap((prev) => {
+        const next = { ...prev };
+        for (const o of opts) next[o.id] = o.label;
+        return next;
+      });
+      return opts;
+    },
+    [countryId, stateId],
   );
 
   // Parse history (filtered by source page).
@@ -118,6 +184,11 @@ export function AddUsingAiModal({
       setFile(null);
       setIsDragging(false);
       setSubmitting(false);
+      setCountryId("");
+      setStateId("");
+      setStateOptions([]);
+      setCityIds([]);
+      setCityLabelMap({});
     }
   }, [open]);
 
@@ -138,7 +209,7 @@ export function AddUsingAiModal({
   }
 
   async function onSubmit() {
-    if (!countryName) {
+    if (!country) {
       toast.error("Pick a country.");
       return;
     }
@@ -149,7 +220,11 @@ export function AddUsingAiModal({
     setSubmitting(true);
     const result = await createParserJob(
       file,
-      { country: countryName, state: null, cities: [] },
+      {
+        country: country.country_name,
+        state: stateId || null,
+        cities: cityIds,
+      },
       sourceEntry,
     );
     setSubmitting(false);
@@ -179,19 +254,46 @@ export function AddUsingAiModal({
         <section className="grid gap-4 border-b pb-4">
           <div className="text-sm font-medium">Upload rate sheet</div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div>
               <label className="mb-1 block text-xs font-medium text-muted-foreground">
                 Country
               </label>
               <Autocomplete
                 options={countryOptions}
-                value={countryName}
-                onChange={(v) => setCountryName(v ?? "")}
+                value={countryId}
+                onChange={(v) => setCountryId(v ?? "")}
                 placeholder="Pick country..."
               />
             </div>
-            <div className="hidden sm:block" />
+            {stateOptions.length > 0 ? (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                  State <span className="text-muted-foreground/60">(optional)</span>
+                </label>
+                <Autocomplete
+                  options={stateOptions}
+                  value={stateId}
+                  onChange={(v) => setStateId(v ?? "")}
+                  placeholder="Any state"
+                />
+              </div>
+            ) : (
+              <div className="hidden sm:block" />
+            )}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Cities <span className="text-muted-foreground/60">(parser hints)</span>
+              </label>
+              <MultiSelectSearch
+                fetchFn={fetchCities}
+                value={cityIds}
+                onChange={setCityIds}
+                placeholder={countryId ? "Pick cities..." : "Pick country first"}
+                disabled={!countryId}
+                initialLabelMap={cityLabelMap}
+              />
+            </div>
           </div>
 
           <FileDropArea
@@ -206,7 +308,7 @@ export function AddUsingAiModal({
             <Button
               size="sm"
               onClick={onSubmit}
-              disabled={submitting || !file || !countryName}
+              disabled={submitting || !file || !country}
             >
               {submitting ? (
                 <>
