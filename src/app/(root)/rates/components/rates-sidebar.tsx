@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, Car, Group, UtensilsCrossed, LucideFerrisWheel, Plane } from "lucide-react";
+import { Building2, Car, Group, UtensilsCrossed, LucideFerrisWheel, Percent, Plane } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -50,6 +50,11 @@ const ratesNavItems = [
     label: "Fixed Departures",
     href: "/rates/fixed-departures",
     icon: Plane,
+  },
+  {
+    label: "Markup",
+    href: "/rates/markup",
+    icon: Percent,
   },
 ];
 
