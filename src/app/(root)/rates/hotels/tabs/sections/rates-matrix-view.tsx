@@ -206,7 +206,7 @@ export function RatesMatrixView({
                             </TooltipTrigger>
                             <TooltipContent
                               side="top"
-                              className="max-w-[300px] p-3"
+                              className="max-w-[300px] p-3 bg-popover text-popover-foreground border shadow-md"
                             >
                               <CellTooltip
                                 rate={r!}
