@@ -1,14 +1,17 @@
 "use client";
 
 // Per-season card for tour packages.
-// Tours-specific because pax rates are by age band (driven by the
-// package's age-policy bands) and vehicle rates are conditional on
-// the package's `rate_mode === 'per_vehicle'`. Borrowed UX (date
-// picker, blackout dates, exception rules) from transfers' season-card.
+// Section visibility is driven by the package's sales_mode:
+//
+//   ticket    → BandRates ("Per Ticket Rate") + Total Rate
+//   shared    → BandRates ("SIC Rate")
+//   private   → Pvt Per Pax (Per Pax / Tiered) + Discounts + Vehicle + Total Rate
+//   exclusive → Pvt Per Pax (Per Pax / Tiered) + Discounts + Vehicle + Total Rate
+//
+// Age bands are sourced from the package (Tab 2 owns the canonical set).
 
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   CalendarOff,
@@ -27,21 +30,23 @@ import {
 import { DatePicker } from "@/components/ui/date-picker";
 import {
   TourAgePolicyBand,
-  TourPackageRateMode,
   TourPackageSalesMode,
+  TourPrivateRateMode,
   TourVehicleRateType,
 } from "@/types/tours";
 import {
-  PaxRatesSection,
+  BandRatesSection,
   PrivateRatesSection,
   VehicleRatesSection,
+  TotalRateSection,
   ChildInfantDiscountSection,
   type PaxRateRow,
   type PrivateCell,
+  type PrivateTierRow,
   type VehicleRow,
 } from "./season-rates-editor";
 
-// ─── Date helpers (mirrors transfers/season-card) ─────────────────────
+// ─── Date helpers ─────────────────────────────────────────────────────
 
 function todayIso(): string {
   const d = new Date();
@@ -132,6 +137,8 @@ export type TourSeasonEditState = {
   status: string;
   exception_rules: string;
   vehicle_rate_type: TourVehicleRateType | null;
+  /** Per-pax vs tiered editor for private rates. */
+  private_rate_mode: TourPrivateRateMode;
   child_discount_type: "percent" | "fixed" | null;
   child_discount_value: string;
   infant_discount_type: "percent" | "fixed" | null;
@@ -141,6 +148,9 @@ export type TourSeasonEditState = {
   pax_rows: PaxRateRow[];
   vehicle_rows: VehicleRow[];
   private_cells: PrivateCell[];
+  private_tier_rows: PrivateTierRow[];
+  total_rate: string;
+  total_max_capacity: string;
 };
 
 export function defaultTourSeasonState(
@@ -154,6 +164,7 @@ export function defaultTourSeasonState(
     status: "active",
     exception_rules: "",
     vehicle_rate_type: "per_vehicle",
+    private_rate_mode: "per_pax",
     child_discount_type: null,
     child_discount_value: "",
     infant_discount_type: null,
@@ -163,6 +174,11 @@ export function defaultTourSeasonState(
     pax_rows: bands.map((b) => ({ band_name: b.band_name, rate: "" })),
     vehicle_rows: [],
     private_cells: [{ _key: `pp-1-${Date.now()}`, pax_count: 1, rate: "" }],
+    private_tier_rows: [
+      { _key: `tr-0-${Date.now()}`, min_pax: "1", max_pax: "1", rate: "" },
+    ],
+    total_rate: "",
+    total_max_capacity: "",
   };
 }
 
@@ -180,7 +196,6 @@ interface SeasonCardProps {
   season: TourSeasonEditState;
   /** Drives which rate sections render. */
   salesMode: TourPackageSalesMode;
-  rateMode: TourPackageRateMode;
   ageBands: TourAgePolicyBand[];
   isOpen: boolean;
   isDirty: boolean;
@@ -195,7 +210,6 @@ interface SeasonCardProps {
 export default function SeasonCard({
   season,
   salesMode,
-  rateMode,
   ageBands,
   isOpen,
   isDirty,
@@ -208,13 +222,16 @@ export default function SeasonCard({
 }: SeasonCardProps) {
   const isPending = season.id.startsWith("pending");
 
-  // Tours rate-mode logic (mirrors old PackageRatesBody):
-  // - ticket / shared → always per-pax
-  // - private / exclusive → per_pax / per_vehicle / total (driven by rateMode)
-  const showPicker = salesMode === "private" || salesMode === "exclusive";
-  const showPax = !showPicker || rateMode === "per_pax";
-  const showVehicle = showPicker && rateMode === "per_vehicle";
-  const showPrivate = showPicker && rateMode === "per_pax";
+  // Sales-mode-driven section visibility per spec.
+  const showBand = salesMode === "ticket" || salesMode === "shared";
+  const bandTitle = salesMode === "ticket" ? "Per Ticket Rate" : "SIC Rate";
+  const isPrivateOrExclusive =
+    salesMode === "private" || salesMode === "exclusive";
+  const showPrivate = isPrivateOrExclusive;
+  const showDiscounts = isPrivateOrExclusive;
+  const showVehicle = isPrivateOrExclusive;
+  const showTotalRate =
+    salesMode === "ticket" || isPrivateOrExclusive;
 
   const pickerValue = useMemo(
     () => rangesToPickerValue(season.date_ranges),
@@ -313,7 +330,7 @@ export default function SeasonCard({
 
       {isOpen && (
         <div className="px-3 pb-3 pt-2 border-t flex flex-col gap-4">
-          {/* Date Ranges */}
+          {/* 1. Date Ranges */}
           <div>
             <div className="flex items-center gap-2 mb-1">
               <CalendarPlus className="h-3.5 w-3.5 text-muted-foreground" />
@@ -355,7 +372,7 @@ export default function SeasonCard({
             )}
           </div>
 
-          {/* Blackout Dates */}
+          {/* 2. Blackout Dates */}
           <div>
             <div className="flex items-center gap-2 mb-1">
               <CalendarOff className="h-3.5 w-3.5 text-muted-foreground" />
@@ -414,47 +431,66 @@ export default function SeasonCard({
             </p>
           </div>
 
-          {/* Rates */}
-          {showPax && (
-            <PaxRatesSection
+          {/* 3. Rate section (per sales mode) */}
+          {showBand && (
+            <BandRatesSection
+              title={bandTitle}
               rows={season.pax_rows}
               bands={ageBands}
               onChange={(rows) => patch({ pax_rows: rows })}
             />
           )}
-
           {showPrivate && (
             <PrivateRatesSection
+              mode={season.private_rate_mode}
               cells={season.private_cells}
-              onChange={(c) => patch({ private_cells: c })}
+              tiers={season.private_tier_rows}
+              onModeChange={(m) => patch({ private_rate_mode: m })}
+              onCellsChange={(c) => patch({ private_cells: c })}
+              onTiersChange={(t) => patch({ private_tier_rows: t })}
             />
           )}
 
+          {/* 4. Discounts (Private/Exclusive only) */}
+          {showDiscounts && (
+            <ChildInfantDiscountSection
+              childType={season.child_discount_type}
+              childValue={season.child_discount_value}
+              infantType={season.infant_discount_type}
+              infantValue={season.infant_discount_value}
+              ageBands={ageBands}
+              onChange={(v) =>
+                patch({
+                  child_discount_type: v.childType,
+                  child_discount_value: v.childValue,
+                  infant_discount_type: v.infantType,
+                  infant_discount_value: v.infantValue,
+                })
+              }
+            />
+          )}
+
+          {/* 5. Vehicle rates (Private/Exclusive only) */}
           {showVehicle && (
             <VehicleRatesSection
               rows={season.vehicle_rows}
-              rateType={season.vehicle_rate_type}
               onRowsChange={(r) => patch({ vehicle_rows: r })}
-              onRateTypeChange={(rt) => patch({ vehicle_rate_type: rt })}
             />
           )}
 
-          {/* Child / Infant discount */}
-          <ChildInfantDiscountSection
-            childType={season.child_discount_type}
-            childValue={season.child_discount_value}
-            infantType={season.infant_discount_type}
-            infantValue={season.infant_discount_value}
-            ageBands={ageBands}
-            onChange={(v) =>
-              patch({
-                child_discount_type: v.childType,
-                child_discount_value: v.childValue,
-                infant_discount_type: v.infantType,
-                infant_discount_value: v.infantValue,
-              })
-            }
-          />
+          {/* 6. Total Rate (Ticket / Private / Exclusive) */}
+          {showTotalRate && (
+            <TotalRateSection
+              rate={season.total_rate}
+              maxCapacity={season.total_max_capacity}
+              onChange={(v) =>
+                patch({
+                  total_rate: v.rate,
+                  total_max_capacity: v.maxCapacity,
+                })
+              }
+            />
+          )}
         </div>
       )}
     </div>

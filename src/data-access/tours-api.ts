@@ -457,6 +457,7 @@ export async function patchSeason(
   dto: Partial<{
     exception_rules: string | null;
     vehicle_rate_type: string | null;
+    private_rate_mode: "per_pax" | "tiered";
     child_discount_type: string | null;
     child_discount_value: number | null;
     infant_discount_type: string | null;

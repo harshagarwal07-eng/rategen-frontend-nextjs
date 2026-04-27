@@ -432,11 +432,16 @@ export interface TourPaxRate {
   rate: number;
 }
 
+export type TourPrivateRateMode = "per_pax" | "tiered";
+
 export interface TourPrivatePerPaxRate {
   id?: string;
   season_id?: string;
   pax_count: number;
   rate: number;
+  /** Tiered mode only — span [min_pax, max_pax]. */
+  min_pax?: number | null;
+  max_pax?: number | null;
 }
 
 export interface TourVehicleRate {
@@ -473,6 +478,8 @@ export interface TourPackageSeason {
   total_min_pax: number | null;
   total_max_pax: number | null;
   vehicle_rate_type: TourVehicleRateType | null;
+  /** "per_pax" | "tiered" — drives Pvt Per Pax editor mode. */
+  private_rate_mode: TourPrivateRateMode | null;
   child_discount_type: TourDiscountType | null;
   child_discount_value: number | null;
   infant_discount_type: TourDiscountType | null;

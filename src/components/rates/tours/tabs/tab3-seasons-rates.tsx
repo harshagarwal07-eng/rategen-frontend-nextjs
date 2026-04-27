@@ -60,6 +60,8 @@ import {
   rowsToPaxRates,
   cellsToPrivateRates,
   privateRatesToCells,
+  privateRatesToTiers,
+  tiersToPrivateRates,
   rowsToVehicleRates,
   vehicleRatesToRows,
 } from "./sections/season-rates-editor";
@@ -98,12 +100,14 @@ function seasonFromServer(
   s: TourPackageSeason,
   bands: TourAgePolicyBand[],
 ): TourSeasonEditState {
+  const privateRates = s.tour_season_private_rates ?? [];
   return {
     _localId: s.id,
     id: s.id,
     status: s.status || "active",
     exception_rules: s.exception_rules ?? "",
     vehicle_rate_type: s.vehicle_rate_type,
+    private_rate_mode: s.private_rate_mode ?? "per_pax",
     child_discount_type: s.child_discount_type,
     child_discount_value:
       s.child_discount_value == null ? "" : String(s.child_discount_value),
@@ -119,7 +123,11 @@ function seasonFromServer(
     ),
     pax_rows: paxRatesToRows(s.tour_season_pax_rates ?? [], bands),
     vehicle_rows: vehicleRatesToRows(s.tour_season_vehicle_rates ?? []),
-    private_cells: privateRatesToCells(s.tour_season_private_rates ?? []),
+    private_cells: privateRatesToCells(privateRates),
+    private_tier_rows: privateRatesToTiers(privateRates),
+    total_rate: s.total_rate == null ? "" : String(s.total_rate),
+    total_max_capacity:
+      s.total_max_pax == null ? "" : String(s.total_max_pax),
   };
 }
 
@@ -152,10 +160,18 @@ function snapshotPackage(
         supplement_hr: v.supplement_hr,
         supplement_km: v.supplement_km,
       })),
+      private_rate_mode: s.private_rate_mode,
       private_cells: s.private_cells.map((c) => ({
         pax_count: c.pax_count,
         rate: c.rate,
       })),
+      private_tier_rows: s.private_tier_rows.map((t) => ({
+        min_pax: t.min_pax,
+        max_pax: t.max_pax,
+        rate: t.rate,
+      })),
+      total_rate: s.total_rate.trim(),
+      total_max_capacity: s.total_max_capacity.trim(),
     })),
   });
 }
@@ -283,6 +299,10 @@ function PackageRatesCard({
         ...c,
         _key: `pp-${c.pax_count}-${Date.now()}`,
       })),
+      private_tier_rows: src.private_tier_rows.map((t) => ({
+        ...t,
+        _key: `tr-${Date.now()}-${Math.random()}`,
+      })),
     };
     onChange({ seasons: [...seasons, copy] });
     setOpenSeasonIds((prev) => new Set(prev).add(newId));
@@ -380,7 +400,6 @@ function PackageRatesCard({
                     key={s._localId}
                     season={s}
                     salesMode={pkg.sales_mode}
-                    rateMode={pkg.rate_mode}
                     ageBands={ageBandsForLabels}
                     isOpen={openSeasonIds.has(s._localId)}
                     isDirty={
@@ -612,6 +631,10 @@ export default function Tab3SeasonsRates({
         ...c,
         _key: `pp-${c.pax_count}-${Date.now()}`,
       })),
+      private_tier_rows: src.private_tier_rows.map((t) => ({
+        ...t,
+        _key: `tr-${Date.now()}-${Math.random()}`,
+      })),
     };
   }
 
@@ -691,13 +714,23 @@ export default function Tab3SeasonsRates({
             ? null
             : Number(s.infant_discount_value);
 
+        const totalRateNum =
+          s.total_rate.trim() === "" ? null : Number(s.total_rate);
+        const totalMaxNum =
+          s.total_max_capacity.trim() === ""
+            ? null
+            : Number(s.total_max_capacity);
+
         const patchRes = await patchSeason(realId, {
           exception_rules: s.exception_rules.trim() || null,
           vehicle_rate_type: s.vehicle_rate_type as TourVehicleRateType | null,
+          private_rate_mode: s.private_rate_mode,
           child_discount_type: s.child_discount_type,
           child_discount_value: childVal,
           infant_discount_type: s.infant_discount_type,
           infant_discount_value: infantVal,
+          total_rate: totalRateNum,
+          total_max_pax: totalMaxNum,
         });
         if (patchRes.error) throw new Error(`Season: ${patchRes.error}`);
 
@@ -712,18 +745,17 @@ export default function Tab3SeasonsRates({
         if (bdRes.error)
           throw new Error(`Season blackouts: ${bdRes.error}`);
 
-        // Pax rates / private rates / vehicle rates per the package's
-        // sales_mode + rate_mode.
-        const showPicker: boolean =
+        // Section visibility per spec — see season-card.tsx for the same matrix.
+        const isPrivateOrExclusive =
           entry.pkg.sales_mode === "private" ||
           entry.pkg.sales_mode === "exclusive";
-        const showPax = !showPicker || entry.pkg.rate_mode === "per_pax";
-        const showPrivate =
-          showPicker && entry.pkg.rate_mode === "per_pax";
-        const showVehicle =
-          showPicker && entry.pkg.rate_mode === "per_vehicle";
+        const showBand =
+          entry.pkg.sales_mode === "ticket" ||
+          entry.pkg.sales_mode === "shared";
+        const showPrivate = isPrivateOrExclusive;
+        const showVehicle = isPrivateOrExclusive;
 
-        if (showPax) {
+        if (showBand) {
           const prRes = await replaceSeasonPaxRates(
             realId,
             rowsToPaxRates(s.pax_rows),
@@ -732,10 +764,11 @@ export default function Tab3SeasonsRates({
             throw new Error(`Season pax rates: ${prRes.error}`);
         }
         if (showPrivate) {
-          const ppRes = await replaceSeasonPrivateRates(
-            realId,
-            cellsToPrivateRates(s.private_cells),
-          );
+          const payload =
+            s.private_rate_mode === "tiered"
+              ? tiersToPrivateRates(s.private_tier_rows)
+              : cellsToPrivateRates(s.private_cells);
+          const ppRes = await replaceSeasonPrivateRates(realId, payload);
           if (ppRes.error)
             throw new Error(`Season private rates: ${ppRes.error}`);
         }

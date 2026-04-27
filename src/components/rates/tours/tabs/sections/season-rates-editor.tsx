@@ -1,12 +1,13 @@
 "use client";
 
-// Season rates editor for tour packages.
-// Differs from transfers' editor in two ways:
-//   1. Pax rates are per-age-band (Adult / Child / Infant / …) rather
-//      than a single SIC row — driven by `TourPackageSeason.tour_season_pax_rates`.
-//   2. Vehicle rates are conditional on the package's `rate_mode === 'per_vehicle'`.
-// Private per-pax rates and Child/Infant discount controls are reused
-// in spirit but reimplemented against tour types.
+// Season rate sections, driven by sales_mode. Section visibility lives
+// in season-card.tsx; this file owns the editors themselves:
+//
+//   BandRatesSection      — Ticket / Shared (per-band rows)
+//   PrivateRatesSection   — Private / Exclusive (per-pax + tiered modes)
+//   VehicleRatesSection   — Private / Exclusive (4-col simplified table)
+//   TotalRateSection      — Ticket / Private / Exclusive (single row)
+//   ChildInfantDiscountSection — Private / Exclusive
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -26,11 +27,11 @@ import {
   TourDiscountType,
   TourPaxRate,
   TourPrivatePerPaxRate,
+  TourPrivateRateMode,
   TourVehicleRate,
-  TourVehicleRateType,
 } from "@/types/tours";
 
-// ─── Vehicle types cache (parallels transfers) ─────────────────────────
+// ─── Vehicle types cache (module-singleton, shared across rows) ────────
 
 type VehicleType = {
   id: string;
@@ -111,7 +112,7 @@ function parseNullNum(s: string): number | null {
   return isNaN(n) ? null : n;
 }
 
-// ─── Pax rates (per age band) ──────────────────────────────────────────
+// ─── Per-band rates (Ticket / Shared) ──────────────────────────────────
 
 export type PaxRateRow = {
   band_name: string;
@@ -140,17 +141,19 @@ export function rowsToPaxRates(rows: PaxRateRow[]): TourPaxRate[] {
     }));
 }
 
-interface PaxRatesSectionProps {
+interface BandRatesSectionProps {
+  title: string;
   rows: PaxRateRow[];
   bands: TourAgePolicyBand[];
   onChange: (rows: PaxRateRow[]) => void;
 }
 
-export function PaxRatesSection({
+export function BandRatesSection({
+  title,
   rows,
   bands,
   onChange,
-}: PaxRatesSectionProps) {
+}: BandRatesSectionProps) {
   function set(idx: number, value: string) {
     onChange(rows.map((r, i) => (i === idx ? { ...r, rate: value } : r)));
   }
@@ -158,12 +161,12 @@ export function PaxRatesSection({
   return (
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-        Per-Pax Rates (by age band)
+        {title}
       </p>
       <div className="flex flex-wrap gap-3">
         {rows.length === 0 ? (
           <p className="text-xs text-muted-foreground">
-            Define age bands first to set rates.
+            Define age bands on Tab 2 first to set rates.
           </p>
         ) : (
           rows.map((row, idx) => {
@@ -192,17 +195,23 @@ export function PaxRatesSection({
   );
 }
 
-// ─── Private per-pax rates (when sales_mode is private/exclusive +
-//     rate_mode is per_pax — kept for completeness) ──────────────────────
+// ─── Pvt Per Pax — Per Pax mode (1..MAX_PAX_CELLS) ─────────────────────
 
 export type PrivateCell = { _key: string; pax_count: number; rate: string };
 
-const MAX_PAX_CELLS = 30;
+const MAX_PAX_CELLS = 20;
+const MAX_TIER_PAX = 100;
 
 export function privateRatesToCells(
   rates: TourPrivatePerPaxRate[],
 ): PrivateCell[] {
+  // Per-pax cells: rows where min_pax==max_pax==pax_count (or both null).
   const seeded = [...rates]
+    .filter((r) => {
+      const min = r.min_pax ?? r.pax_count;
+      const max = r.max_pax ?? r.pax_count;
+      return min === max;
+    })
     .sort((a, b) => a.pax_count - b.pax_count)
     .map((r, i) => ({
       _key: `pp-${r.pax_count}-${i}`,
@@ -219,18 +228,152 @@ export function cellsToPrivateRates(
 ): TourPrivatePerPaxRate[] {
   return cells
     .filter((c) => c.rate !== "")
-    .map((c) => ({ pax_count: c.pax_count, rate: parseNum(c.rate) }));
+    .map((c) => ({
+      pax_count: c.pax_count,
+      rate: parseNum(c.rate),
+      min_pax: c.pax_count,
+      max_pax: c.pax_count,
+    }));
+}
+
+// ─── Pvt Per Pax — Tiered mode (min..max..rate, up to 100) ─────────────
+
+export type PrivateTierRow = {
+  _key: string;
+  min_pax: string;
+  max_pax: string;
+  rate: string;
+};
+
+export function privateRatesToTiers(
+  rates: TourPrivatePerPaxRate[],
+): PrivateTierRow[] {
+  const seeded = [...rates]
+    .filter((r) => {
+      const min = r.min_pax ?? r.pax_count;
+      const max = r.max_pax ?? r.pax_count;
+      return min !== max;
+    })
+    .sort((a, b) => (a.min_pax ?? a.pax_count) - (b.min_pax ?? b.pax_count))
+    .map((r, i) => ({
+      _key: `tr-${i}-${Date.now()}`,
+      min_pax: String(r.min_pax ?? r.pax_count),
+      max_pax: String(r.max_pax ?? r.pax_count),
+      rate: r.rate > 0 ? String(r.rate) : "",
+    }));
+  return seeded.length > 0
+    ? seeded
+    : [{ _key: `tr-0-${Date.now()}`, min_pax: "1", max_pax: "1", rate: "" }];
+}
+
+export function tiersToPrivateRates(
+  rows: PrivateTierRow[],
+): TourPrivatePerPaxRate[] {
+  return rows
+    .filter((r) => r.rate !== "" && r.min_pax !== "" && r.max_pax !== "")
+    .map((r) => {
+      const min = Math.max(1, parseInt(r.min_pax, 10) || 1);
+      const max = Math.min(MAX_TIER_PAX, parseInt(r.max_pax, 10) || min);
+      return {
+        // pax_count is NOT NULL on the table; back-compat to min.
+        pax_count: min,
+        rate: parseNum(r.rate),
+        min_pax: min,
+        max_pax: Math.max(min, max),
+      };
+    });
+}
+
+/** Returns per-row error messages ("" when row is OK). */
+export function validateTiers(rows: PrivateTierRow[]): string[] {
+  const errs: string[] = rows.map(() => "");
+  const parsed = rows.map((r, i) => ({
+    i,
+    min: parseInt(r.min_pax, 10) || 0,
+    max: parseInt(r.max_pax, 10) || 0,
+  }));
+  for (const p of parsed) {
+    if (p.min < 1) errs[p.i] = "Min must be ≥ 1.";
+    else if (p.max > MAX_TIER_PAX) errs[p.i] = `Max must be ≤ ${MAX_TIER_PAX}.`;
+    else if (p.max < p.min) errs[p.i] = "Max must be ≥ min.";
+  }
+  // Overlap check (after individual validity).
+  for (let i = 0; i < parsed.length; i++) {
+    if (errs[i]) continue;
+    for (let j = i + 1; j < parsed.length; j++) {
+      if (errs[j]) continue;
+      const a = parsed[i];
+      const b = parsed[j];
+      if (a.max >= b.min && b.max >= a.min) {
+        errs[i] = `Overlaps tier ${j + 1}.`;
+        errs[j] = `Overlaps tier ${i + 1}.`;
+      }
+    }
+  }
+  return errs;
 }
 
 interface PrivateRatesSectionProps {
+  mode: TourPrivateRateMode;
   cells: PrivateCell[];
-  onChange: (cells: PrivateCell[]) => void;
+  tiers: PrivateTierRow[];
+  onModeChange: (m: TourPrivateRateMode) => void;
+  onCellsChange: (cells: PrivateCell[]) => void;
+  onTiersChange: (tiers: PrivateTierRow[]) => void;
 }
 
 export function PrivateRatesSection({
+  mode,
+  cells,
+  tiers,
+  onModeChange,
+  onCellsChange,
+  onTiersChange,
+}: PrivateRatesSectionProps) {
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Pvt Per Pax Rate
+        </p>
+        <div className="inline-flex rounded-md border bg-muted/40 p-0.5 h-7">
+          {(["per_pax", "tiered"] as const).map((m) => {
+            const active = mode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => onModeChange(m)}
+                className={cn(
+                  "px-2.5 text-xs font-medium rounded-sm transition-colors",
+                  active
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {m === "per_pax" ? "Per Pax" : "Tiered"}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {mode === "per_pax" ? (
+        <PerPaxCellsView cells={cells} onChange={onCellsChange} />
+      ) : (
+        <TieredRowsView tiers={tiers} onChange={onTiersChange} />
+      )}
+    </div>
+  );
+}
+
+function PerPaxCellsView({
   cells,
   onChange,
-}: PrivateRatesSectionProps) {
+}: {
+  cells: PrivateCell[];
+  onChange: (next: PrivateCell[]) => void;
+}) {
   function nextPax(): number | null {
     const used = new Set(cells.map((c) => c.pax_count));
     for (let n = 1; n <= MAX_PAX_CELLS; n++) {
@@ -256,56 +399,148 @@ export function PrivateRatesSection({
   const sorted = [...cells].sort((a, b) => a.pax_count - b.pax_count);
   const canAdd = nextPax() !== null;
   return (
-    <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-        Private Per-Pax Rates
-      </p>
-      <div className="flex flex-wrap gap-3">
-        {sorted.map((c) => (
-          <div key={c._key} className="flex flex-col gap-0.5">
-            <div className="flex items-center justify-between gap-2 w-24">
-              <label className="text-[10px] font-medium text-muted-foreground">
-                {c.pax_count} pax
-              </label>
-              {sorted.length > 1 && (
-                <button
-                  type="button"
-                  className="text-muted-foreground/60 hover:text-destructive"
-                  onClick={() => remove(c._key)}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-            <Input
-              type="number"
-              min={0}
-              step={0.01}
-              value={c.rate}
-              onChange={(e) => setRate(c._key, e.target.value)}
-              placeholder="0"
-              className="h-7 w-24 text-xs"
-            />
+    <div className="flex flex-wrap gap-3">
+      {sorted.map((c) => (
+        <div key={c._key} className="flex flex-col gap-0.5">
+          <div className="flex items-center justify-between gap-2 w-24">
+            <label className="text-[10px] font-medium text-muted-foreground">
+              {c.pax_count} pax
+            </label>
+            {sorted.length > 1 && (
+              <button
+                type="button"
+                className="text-muted-foreground/60 hover:text-destructive"
+                onClick={() => remove(c._key)}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            )}
           </div>
-        ))}
-        {canAdd && (
-          <div className="flex flex-col gap-0.5">
-            <div className="text-[10px] select-none text-transparent">add</div>
-            <button
-              type="button"
-              onClick={add}
-              className="h-7 px-3 rounded border border-dashed text-xs text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-1"
-            >
-              <Plus className="h-3 w-3" /> Add
-            </button>
-          </div>
-        )}
-      </div>
+          <Input
+            type="number"
+            min={0}
+            step={0.01}
+            value={c.rate}
+            onChange={(e) => setRate(c._key, e.target.value)}
+            placeholder="0"
+            className="h-7 w-24 text-xs"
+          />
+        </div>
+      ))}
+      {canAdd && (
+        <div className="flex flex-col gap-0.5">
+          <div className="text-[10px] select-none text-transparent">add</div>
+          <button
+            type="button"
+            onClick={add}
+            className="h-7 px-3 rounded border border-dashed text-xs text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-1"
+          >
+            <Plus className="h-3 w-3" /> Add pax tier
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Vehicle rates (rate_mode === 'per_vehicle') ───────────────────────
+function TieredRowsView({
+  tiers,
+  onChange,
+}: {
+  tiers: PrivateTierRow[];
+  onChange: (next: PrivateTierRow[]) => void;
+}) {
+  const errs = validateTiers(tiers);
+  function set(i: number, patch: Partial<PrivateTierRow>) {
+    onChange(tiers.map((t, idx) => (idx === i ? { ...t, ...patch } : t)));
+  }
+  function add() {
+    // Suggest min = previous max + 1
+    const last = tiers[tiers.length - 1];
+    const lastMax = last ? parseInt(last.max_pax, 10) || 0 : 0;
+    const min = Math.min(MAX_TIER_PAX, lastMax + 1) || 1;
+    onChange([
+      ...tiers,
+      {
+        _key: `tr-${Date.now()}-${Math.random()}`,
+        min_pax: String(min),
+        max_pax: String(Math.min(MAX_TIER_PAX, min)),
+        rate: "",
+      },
+    ]);
+  }
+  function remove(i: number) {
+    if (tiers.length === 1) return;
+    onChange(tiers.filter((_, idx) => idx !== i));
+  }
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-[80px_80px_1fr_28px] gap-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        <span>Min Pax</span>
+        <span>Max Pax</span>
+        <span>Rate</span>
+        <span />
+      </div>
+      {tiers.map((t, i) => (
+        <div key={t._key} className="space-y-1">
+          <div className="grid grid-cols-[80px_80px_1fr_28px] gap-2 items-center">
+            <Input
+              type="number"
+              min={1}
+              max={MAX_TIER_PAX}
+              value={t.min_pax}
+              onChange={(e) => set(i, { min_pax: e.target.value })}
+              className="h-7 text-xs"
+            />
+            <Input
+              type="number"
+              min={1}
+              max={MAX_TIER_PAX}
+              value={t.max_pax}
+              onChange={(e) => set(i, { max_pax: e.target.value })}
+              className="h-7 text-xs"
+            />
+            <Input
+              type="number"
+              min={0}
+              step={0.01}
+              value={t.rate}
+              onChange={(e) => set(i, { rate: e.target.value })}
+              placeholder="0"
+              className="h-7 text-xs"
+            />
+            <button
+              type="button"
+              className="text-muted-foreground/60 hover:text-destructive disabled:opacity-30"
+              onClick={() => remove(i)}
+              disabled={tiers.length === 1}
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+          {errs[i] && (
+            <p className="text-[10px] text-destructive pl-1">{errs[i]}</p>
+          )}
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
+        onClick={add}
+      >
+        <Plus className="h-3 w-3" /> Add tier
+      </Button>
+    </div>
+  );
+}
+
+// ─── Vehicle rates — simplified to 4 columns for the new spec ──────────
+// Vehicle Type, Brand (read-only from master), Max Pax (read-only from
+// master, editable), Rate. Backend extras (max_pax_with_luggage,
+// max_luggage, supplement_*, kms/hrs) are kept in state at empty defaults
+// so the existing PUT shape still saves.
 
 export type VehicleRow = {
   _key: string;
@@ -355,28 +590,14 @@ export function rowsToVehicleRates(rows: VehicleRow[]): TourVehicleRate[] {
     }));
 }
 
-const RATE_TYPE_OPTIONS: {
-  value: TourVehicleRateType;
-  label: string;
-  rateColumn: string;
-}[] = [
-  { value: "per_vehicle", label: "Per Vehicle", rateColumn: "Per Vehicle Rate" },
-  { value: "per_hour", label: "Per Hour", rateColumn: "Per Hour Rate" },
-  { value: "per_km", label: "Per Km", rateColumn: "Per Km Rate" },
-];
-
 interface VehicleRatesSectionProps {
   rows: VehicleRow[];
-  rateType: TourVehicleRateType | null;
   onRowsChange: (rows: VehicleRow[]) => void;
-  onRateTypeChange: (rt: TourVehicleRateType) => void;
 }
 
 export function VehicleRatesSection({
   rows,
-  rateType,
   onRowsChange,
-  onRateTypeChange,
 }: VehicleRatesSectionProps) {
   const vehicleTypes = useVehicleTypes();
 
@@ -398,7 +619,6 @@ export function VehicleRatesSection({
         supplement_km: "",
       },
     ]);
-    if (rateType === null) onRateTypeChange("per_vehicle");
   }
 
   function deleteRow(key: string) {
@@ -431,46 +651,17 @@ export function VehicleRatesSection({
 
   function updateField(
     key: string,
-    field: keyof Omit<VehicleRow, "_key" | "vehicle_type_id" | "label" | "brand">,
+    field: "rate" | "max_pax",
     value: string,
   ) {
     onRowsChange(rows.map((r) => (r._key === key ? { ...r, [field]: value } : r)));
   }
 
-  const rateColumnLabel = rateType
-    ? (RATE_TYPE_OPTIONS.find((o) => o.value === rateType)?.rateColumn ??
-      "Rate")
-    : "Rate";
-
   return (
     <div>
-      <div className="flex items-center gap-3 mb-2 flex-wrap">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Vehicle Rates
-        </p>
-        {rows.length > 0 && (
-          <div className="inline-flex rounded-md border bg-muted/40 p-0.5 h-7">
-            {RATE_TYPE_OPTIONS.map((opt) => {
-              const active = rateType === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => onRateTypeChange(opt.value)}
-                  className={cn(
-                    "px-2.5 text-xs font-medium rounded-sm transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+        Vehicle Rates
+      </p>
 
       <div className="space-y-2 mb-2">
         {rows.length === 0 ? (
@@ -480,7 +671,7 @@ export function VehicleRatesSection({
         ) : (
           rows.map((row) => (
             <div key={row._key} className="rounded-md border p-2">
-              <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_60px_60px_60px_auto] gap-2 items-end">
+              <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_80px_minmax(0,1fr)_28px] gap-2 items-end">
                 <div className="flex flex-col gap-0.5">
                   <label className="text-[10px] font-medium text-muted-foreground">
                     Vehicle Type
@@ -491,11 +682,7 @@ export function VehicleRatesSection({
                   >
                     <SelectTrigger className="h-7 text-xs">
                       <SelectValue placeholder="Select vehicle…">
-                        {row.vehicle_type_id
-                          ? row.brand
-                            ? `${row.brand} — ${row.label}`
-                            : row.label
-                          : "Select vehicle…"}
+                        {row.vehicle_type_id ? row.label : "Select vehicle…"}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -523,20 +710,6 @@ export function VehicleRatesSection({
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <label className="text-[10px] font-medium text-muted-foreground">
-                    {rateColumnLabel}
-                  </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={row.rate}
-                    onChange={(e) => updateField(row._key, "rate", e.target.value)}
-                    placeholder="0"
-                    className="h-7 text-xs"
-                  />
-                </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] font-medium text-muted-foreground">
                     Max Pax
                   </label>
                   <Input
@@ -552,39 +725,19 @@ export function VehicleRatesSection({
                 </div>
                 <div className="flex flex-col gap-0.5">
                   <label className="text-[10px] font-medium text-muted-foreground">
-                    Max w/Lug
+                    Rate
                   </label>
                   <Input
                     type="number"
                     min={0}
-                    value={row.max_pax_with_luggage}
-                    onChange={(e) =>
-                      updateField(
-                        row._key,
-                        "max_pax_with_luggage",
-                        e.target.value,
-                      )
-                    }
-                    placeholder="—"
+                    step={0.01}
+                    value={row.rate}
+                    onChange={(e) => updateField(row._key, "rate", e.target.value)}
+                    placeholder="0"
                     className="h-7 text-xs"
                   />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[10px] font-medium text-muted-foreground">
-                    Max Lug
-                  </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={row.max_luggage}
-                    onChange={(e) =>
-                      updateField(row._key, "max_luggage", e.target.value)
-                    }
-                    placeholder="—"
-                    className="h-7 text-xs"
-                  />
-                </div>
-                <div className="flex items-center pb-0.5">
+                <div className="flex items-center pb-1">
                   <button
                     type="button"
                     className="p-1 text-muted-foreground hover:text-destructive"
@@ -611,7 +764,58 @@ export function VehicleRatesSection({
   );
 }
 
-// ─── Child / Infant discount section ───────────────────────────────────
+// ─── Total Rate (single row: rate + max_capacity) ──────────────────────
+
+interface TotalRateSectionProps {
+  rate: string;
+  maxCapacity: string;
+  onChange: (v: { rate: string; maxCapacity: string }) => void;
+}
+
+export function TotalRateSection({
+  rate,
+  maxCapacity,
+  onChange,
+}: TotalRateSectionProps) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+        Total Rate
+      </p>
+      <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] font-medium text-muted-foreground">
+            Rate
+          </label>
+          <Input
+            type="number"
+            min={0}
+            step={0.01}
+            value={rate}
+            onChange={(e) => onChange({ rate: e.target.value, maxCapacity })}
+            placeholder="0"
+            className="h-7 w-32 text-xs"
+          />
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <label className="text-[10px] font-medium text-muted-foreground">
+            Max Capacity
+          </label>
+          <Input
+            type="number"
+            min={0}
+            value={maxCapacity}
+            onChange={(e) => onChange({ rate, maxCapacity: e.target.value })}
+            placeholder="—"
+            className="h-7 w-32 text-xs"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Child / Infant discount ───────────────────────────────────────────
 
 interface DiscountRowProps {
   label: string;
@@ -709,10 +913,7 @@ export function ChildInfantDiscountSection({
   return (
     <div>
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-        Child / Infant Discount{" "}
-        <span className="normal-case font-normal text-muted-foreground/70">
-          (applied by rate engine)
-        </span>
+        Discounts
       </p>
       <div className="space-y-2">
         <DiscountRow
