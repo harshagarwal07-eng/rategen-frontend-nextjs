@@ -47,11 +47,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AlertModal } from "@/components/ui/alert-modal";
 import {
   fdListPackages,
   fdGetCountries,
   fdDeletePackage,
+  fdHardDeletePackage,
 } from "@/data-access/fixed-departures";
 import type { FDPackageListRow } from "@/types/fixed-departures";
 import { FDFullscreenForm } from "@/components/forms/fd-fullscreen-form";
@@ -77,6 +88,10 @@ export function FDList() {
   const [deleting, setDeleting] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [hardDeleteTarget, setHardDeleteTarget] = useState<FDPackageListRow | null>(null);
+  const [hardDeleting, setHardDeleting] = useState(false);
+  const [showBulkHardDeleteDialog, setShowBulkHardDeleteDialog] = useState(false);
+  const [bulkHardDeleting, setBulkHardDeleting] = useState(false);
 
   // Handoff from the FD parser save flow: /rates/fixed-departures?edit=<id>
   // auto-opens the edit overlay for that package. We strip ?edit= from the
@@ -194,6 +209,46 @@ export function FDList() {
     }
   };
 
+  const handleHardDelete = async () => {
+    if (!hardDeleteTarget) return;
+    setHardDeleting(true);
+    try {
+      await fdHardDeletePackage(hardDeleteTarget.id);
+      toast.success("Package deleted");
+      qc.invalidateQueries({ queryKey: ["fd-packages"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setHardDeleting(false);
+      setHardDeleteTarget(null);
+    }
+  };
+
+  const handleBulkHardDelete = async () => {
+    setBulkHardDeleting(true);
+    let completed = 0;
+    try {
+      for (const p of selectedPackages) {
+        await fdHardDeletePackage(p.id);
+        completed += 1;
+      }
+      toast.success(`Deleted ${completed} package${completed === 1 ? "" : "s"}`);
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ["fd-packages"] });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Bulk delete failed";
+      toast.error(
+        completed > 0
+          ? `Deleted ${completed} of ${selectedPackages.length}, then stopped: ${msg}`
+          : msg,
+      );
+      if (completed > 0) qc.invalidateQueries({ queryKey: ["fd-packages"] });
+    } finally {
+      setBulkHardDeleting(false);
+      setShowBulkHardDeleteDialog(false);
+    }
+  };
+
   if (isLoading) return <DataTableSkeleton columnCount={8} rowCount={10} />;
 
   return (
@@ -208,15 +263,23 @@ export function FDList() {
               variant="destructive"
               size="sm"
               onClick={() => setShowBulkDeleteDialog(true)}
-              disabled={bulkDeleting}
+              disabled={bulkDeleting || bulkHardDeleting}
             >
               Deactivate Selected
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowBulkHardDeleteDialog(true)}
+              disabled={bulkDeleting || bulkHardDeleting}
+            >
+              Delete Selected
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setSelectedIds(new Set())}
-              disabled={bulkDeleting}
+              disabled={bulkDeleting || bulkHardDeleting}
             >
               Cancel
             </Button>
@@ -393,6 +456,12 @@ export function FDList() {
                               >
                                 Deactivate
                               </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setHardDeleteTarget(pkg)}
+                                className="text-destructive"
+                              >
+                                Delete
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
@@ -492,6 +561,65 @@ export function FDList() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={!!hardDeleteTarget}
+        onOpenChange={(o) => { if (!o) setHardDeleteTarget(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete package?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete "${hardDeleteTarget?.name ?? ""}"? This cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={hardDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleHardDelete(); }}
+              disabled={hardDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {hardDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={showBulkHardDeleteDialog}
+        onOpenChange={(o) => { if (!bulkHardDeleting) setShowBulkHardDeleteDialog(o); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete packages?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`Delete ${selectedPackages.length} package${selectedPackages.length === 1 ? "" : "s"}? This cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-60 overflow-y-auto">
+            <ul className="space-y-1">
+              {selectedPackages.map((p) => (
+                <li key={p.id} className="text-sm text-muted-foreground">
+                  • {p.name}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkHardDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleBulkHardDelete(); }}
+              disabled={bulkHardDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkHardDeleting
+                ? "Deleting..."
+                : `Delete ${selectedPackages.length} package${selectedPackages.length === 1 ? "" : "s"}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <FDFullscreenForm
         open={overlayOpen}

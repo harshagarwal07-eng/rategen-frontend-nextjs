@@ -100,6 +100,14 @@ export async function fdDeletePackage(id: string): Promise<FDPackageDetail> {
   return data;
 }
 
+export async function fdHardDeletePackage(id: string): Promise<{ id: string; deleted: true }> {
+  const { data } = await fdApi.delete<{ id: string; deleted: true }>(
+    `${BASE}/packages/${id}`,
+    { params: { hard: "true" } },
+  );
+  return data;
+}
+
 export async function fdGetPackageCountries(packageId: string): Promise<FDCountry[]> {
   const { data } = await fdApi.get<FDCountry[]>(`${BASE}/packages/${packageId}/countries`);
   return data;
